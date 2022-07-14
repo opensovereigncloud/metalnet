@@ -1,0 +1,6 @@
+apiVersion: networking.metalnet.onmetal.de/v1alpha1
+kind: NetworkFunction
+metadata:
+  name: networkfunction-sample
+spec:
+  # TODO(user): Add fields here

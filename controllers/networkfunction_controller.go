@@ -78,7 +78,7 @@ func (r *NetworkFunctionReconciler) reconcileExists(ctx context.Context, log log
 }
 
 func (r *NetworkFunctionReconciler) delete(ctx context.Context, log logr.Logger, function *networkingv1alpha1.NetworkFunction) (ctrl.Result, error) {
-
+	return ctrl.Result{}, nil
 }
 
 const notFoundCode = 404
@@ -99,9 +99,8 @@ func (r *NetworkFunctionReconciler) reconcile(ctx context.Context, log logr.Logg
 		return ctrl.Result{}, fmt.Errorf("error getting function: %w", err)
 	}
 	if machine.Status.Error != 0 {
-		extStatus := machine.Status.Error
-		if extStatus.Error != notFoundCode {
-			return ctrl.Result{}, fmt.Errorf("dpdk reported unknown error getting function: %w", extStatus)
+		if machine.Status.Error != notFoundCode {
+			return ctrl.Result{}, fmt.Errorf("dpdk reported unknown error getting function: %d", machine.Status.Error)
 		}
 
 		var (
@@ -133,6 +132,7 @@ func (r *NetworkFunctionReconciler) reconcile(ctx context.Context, log logr.Logg
 			Ipv6Config:  ipv6Config,
 			DeviceName:  device,
 		})
+		log.V(1).Info("Addmachine ", "reply: ", res.GetVf().Name)
 	}
 
 	// DPDK TODO:

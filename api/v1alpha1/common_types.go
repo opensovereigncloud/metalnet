@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 
 	"inet.af/netaddr"
+	corev1 "k8s.io/api/core/v1"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 )
 
 // IP is an IP address.

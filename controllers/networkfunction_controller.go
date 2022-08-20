@@ -78,10 +78,11 @@ func (r *NetworkFunctionReconciler) reconcileExists(ctx context.Context, log log
 }
 
 func (r *NetworkFunctionReconciler) delete(ctx context.Context, log logr.Logger, function *networkingv1alpha1.NetworkFunction) (ctrl.Result, error) {
+	if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, function, finalizer); err != nil {
+		return ctrl.Result{}, err
+	}
 	return ctrl.Result{}, nil
 }
-
-const notFoundCode = 404
 
 func (r *NetworkFunctionReconciler) reconcile(ctx context.Context, log logr.Logger, function *networkingv1alpha1.NetworkFunction) (ctrl.Result, error) {
 	log.V(1).Info("Reconcile")
@@ -92,47 +93,15 @@ func (r *NetworkFunctionReconciler) reconcile(ctx context.Context, log logr.Logg
 	}
 
 	log.V(1).Info("Getting function from dpdk")
-	machine, err := r.DPDKClient.GetMachineVIP(ctx, &dpdkproto.MachineIDMsg{
-		MachineID: []byte(function.UID),
-	})
+	uuid, err := r.DPDKClient.Initialized(ctx, &dpdkproto.Empty{})
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error getting function: %w", err)
 	}
-	if machine.Status.Error != 0 {
-		if machine.Status.Error != notFoundCode {
-			return ctrl.Result{}, fmt.Errorf("dpdk reported unknown error getting function: %d", machine.Status.Error)
-		}
-
-		var (
-			ipv4Config, ipv6Config *dpdkproto.IPConfig
-			ip                     = function.Spec.IP
-		)
-		switch {
-		case ip.Is4():
-			ipv4Config = &dpdkproto.IPConfig{
-				IpVersion:      dpdkproto.IPVersion_IPv4,
-				PrimaryAddress: []byte(ip.String()),
-			}
-		case ip.Is6():
-			ipv6Config = &dpdkproto.IPConfig{
-				IpVersion:      dpdkproto.IPVersion_IPv6,
-				PrimaryAddress: []byte(ip.String()),
-			}
-		}
-
-		device, err := r.DeviceAllocator.ReserveDevice()
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-
-		res, err := r.DPDKClient.AddMachine(ctx, &dpdkproto.AddMachineRequest{
-			MachineType: dpdkproto.MachineType_VirtualMachine,
-			Vni:         uint32(function.Spec.VNetID),
-			Ipv4Config:  ipv4Config,
-			Ipv6Config:  ipv6Config,
-			DeviceName:  device,
-		})
-		log.V(1).Info("Addmachine ", "reply: ", res.GetVf().Name)
+	if uuid != nil && uuid.Uuid != "" {
+		log.V(1).Info("UUID ", "reply: ", uuid.Uuid)
+	} else {
+		log.V(1).Info("Got no response from dpdk from dpdk")
+		return ctrl.Result{}, nil
 	}
 
 	// DPDK TODO:
@@ -141,7 +110,7 @@ func (r *NetworkFunctionReconciler) reconcile(ctx context.Context, log logr.Logg
 	// 3. Get / List Machine / Function should return bus address
 
 	base := function.DeepCopy()
-	function.Status.PCIAddress = "pci address here"
+	function.Status.PCIAddress = uuid.Uuid
 	if err := r.Status().Patch(ctx, function, client.MergeFrom(base)); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error updating status: %w", err)
 	}

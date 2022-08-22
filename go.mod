@@ -6,10 +6,8 @@ require (
 	github.com/go-logr/logr v1.2.0
 	github.com/jaypipes/ghw v0.9.0
 	github.com/onmetal/controller-utils v0.6.0
-	github.com/onmetal/net-dpservice-go v0.1.1
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.19.0
-	google.golang.org/grpc v1.46.2
 	inet.af/netaddr v0.0.0-20220617031823-097006376321
 	k8s.io/api v0.24.0
 	k8s.io/apimachinery v0.24.0
@@ -79,7 +77,6 @@ require (
 	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.2.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/genproto v0.0.0-20220107163113-42d7afdf6368 // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect

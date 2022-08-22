@@ -17,14 +17,12 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"flag"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -36,13 +34,13 @@ import (
 
 	networkingv1alpha1 "github.com/onmetal/metalnet/api/v1alpha1"
 	"github.com/onmetal/metalnet/controllers"
-	dpdkproto "github.com/onmetal/net-dpservice-go/proto"
 	//+kubebuilder:scaffold:imports
 )
 
 var (
-	scheme   = runtime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
+	scheme      = runtime.NewScheme()
+	setupLog    = ctrl.Log.WithName("setup")
+	hostName, _ = os.Hostname()
 )
 
 func init() {
@@ -96,28 +94,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	// setup net-dpservice client
-	var dpdkClient dpdkproto.DPDKonmetalClient
-	if dpserviceAddr != "" {
-		ctx := context.Background()
-		conn, err := grpc.DialContext(ctx, dpserviceAddr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-		defer func() {
-			if err := conn.Close(); err != nil {
-				setupLog.Error(err, "unable to close dpdk connection")
-			}
-		}()
-
-		if err != nil {
-			setupLog.Error(err, "unable create dpdk client")
-			os.Exit(1)
-		}
-		dpdkClient = dpdkproto.NewDPDKonmetalClient(conn)
+	nfDeviceBase, err := controllers.NewNFDeviceBase()
+	if err != nil {
+		setupLog.Error(err, "unable to start manager, Devicebase init failure")
+		os.Exit(1)
 	}
 
 	if err = (&controllers.NetworkFunctionReconciler{
-		Client:     mgr.GetClient(),
-		Scheme:     mgr.GetScheme(),
-		DPDKClient: dpdkClient,
+		Client:          mgr.GetClient(),
+		Scheme:          mgr.GetScheme(),
+		DeviceAllocator: nfDeviceBase,
+		Hostname:        hostName,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkFunction")
 		os.Exit(1)

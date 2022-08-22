@@ -17,21 +17,36 @@ limitations under the License.
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // NetworkFunctionSpec defines the desired state of NetworkFunction
 type NetworkFunctionSpec struct {
-	IP      IP                          `json:"ip"`
-	VNetID  int32                       `json:"vNetID"`
-	NodeRef corev1.LocalObjectReference `json:"nodeRef"`
+	NFType   string  `json:"type,omitempty"`
+	NodeName *string `json:"nodeName,omitempty"`
+	// TargetRef references the target for this NetworkFunction (currently only NetworkInterface).
+	TargetRef *LocalUIDReference `json:"targetRef,omitempty"`
 }
 
 // NetworkFunctionStatus defines the observed state of NetworkFunction
 type NetworkFunctionStatus struct {
-	PCIAddress string `json:"pciAddress,omitempty"`
+	// Phase is the NetworkFunctionPhase of the VirtualIP.
+	Phase                   NetworkFunctionPhase `json:"phase,omitempty"`
+	LastPhaseTransitionTime *metav1.Time         `json:"phaseLastTransitionTime,omitempty"`
+	PCIAddress              string               `json:"pciAddress,omitempty"`
 }
+
+// NetworkFunctionPhase is the binding phase of a NetworkFunction.
+type NetworkFunctionPhase string
+
+const (
+	// NetworkFunctionUnbound is used for any NetworkFunction that is not bound.
+	NetworkFunctionUnbound NetworkFunctionPhase = "Unbound"
+	// NetworkFunctionPending is used for any NetworkFunction that is currently awaiting binding.
+	NetworkFunctionPending NetworkFunctionPhase = "Pending"
+	// NetworkFunctionBound is used for any NetworkFunction that is properly bound.
+	NetworkFunctionBound NetworkFunctionPhase = "Bound"
+)
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status

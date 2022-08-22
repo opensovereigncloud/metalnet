@@ -35,29 +35,34 @@ spec:
           spec:
             description: NetworkFunctionSpec defines the desired state of NetworkFunction
             properties:
-              ip:
+              nodeName:
                 type: string
-              nodeRef:
-                description: LocalObjectReference contains enough information to let
-                  you locate the referenced object inside the same namespace.
+              targetRef:
+                description: TargetRef references the target for this NetworkFunction
+                  (currently only NetworkInterface).
                 properties:
                   name:
-                    description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                      TODO: Add other useful fields. apiVersion, kind, uid?'
+                    description: Name is the name of the referenced entity.
                     type: string
+                  uid:
+                    description: UID is the UID of the referenced entity.
+                    type: string
+                required:
+                - name
                 type: object
-              vNetID:
-                format: int32
-                type: integer
-            required:
-            - ip
-            - nodeRef
-            - vNetID
+              type:
+                type: string
             type: object
           status:
             description: NetworkFunctionStatus defines the observed state of NetworkFunction
             properties:
               pciAddress:
+                type: string
+              phase:
+                description: Phase is the NetworkFunctionPhase of the VirtualIP.
+                type: string
+              phaseLastTransitionTime:
+                format: date-time
                 type: string
             type: object
         type: object

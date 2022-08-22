@@ -5,8 +5,18 @@ import (
 
 	"inet.af/netaddr"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 )
+
+// LocalUIDReference is a reference to another entity including its UID
+type LocalUIDReference struct {
+	// Name is the name of the referenced entity.
+	Name string `json:"name"`
+	// UID is the UID of the referenced entity.
+	// +optional
+	UID types.UID `json:"uid,omitempty"`
+}
 
 // IP is an IP address.
 //+kubebuilder:validation:Type=string

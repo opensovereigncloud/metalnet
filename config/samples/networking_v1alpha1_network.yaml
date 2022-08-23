@@ -3,4 +3,4 @@ kind: Network
 metadata:
   name: network-sample
 spec:
-  # TODO(user): Add fields here
+  id: 123

@@ -118,6 +118,7 @@ func (r *NetworkFunctionReconciler) reconcileBound(ctx context.Context, log logr
 }
 
 func (r *NetworkFunctionReconciler) reconcileUnbound(ctx context.Context, log logr.Logger, function *networkingv1alpha1.NetworkFunction) (ctrl.Result, error) {
+	log.V(1).Info("Running Unbound")
 	if function.Status.PCIAddress == "" {
 		if err := r.patchStatus(ctx, function, networkingv1alpha1.NetworkFunctionUnbound, ""); err != nil {
 			return ctrl.Result{}, err

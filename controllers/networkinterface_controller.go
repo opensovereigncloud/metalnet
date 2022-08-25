@@ -41,6 +41,8 @@ import (
 const (
 	NetworkInterfaceFinalizerName = "networking.metalnet.onmetal.de/networkInterface"
 	UnderlayRoute                 = "dpdk.metalnet.onmetal.de/underlayRoute"
+	DpPciAddr                     = "dpdk.metalnet.onmetal.de/dpPciAddr"
+	NetworkFunctionName           = "networkfunction-sample"
 )
 
 type NodeDevPCIInfo func(string, int) (map[string]string, error)
@@ -132,6 +134,43 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
+	nf := &networkingv1alpha1.NetworkFunction{}
+	keyNF := types.NamespacedName{
+		Namespace: req.NamespacedName.Namespace,
+		Name:      req.Name + NetworkFunctionName,
+	}
+
+	if err := r.Get(ctx, keyNF, nf); err != nil {
+		dpPci := ""
+		if ni.Status.Access != nil {
+			dpPci = ni.Status.Access.NetworkAttributes[DpPciAddr]
+		}
+		if dpPci == "" {
+			nf := &networkingv1alpha1.NetworkFunction{
+				ObjectMeta: v1.ObjectMeta{
+					Namespace: req.NamespacedName.Namespace,
+					Name:      req.Name + NetworkFunctionName,
+				},
+				Spec: networkingv1alpha1.NetworkFunctionSpec{
+					NFType:   "virtual",
+					NodeName: &r.HostName,
+					TargetRef: &networkingv1alpha1.LocalUIDReference{
+						Name: req.NamespacedName.Namespace,
+					},
+				},
+			}
+			err := r.Create(ctx, nf)
+			if err != nil {
+				log.Info("unable to create Network Function", "Error", err)
+			}
+		}
+		log.Info("unable to fetch NetworkFunction", "Error", err)
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, client.IgnoreNotFound(err)
+	}
+	if nf.Status.PCIAddress == "" {
+		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+	}
+
 	n := &networkingv1alpha1.Network{}
 	key := types.NamespacedName{
 		Namespace: req.NamespacedName.Namespace,
@@ -142,7 +181,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, client.IgnoreNotFound(err)
 	}
 
-	machineID, resp, err := r.addMachineDPSKServerCall(ctx, ni.Spec, n.Spec)
+	machineID, resp, err := r.addMachineDPSKServerCall(ctx, ni.Spec, n.Spec, n2.Status.PCIAddress)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -157,14 +196,12 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	ni = clone
-	log.Info("AddMachine GRPC call 2")
 	// pciDev := convertToLibvirtPciDevName(resp.Vf.Name)
 	// vfn, err := getVirtualFunctionNumber(resp.Vf.Name)
 	// if err != nil {
 	// 	log.Error(err, "error during getVirtualFunctionNumber")
 	// 	return ctrl.Result{}, err
 	// }
-	log.Info("AddMachine GRPC call 3")
 	na := &networkingv1alpha1.NetworkInterfaceAccess{}
 	// attrs, err := r.NodeDevPCIInfo(pciDev, vfn)
 	// if err != nil {
@@ -172,12 +209,10 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// 	return ctrl.Result{}, err
 	// }
 	na.UID = types.UID(machineID)
-	log.Info("AddMachine GRPC call 4")
 	na.NetworkAttributes = map[string]string{
 		UnderlayRoute: "",
 	}
 	na.NetworkAttributes[UnderlayRoute] = string(resp.Status.UnderlayRoute)
-	log.Info("AddMachine GRPC call 5")
 	// if err := r.MbInstance.Subscribe(mb.VNI(n.Spec.ID)); err != nil {
 	// 	log.Info("duplicate subscription, IGNORED for now due to boostrap of virt networks")
 	// }
@@ -190,7 +225,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			log.Info("Tried to announce the same route for the same VM.")
 		}
 	}
-	log.Info("AddMachine GRPC call 6")
+
 	if err := r.insertDefaultVNIPublicRoute(ctx, n.Spec.ID); err != nil {
 		log.Error(err, "failed to add default route to vni %d", n.Spec.ID)
 		return ctrl.Result{}, err
@@ -237,13 +272,14 @@ func (r *NetworkInterfaceReconciler) deleteMachineDPSKServerCall(ctx context.Con
 	return nil
 }
 
-func (r *NetworkInterfaceReconciler) addMachineDPSKServerCall(ctx context.Context, niSpec networkingv1alpha1.NetworkInterfaceSpec, nSpec networkingv1alpha1.NetworkSpec) (string, *dpdkproto.AddMachineResponse, error) {
+func (r *NetworkInterfaceReconciler) addMachineDPSKServerCall(ctx context.Context, niSpec networkingv1alpha1.NetworkInterfaceSpec, nSpec networkingv1alpha1.NetworkSpec, pciAddr string) (string, *dpdkproto.AddMachineResponse, error) {
 	machineID := uuid.New().String()
 	ip := niSpec.IP.String()
 	addMachineReq := &dpdkproto.AddMachineRequest{
 		MachineType: dpdkproto.MachineType_VirtualMachine,
 		MachineID:   []byte(machineID),
 		Vni:         uint32(nSpec.ID),
+		DeviceName:  pciAddr,
 		Ipv4Config: &dpdkproto.IPConfig{
 			IpVersion:      dpdkproto.IPVersion_IPv4,
 			PrimaryAddress: []byte(ip),

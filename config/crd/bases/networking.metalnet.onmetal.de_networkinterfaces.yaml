@@ -53,7 +53,8 @@ spec:
                   be assigned to this NetworkInterface.
                 properties:
                   networkFuncionRef:
-                    description: VirtualIPRef references a VirtualIP to use.
+                    description: NetworkFunctionRef references a NetworkFunction to
+                      use.
                     properties:
                       name:
                         description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names

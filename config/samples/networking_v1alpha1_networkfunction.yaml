@@ -4,6 +4,6 @@ metadata:
   name: networkfunction-sample
 spec:
   type: virtual
-  nodeName: fra4-lab-dell-2
+  nodeName:
   targetRef:
     name: networkinterface-sample

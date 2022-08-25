@@ -5,6 +5,7 @@ metadata:
 spec:
   id: 123
 
+
 apiVersion: networking.metalnet.onmetal.de/v1alpha1
 kind: NetworkFunction
 metadata:
@@ -15,6 +16,7 @@ spec:
   targetRef:
     name: networkinterface-sample
 
+
 apiVersion: networking.metalnet.onmetal.de/v1alpha1
 kind: NetworkInterface
 metadata:
@@ -23,6 +25,6 @@ spec:
   ipFamilies:
     - "IPv4"
   ip: 10.0.0.2
-  nodeName: 
+  nodeName: fra4-lab-dell-2
   networkRef:
     name: network-sample

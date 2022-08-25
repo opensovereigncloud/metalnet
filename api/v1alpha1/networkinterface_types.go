@@ -57,7 +57,7 @@ type VirtualIPSource struct {
 
 // NetworkFunctionSource is the definition of how to obtain a network function.
 type NetworkFunctionSource struct {
-	// VirtualIPRef references a VirtualIP to use.
+	// NetworkFunctionRef references a NetworkFunction to use.
 	NetworkFunctionRef *corev1.LocalObjectReference `json:"networkFuncionRef,omitempty"`
 }
 

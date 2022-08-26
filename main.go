@@ -64,12 +64,14 @@ func main() {
 	var dpserviceAddr string
 	var metalbondServerAddr string
 	var metalbondServerPort string
+	var publicVNI int
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.StringVar(&dpserviceAddr, "dpservice-address", "", "The address of net-dpservice.")
 	flag.StringVar(&metalbondServerAddr, "metalbondserver-address", "", "The address of metal bond address server.")
 	flag.StringVar(&metalbondServerPort, "metalbondserver-port", "", "The port of metal bond server.")
+	flag.IntVar(&publicVNI, "public-vni", 100, "Virtual network identifier used for public routing announcements.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -178,6 +180,18 @@ func main() {
 		RouterAddress: metalbondServerAddr,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkInterface")
+		os.Exit(1)
+	}
+	if err = (&controllers.VirtualIPReconciler{
+		Client:          mgr.GetClient(),
+		Scheme:          mgr.GetScheme(),
+		DPDKClient:      dpdkClient,
+		PublicVNI:       publicVNI,
+		MbInstance:      mbInstance,
+		MetalbondServer: metalbondServerAddr,
+		Hostname:        hostName,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "VirtualIP")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

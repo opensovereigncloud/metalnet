@@ -83,3 +83,29 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - networking.metalnet.onmetal.de
+  resources:
+  - virtualips
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - networking.metalnet.onmetal.de
+  resources:
+  - virtualips/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - networking.metalnet.onmetal.de
+  resources:
+  - virtualips/status
+  verbs:
+  - get
+  - patch
+  - update

@@ -19,6 +19,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	mb "github.com/onmetal/metalbond"
 	dpdkproto "github.com/onmetal/net-dpservice-go/proto"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -61,11 +63,13 @@ func main() {
 	var probeAddr string
 	var dpserviceAddr string
 	var metalbondServerAddr string
+	var metalbondServerPort string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.StringVar(&dpserviceAddr, "dpservice-address", "", "The address of net-dpservice.")
 	flag.StringVar(&metalbondServerAddr, "metalbondserver-address", "", "The address of metal bond address server.")
+	flag.StringVar(&metalbondServerPort, "metalbondserver-port", "", "The port of metal bond server.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -121,6 +125,27 @@ func main() {
 		dpdkClient = dpdkproto.NewDPDKonmetalClient(conn)
 	}
 
+	var metalbondClient mb.Client
+	config := mb.Config{
+		KeepaliveInterval: 3,
+	}
+
+	metalbondClient, err = controllers.NewMetalbondClient(controllers.MetalbondClientConfig{
+		IPv4Only:          true,
+		DPDKonmetalClient: dpdkClient,
+	})
+	if err != nil {
+		setupLog.Error(err, "failed to initiliaze metalbond client")
+		os.Exit(1)
+	}
+	mbInstance := mb.NewMetalBond(config, metalbondClient)
+
+	// for now, only one metalbond server is used
+	if err := mbInstance.AddPeer(fmt.Sprintf("[%s]:%s", metalbondServerAddr, metalbondServerPort)); err != nil {
+		setupLog.Error(err, "failed to add/connect metalbond server")
+		os.Exit(1)
+	}
+
 	nfDeviceBase, err := controllers.NewNFDeviceBase()
 	if err != nil {
 		setupLog.Error(err, "unable to start manager, Devicebase init failure")
@@ -149,6 +174,7 @@ func main() {
 		Scheme:        mgr.GetScheme(),
 		DPDKClient:    dpdkClient,
 		HostName:      hostName,
+		MbInstance:    mbInstance,
 		RouterAddress: metalbondServerAddr,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkInterface")

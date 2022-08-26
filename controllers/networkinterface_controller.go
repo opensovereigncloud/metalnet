@@ -21,11 +21,12 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
-	"strconv"
+	"net/netip"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	mb "github.com/onmetal/metalbond"
 	dpdkproto "github.com/onmetal/net-dpservice-go/proto"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -54,6 +55,7 @@ type NetworkInterfaceReconciler struct {
 	DPDKClient    dpdkproto.DPDKonmetalClient
 	HostName      string
 	RouterAddress string
+	MbInstance    *mb.MetalBond
 }
 
 //+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networkinterfaces,verbs=get;list;watch;create;update;patch;delete
@@ -208,26 +210,15 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	ni = clone
-	// pciDev := convertToLibvirtPciDevName(resp.Vf.Name)
-	// vfn, err := getVirtualFunctionNumber(resp.Vf.Name)
-	// if err != nil {
-	// 	log.Error(err, "error during getVirtualFunctionNumber")
-	// 	return ctrl.Result{}, err
-	// }
 	na := &networkingv1alpha1.NetworkInterfaceAccess{}
-	// attrs, err := r.NodeDevPCIInfo(pciDev, vfn)
-	// if err != nil {
-	// 	log.Error(err, "error during getPciDevice")
-	// 	return ctrl.Result{}, err
-	// }
 	na.UID = types.UID(machineID)
 	na.NetworkAttributes = map[string]string{
 		UnderlayRoute: "",
 	}
 	na.NetworkAttributes[UnderlayRoute] = string(resp.Status.UnderlayRoute)
-	// if err := r.MbInstance.Subscribe(mb.VNI(n.Spec.ID)); err != nil {
-	// 	log.Info("duplicate subscription, IGNORED for now due to boostrap of virt networks")
-	// }
+	if err := r.MbInstance.Subscribe(mb.VNI(n.Spec.ID)); err != nil {
+		log.Info("duplicate subscription, IGNORED for now due to boostrap of virt networks")
+	}
 
 	if err := r.announceMachineLocalRoute(ctx, ni.Spec, n.Spec, na, networkingv1alpha1.ROUTEADD); err != nil {
 		if !strings.Contains(fmt.Sprint(err), "Nexthop already exists") {
@@ -319,44 +310,44 @@ func (r *NetworkInterfaceReconciler) announceMachineLocalRoute(ctx context.Conte
 		return nil
 	}
 
-	// ip := niSpec.IP.String() + "/32"
-	// prefix, err := netip.ParsePrefix(ip)
-	// if err != nil {
-	// 	return fmt.Errorf("failed to convert interface ip to prefix version, reson=%v", err)
-	// }
+	ip := niSpec.IP.String() + "/32"
+	prefix, err := netip.ParsePrefix(ip)
+	if err != nil {
+		return fmt.Errorf("failed to convert interface ip to prefix version, reson=%v", err)
+	}
 
-	// var ipversion mb.IPVersion
-	// if prefix.Addr().Is4() {
-	// 	ipversion = mb.IPV4
-	// } else {
-	// 	ipversion = mb.IPV6
-	// }
+	var ipversion mb.IPVersion
+	if prefix.Addr().Is4() {
+		ipversion = mb.IPV4
+	} else {
+		ipversion = mb.IPV6
+	}
 
-	// dest := mb.Destination{
-	// 	IPVersion: ipversion,
-	// 	Prefix:    prefix,
-	// }
+	dest := mb.Destination{
+		IPVersion: ipversion,
+		Prefix:    prefix,
+	}
 
-	// hopIP, err := netip.ParseAddr(na.NetworkAttributes[UnderlayRoute])
-	// if err != nil {
-	// 	return fmt.Errorf("invalid nexthop address: %s - %v", na.NetworkAttributes[UnderlayRoute], err)
-	// }
+	hopIP, err := netip.ParseAddr(na.NetworkAttributes[UnderlayRoute])
+	if err != nil {
+		return fmt.Errorf("invalid nexthop address: %s - %v", na.NetworkAttributes[UnderlayRoute], err)
+	}
 
-	// hop := mb.NextHop{
-	// 	TargetAddress: hopIP,
-	// 	TargetVNI:     0,
-	// 	NAT:           false,
-	// }
+	hop := mb.NextHop{
+		TargetAddress: hopIP,
+		TargetVNI:     0,
+		NAT:           false,
+	}
 
-	// if action == networkingv1alpha1.ROUTEADD {
-	// 	if err = r.MbInstance.AnnounceRoute(mb.VNI(nSpec.ID), dest, hop); err != nil {
-	// 		return fmt.Errorf("failed to announce a local route, reason: %v", err)
-	// 	}
-	// } else {
-	// 	if err = r.MbInstance.WithdrawRoute(mb.VNI(nSpec.ID), dest, hop); err != nil {
-	// 		return fmt.Errorf("failed to withdraw a local route, reason: %v", err)
-	// 	}
-	// }
+	if action == networkingv1alpha1.ROUTEADD {
+		if err = r.MbInstance.AnnounceRoute(mb.VNI(nSpec.ID), dest, hop); err != nil {
+			return fmt.Errorf("failed to announce a local route, reason: %v", err)
+		}
+	} else {
+		if err = r.MbInstance.WithdrawRoute(mb.VNI(nSpec.ID), dest, hop); err != nil {
+			return fmt.Errorf("failed to withdraw a local route, reason: %v", err)
+		}
+	}
 
 	return nil
 }
@@ -394,27 +385,6 @@ func (r *NetworkInterfaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&networkingv1alpha1.NetworkInterface{}).
 		Complete(r)
-}
-
-func getVirtualFunctionNumber(name string) (int, error) {
-	//vfIndex: vf0 -> 0
-	pciInfo := strings.Split(name, "_")
-	s := pciInfo[len(pciInfo)-1]
-	s = strings.TrimPrefix(s, "vf")
-	return strconv.Atoi(s)
-}
-
-func convertToLibvirtPciDevName(name string) string {
-	// Parsing grpc server response
-	// "name:"0000:3b:00.0_representor_vf0"  domain:1702061426  bus:1919906926  slot:812021343 <nil>"
-	// pci dev: 0000:3b:00.0 -> pci_0000_3b_00_0
-	pciInfo := strings.Split(name, "_")
-	pciDev := pciInfo[0]
-
-	pciDev = strings.Replace(pciDev, ":", "_", -1)
-	pciDev = strings.Replace(pciDev, ".", "_", -1)
-
-	return "pci_" + pciDev
 }
 
 func RandomIpV6Address() string {

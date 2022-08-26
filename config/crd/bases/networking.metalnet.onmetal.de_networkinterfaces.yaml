@@ -12,10 +12,25 @@ spec:
     kind: NetworkInterface
     listKind: NetworkInterfaceList
     plural: networkinterfaces
+    shortNames:
+    - ni
     singular: networkinterface
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - description: Current status of the network interface.
+      jsonPath: .status.phase
+      name: Status
+      type: string
+    - description: Current Network Attributes of the Network Interface.
+      jsonPath: .status.access.networkAttributes
+      name: Status
+      type: string
+    - description: Current baremetal host of the Network Interface.
+      jsonPath: .spec.nodeName
+      name: Host
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: NetworkInterface is the Schema for the networkinterfaces API

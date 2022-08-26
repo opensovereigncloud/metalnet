@@ -111,6 +111,9 @@ const (
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+// +kubebuilder:resource:shortName=ni
+// +kubebuilder:printcolumn:name="Status",type=string,description="Current status of the network interface.",JSONPath=`.status.phase`,priority=0
+// +kubebuilder:printcolumn:name="Host",type=string,description="Current baremetal host of the Network Interface.",JSONPath=`.spec.nodeName`,priority=0
 
 // NetworkInterface is the Schema for the networkinterfaces API
 type NetworkInterface struct {

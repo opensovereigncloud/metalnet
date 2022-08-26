@@ -20,11 +20,17 @@ import (
 	"context"
 
 	networkingv1alpha1 "github.com/onmetal/metalnet/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const (
@@ -53,20 +59,20 @@ func (r *NetworkReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// refNetworkInterfaces := &networkingv1alpha1.NetworkInterfaceList{}
-	// listOps := &client.ListOptions{
-	// 	FieldSelector: fields.OneTermEqualSelector(networkRefField, req.Name),
-	// 	Namespace:     req.Namespace,
-	// }
-	// err := r.List(ctx, refNetworkInterfaces, listOps)
-	// if err != nil {
-	// 	return ctrl.Result{}, err
-	// }
+	refNetworkInterfaces := &networkingv1alpha1.NetworkInterfaceList{}
+	listOps := &client.ListOptions{
+		FieldSelector: fields.OneTermEqualSelector(networkRefField, req.Name),
+		Namespace:     req.Namespace,
+	}
+	err := r.List(ctx, refNetworkInterfaces, listOps)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	changeFinalizerFunc := controllerutil.AddFinalizer
-	// if !network.DeletionTimestamp.IsZero() && len(refNetworkInterfaces.Items) == 0 {
-	// 	changeFinalizerFunc = controllerutil.RemoveFinalizer
-	// }
+	if !network.DeletionTimestamp.IsZero() && len(refNetworkInterfaces.Items) == 0 {
+		changeFinalizerFunc = controllerutil.RemoveFinalizer
+	}
 
 	clone := network.DeepCopy()
 	if !changeFinalizerFunc(clone, NetworkFinalizerName) {
@@ -81,34 +87,34 @@ func (r *NetworkReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *NetworkReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	// if err := mgr.GetFieldIndexer().IndexField(context.Background(), &networkingv1alpha1.NetworkInterface{}, networkRefField, func(rawObj client.Object) []string {
-	// 	ni := rawObj.(*networkingv1alpha1.NetworkInterface)
-	// 	return []string{ni.Spec.NetworkRef.Name}
-	// }); err != nil {
-	// 	return err
-	// }
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &networkingv1alpha1.NetworkInterface{}, networkRefField, func(rawObj client.Object) []string {
+		ni := rawObj.(*networkingv1alpha1.NetworkInterface)
+		return []string{ni.Spec.NetworkRef.Name}
+	}); err != nil {
+		return err
+	}
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&networkingv1alpha1.Network{}).
 		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
-		// Watches(
-		// 	&source.Kind{Type: &networkingv1alpha1.NetworkInterface{}},
-		// 	handler.EnqueueRequestsFromMapFunc(r.findObjectsForNetworkInterface),
-		// 	builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
-		// ).
+		Watches(
+			&source.Kind{Type: &networkingv1alpha1.NetworkInterface{}},
+			handler.EnqueueRequestsFromMapFunc(r.findObjectsForNetworkInterface),
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		).
 		Complete(r)
 }
 
-// func (r *NetworkReconciler) findObjectsForNetworkInterface(obj client.Object) []reconcile.Request {
-// 	networkInterface, ok := obj.(*networkingv1alpha1.NetworkInterface)
-// 	if !ok {
-// 		return []reconcile.Request{}
-// 	}
+func (r *NetworkReconciler) findObjectsForNetworkInterface(obj client.Object) []reconcile.Request {
+	networkInterface, ok := obj.(*networkingv1alpha1.NetworkInterface)
+	if !ok {
+		return []reconcile.Request{}
+	}
 
-// 	return []reconcile.Request{{
-// 		NamespacedName: types.NamespacedName{
-// 			Name:      networkInterface.Spec.NetworkRef.Name,
-// 			Namespace: networkInterface.GetNamespace(),
-// 		},
-// 	}}
-// }
+	return []reconcile.Request{{
+		NamespacedName: types.NamespacedName{
+			Name:      networkInterface.Spec.NetworkRef.Name,
+			Namespace: networkInterface.GetNamespace(),
+		},
+	}}
+}

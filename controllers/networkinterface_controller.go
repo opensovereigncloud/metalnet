@@ -115,6 +115,17 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 		}
 
+		nf := &networkingv1alpha1.NetworkFunction{}
+		keyNF := types.NamespacedName{
+			Namespace: req.NamespacedName.Namespace,
+			Name:      req.Name + NetworkFunctionName,
+		}
+
+		if err := r.Get(ctx, keyNF, nf); err == nil {
+			if err := r.Delete(ctx, nf); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
 		controllerutil.RemoveFinalizer(clone, NetworkInterfaceFinalizerName)
 		if err := r.Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
 			return ctrl.Result{}, err
@@ -162,6 +173,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			err := r.Create(ctx, nf)
 			if err != nil {
 				log.Info("unable to create Network Function", "Error", err)
+				return ctrl.Result{RequeueAfter: 2 * time.Second}, err
 			}
 		}
 		log.Info("unable to fetch NetworkFunction", "Error", err)
@@ -181,7 +193,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, client.IgnoreNotFound(err)
 	}
 
-	machineID, resp, err := r.addMachineDPSKServerCall(ctx, ni.Spec, n.Spec, n2.Status.PCIAddress)
+	machineID, resp, err := r.addMachineDPSKServerCall(ctx, ni.Spec, n.Spec, nf.Status.PCIAddress)
 	if err != nil {
 		return ctrl.Result{}, err
 	}

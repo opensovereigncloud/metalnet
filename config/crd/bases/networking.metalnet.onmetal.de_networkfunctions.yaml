@@ -12,10 +12,29 @@ spec:
     kind: NetworkFunction
     listKind: NetworkFunctionList
     plural: networkfunctions
+    shortNames:
+    - nf
     singular: networkfunction
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - description: Type of the network function.
+      jsonPath: .spec.type
+      name: Type
+      type: string
+    - description: Current status of the network function.
+      jsonPath: .status.phase
+      name: Status
+      type: string
+    - description: Baremetal host of the network function
+      jsonPath: .spec.nodeName
+      name: Host
+      type: string
+    - description: PCI Address of the network function
+      jsonPath: .status.pciAddress
+      name: PCI
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: NetworkFunction is the Schema for the networkfunctions API

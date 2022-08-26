@@ -14,6 +14,7 @@ const (
 )
 
 type DeviceAllocator interface {
+	ReserveDeviceWithName(string) error
 	ReserveDevice() (string, error)
 	FreeDevice(dev string) error
 }
@@ -43,6 +44,16 @@ func (d *NFDeviceBase) ReserveDevice() (string, error) {
 		}
 	}
 	return "", errors.New("no available device found")
+}
+
+func (d *NFDeviceBase) ReserveDeviceWithName(dev string) error {
+	for i := 0; i < len(d.devices); i++ {
+		if !d.devices[i].reserved && d.devices[i].pci_addr == dev {
+			d.devices[i].reserved = true
+			return nil
+		}
+	}
+	return nil
 }
 
 func (d *NFDeviceBase) FreeDevice(dev string) error {

@@ -101,9 +101,10 @@ func (r *NetworkFunctionReconciler) reconcileBound(ctx context.Context, log logr
 		log.V(1).Info("Network Function is not yet assigned to a node.")
 		return ctrl.Result{Requeue: true}, nil
 	}
-	if function.Status.PCIAddress == "" {
+	if function.Status.PCIAddress != "" {
+		r.DeviceAllocator.ReserveDeviceWithName(function.Status.PCIAddress)
+	} else {
 		newDevice, err := r.DeviceAllocator.ReserveDevice()
-
 		if err != nil {
 			log.V(1).Error(err, "Network function error")
 			return ctrl.Result{}, err

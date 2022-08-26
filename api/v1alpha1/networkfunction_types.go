@@ -50,6 +50,11 @@ const (
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+// +kubebuilder:resource:shortName=nf
+// +kubebuilder:printcolumn:name="Type",type=string,description="Type of the network function.",JSONPath=`.spec.type`,priority=0
+// +kubebuilder:printcolumn:name="Status",type=string,description="Current status of the network function.",JSONPath=`.status.phase`,priority=0
+// +kubebuilder:printcolumn:name="Host",type=string,description="Baremetal host of the network function",JSONPath=`.spec.nodeName`,priority=0
+// +kubebuilder:printcolumn:name="PCI",type=string,description="PCI Address of the network function",JSONPath=`.status.pciAddress`,priority=0
 
 // NetworkFunction is the Schema for the networkfunctions API
 type NetworkFunction struct {

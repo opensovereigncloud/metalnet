@@ -44,6 +44,7 @@ const (
 	UnderlayRoute                 = "dpdk.metalnet.onmetal.de/underlayRoute"
 	DpPciAddr                     = "dpdk.metalnet.onmetal.de/dpPciAddr"
 	NetworkFunctionName           = "networkfunction-sample"
+	DpRouteAlreadyAddedError      = 251
 )
 
 type NodeDevPCIInfo func(string, int) (map[string]string, error)
@@ -373,7 +374,7 @@ func (r *NetworkInterfaceReconciler) insertDefaultVNIPublicRoute(ctx context.Con
 	}
 
 	status, err := r.DPDKClient.AddRoute(ctx, req)
-	if err != nil || (status.Error != 0 && status.Error != 251) {
+	if err != nil || (status.Error != 0 && status.Error != DpRouteAlreadyAddedError) {
 		return fmt.Errorf("cannot add route to dpdk service: %v Status from DPDKClient: %d", err, status.Error)
 	}
 

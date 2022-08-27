@@ -1,0 +1,24 @@
+# permissions for end users to edit aliasprefixes.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: aliasprefix-editor-role
+rules:
+- apiGroups:
+  - networking.metalnet.onmetal.de
+  resources:
+  - aliasprefixes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - networking.metalnet.onmetal.de
+  resources:
+  - aliasprefixes/status
+  verbs:
+  - get

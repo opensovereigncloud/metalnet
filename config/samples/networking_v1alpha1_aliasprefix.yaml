@@ -1,0 +1,6 @@
+apiVersion: networking.metalnet.onmetal.de/v1alpha1
+kind: AliasPrefix
+metadata:
+  name: aliasprefix-sample
+spec:
+  # TODO(user): Add fields here

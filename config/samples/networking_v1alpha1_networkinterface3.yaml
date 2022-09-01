@@ -1,0 +1,11 @@
+apiVersion: networking.metalnet.onmetal.de/v1alpha1
+kind: NetworkInterface
+metadata:
+  name: networkinterface-sample3
+spec:
+  ipFamilies:
+    - "IPv4"
+  ip: 10.0.0.4
+  nodeName: fra4-lab-dell-2
+  networkRef:
+    name: network-sample

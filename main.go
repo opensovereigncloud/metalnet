@@ -154,15 +154,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.NetworkFunctionReconciler{
-		Client:          mgr.GetClient(),
-		Scheme:          mgr.GetScheme(),
-		DeviceAllocator: nfDeviceBase,
-		Hostname:        hostName,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "NetworkFunction")
-		os.Exit(1)
-	}
+	// if err = (&controllers.NetworkFunctionReconciler{
+	// 	Client:          mgr.GetClient(),
+	// 	Scheme:          mgr.GetScheme(),
+	// 	DeviceAllocator: nfDeviceBase,
+	// 	Hostname:        hostName,
+	// }).SetupWithManager(mgr); err != nil {
+	// 	setupLog.Error(err, "unable to create controller", "controller", "NetworkFunction")
+	// 	os.Exit(1)
+	// }
 	if err = (&controllers.NetworkReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
@@ -172,16 +172,18 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.NetworkInterfaceReconciler{
-		Client:        mgr.GetClient(),
-		Scheme:        mgr.GetScheme(),
-		DPDKClient:    dpdkClient,
-		HostName:      hostName,
-		MbInstance:    mbInstance,
-		RouterAddress: metalbondServerAddr,
+		Client:          mgr.GetClient(),
+		Scheme:          mgr.GetScheme(),
+		DPDKClient:      dpdkClient,
+		HostName:        hostName,
+		MbInstance:      mbInstance,
+		RouterAddress:   metalbondServerAddr,
+		DeviceAllocator: nfDeviceBase,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkInterface")
 		os.Exit(1)
 	}
+
 	if err = (&controllers.VirtualIPReconciler{
 		Client:          mgr.GetClient(),
 		Scheme:          mgr.GetScheme(),

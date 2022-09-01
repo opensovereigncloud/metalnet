@@ -7,17 +7,6 @@ spec:
 
 
 apiVersion: networking.metalnet.onmetal.de/v1alpha1
-kind: NetworkFunction
-metadata:
-  name: networkfunction-sample
-spec:
-  type: virtual
-  nodeName: fra4-lab-dell-2
-  targetRef:
-    name: networkinterface-sample
-
-
-apiVersion: networking.metalnet.onmetal.de/v1alpha1
 kind: NetworkInterface
 metadata:
   name: networkinterface-sample
@@ -25,6 +14,18 @@ spec:
   ipFamilies:
     - "IPv4"
   ip: 10.0.0.2
+  nodeName: fra4-lab-dell-2
+  networkRef:
+    name: network-sample
+
+apiVersion: networking.metalnet.onmetal.de/v1alpha1
+kind: NetworkInterface
+metadata:
+  name: networkinterface-sample2
+spec:
+  ipFamilies:
+    - "IPv4"
+  ip: 10.0.0.3
   nodeName: fra4-lab-dell-2
   networkRef:
     name: network-sample

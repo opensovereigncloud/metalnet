@@ -43,7 +43,6 @@ const (
 	NetworkInterfaceFinalizerName = "networking.metalnet.onmetal.de/networkInterface"
 	UnderlayRoute                 = "dpdk.metalnet.onmetal.de/underlayRoute"
 	DpPciAddr                     = "dpdk.metalnet.onmetal.de/dpPciAddr"
-	NetworkFunctionName           = "networkfunction-sample"
 	DpRouteAlreadyAddedError      = 251
 )
 
@@ -52,11 +51,12 @@ type NodeDevPCIInfo func(string, int) (map[string]string, error)
 // NetworkInterfaceReconciler reconciles a NetworkInterface object
 type NetworkInterfaceReconciler struct {
 	client.Client
-	Scheme        *runtime.Scheme
-	DPDKClient    dpdkproto.DPDKonmetalClient
-	HostName      string
-	RouterAddress string
-	MbInstance    *mb.MetalBond
+	Scheme          *runtime.Scheme
+	DPDKClient      dpdkproto.DPDKonmetalClient
+	HostName        string
+	RouterAddress   string
+	MbInstance      *mb.MetalBond
+	DeviceAllocator DeviceAllocator
 }
 
 //+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networkinterfaces,verbs=get;list;watch;create;update;patch;delete
@@ -107,6 +107,8 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				}
 				return ctrl.Result{}, err
 			}
+			r.DeviceAllocator.FreeDevice(ni.Status.Access.NetworkAttributes[DpPciAddr])
+			ni.Status.Access.NetworkAttributes[DpPciAddr] = ""
 		}
 
 		log.V(1).Info("Withdrawing Private route", "NIC", ni.Name, "PublicIP", ni.Spec.IP, "VNI", network.Spec.ID)
@@ -118,17 +120,6 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 		}
 
-		nf := &networkingv1alpha1.NetworkFunction{}
-		keyNF := types.NamespacedName{
-			Namespace: req.NamespacedName.Namespace,
-			Name:      req.Name + NetworkFunctionName,
-		}
-
-		if err := r.Get(ctx, keyNF, nf); err == nil {
-			if err := r.Delete(ctx, nf); err != nil {
-				return ctrl.Result{}, err
-			}
-		}
 		controllerutil.RemoveFinalizer(clone, NetworkInterfaceFinalizerName)
 		if err := r.Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
 			return ctrl.Result{}, err
@@ -141,49 +132,22 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	if ni.Status.Phase == networkingv1alpha1.NetworkInterfacePhaseUnbound {
+		if ni.Status.Access != nil {
+			interfaceID := string(ni.Status.Access.UID)
+			_, err := r.getInterfaceDPSKServerCall(ctx, interfaceID)
+			if err != nil {
+				clone := ni.DeepCopy()
+				clone.Status.Phase = ""
+				if err := r.Status().Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+		}
 		return ctrl.Result{}, nil
 	}
 
 	if ni.Status.Phase == networkingv1alpha1.NetworkInterfacePhasePending {
 		return ctrl.Result{}, nil
-	}
-
-	nf := &networkingv1alpha1.NetworkFunction{}
-	keyNF := types.NamespacedName{
-		Namespace: req.NamespacedName.Namespace,
-		Name:      req.Name + NetworkFunctionName,
-	}
-
-	if err := r.Get(ctx, keyNF, nf); err != nil {
-		dpPci := ""
-		if ni.Status.Access != nil {
-			dpPci = ni.Status.Access.NetworkAttributes[DpPciAddr]
-		}
-		if dpPci == "" {
-			nf := &networkingv1alpha1.NetworkFunction{
-				ObjectMeta: v1.ObjectMeta{
-					Namespace: req.NamespacedName.Namespace,
-					Name:      req.Name + NetworkFunctionName,
-				},
-				Spec: networkingv1alpha1.NetworkFunctionSpec{
-					NFType:   "virtual",
-					NodeName: &r.HostName,
-					TargetRef: &networkingv1alpha1.LocalUIDReference{
-						Name: req.NamespacedName.Namespace,
-					},
-				},
-			}
-			err := r.Create(ctx, nf)
-			if err != nil {
-				log.Info("unable to create Network Function", "Error", err)
-				return ctrl.Result{RequeueAfter: 2 * time.Second}, err
-			}
-		}
-		log.Info("unable to fetch NetworkFunction", "Error", err)
-		return ctrl.Result{RequeueAfter: 2 * time.Second}, client.IgnoreNotFound(err)
-	}
-	if nf.Status.PCIAddress == "" {
-		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 	}
 
 	n := &networkingv1alpha1.Network{}
@@ -196,8 +160,27 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, client.IgnoreNotFound(err)
 	}
 
-	interfaceID, resp, err := r.addInterfaceDPSKServerCall(ctx, ni.Spec, n.Spec, nf.Status.PCIAddress)
+	dpPci := ""
+
+	if ni.Status.Access != nil {
+		dpPci = ni.Status.Access.NetworkAttributes[DpPciAddr]
+	}
+	if dpPci == "" {
+		newDevice, err := r.DeviceAllocator.ReserveDevice()
+		if err != nil {
+			log.V(1).Error(err, "PCI device reservation error")
+			return ctrl.Result{}, err
+		}
+		dpPci = newDevice
+		log.V(1).Info("Assigning new Network PCI Device", "PCI:", newDevice)
+	} else {
+		log.V(1).Info("Using assigned Network PCI Device", "PCI:", dpPci)
+		r.DeviceAllocator.ReserveDeviceWithName(dpPci)
+	}
+
+	interfaceID, resp, err := r.addInterfaceDPSKServerCall(ctx, ni.Spec, n.Spec, dpPci)
 	if err != nil {
+		r.DeviceAllocator.FreeDevice(dpPci)
 		return ctrl.Result{}, err
 	}
 	log.Info("AddInterface GRPC call", "resp", resp)
@@ -217,6 +200,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		UnderlayRoute: "",
 	}
 	na.NetworkAttributes[UnderlayRoute] = string(resp.Response.UnderlayRoute)
+	na.NetworkAttributes[DpPciAddr] = string(resp.Vf.Name)
 	if err := r.MbInstance.Subscribe(mb.VNI(n.Spec.ID)); err != nil {
 		log.Info("duplicate subscription, IGNORED for now due to boostrap of virt networks")
 	}
@@ -274,6 +258,20 @@ func (r *NetworkInterfaceReconciler) deleteInterfaceDPSKServerCall(ctx context.C
 		return fmt.Errorf("eror during Grpc call, DeleteInterface, code=%v", status.Error)
 	}
 	return nil
+}
+
+func (r *NetworkInterfaceReconciler) getInterfaceDPSKServerCall(ctx context.Context, interfaceID string) (*dpdkproto.GetInterfaceResponse, error) {
+	getInterfaceReq := &dpdkproto.InterfaceIDMsg{
+		InterfaceID: []byte(interfaceID),
+	}
+	resp, err := r.DPDKClient.GetInterface(ctx, getInterfaceReq)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Status.Error != 0 {
+		return nil, fmt.Errorf("eror during Grpc call, GetInterface, code=%v", resp.Status.Error)
+	}
+	return resp, nil
 }
 
 func (r *NetworkInterfaceReconciler) addInterfaceDPSKServerCall(ctx context.Context, niSpec networkingv1alpha1.NetworkInterfaceSpec, nSpec networkingv1alpha1.NetworkSpec, pciAddr string) (string, *dpdkproto.CreateInterfaceResponse, error) {

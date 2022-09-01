@@ -51,7 +51,7 @@ type VirtualIPStatus struct {
 	// LastPhaseTransitionTime is the last time the Phase transitioned from one value to another.
 	LastPhaseTransitionTime *metav1.Time `json:"phaseLastTransitionTime,omitempty"`
 	// TODO: we should establish a model how we can identify a VirtualIP standalone
-	MachineID string `json:"machineID,omitempty"`
+	InterfaceID string `json:"machineID,omitempty"`
 	// UnderlayIP of the host
 	UnderlayIP *IP `json:"underlayIP,omitempty"`
 }

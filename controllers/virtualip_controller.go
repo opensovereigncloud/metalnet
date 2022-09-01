@@ -45,7 +45,7 @@ const (
 	virtualIPFinalizer           = "networking.metalnet.onmetal.de/virtualip"
 	virtualIPField               = ".spec.targetRef.name"
 	dpdkExitSuccess        int32 = 0
-	dpdkMachineNotFound    int32 = 450
+	dpdkInterfaceNotFound  int32 = 450
 	dpdkRouteAlreadyExists int32 = 351
 )
 
@@ -85,22 +85,22 @@ func (r *VirtualIPReconciler) reconcileExists(ctx context.Context, log logr.Logg
 func (r *VirtualIPReconciler) delete(ctx context.Context, log logr.Logger, virtualIP *networkingv1alpha1.VirtualIP) (ctrl.Result, error) {
 	log.V(1).Info("Deleting VirtualIP")
 
-	if virtualIP.Status.MachineID != "" {
-		msg := &dpdkproto.MachineIDMsg{MachineID: []byte(virtualIP.Status.MachineID)}
-		status, err := r.DPDKClient.DelMachineVIP(ctx, msg)
+	if virtualIP.Status.InterfaceID != "" {
+		msg := &dpdkproto.InterfaceIDMsg{InterfaceID: []byte(virtualIP.Status.InterfaceID)}
+		status, err := r.DPDKClient.DeleteInterfaceVIP(ctx, msg)
 		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to delete the VIP %s for machine %s : %w", client.ObjectKeyFromObject(virtualIP), virtualIP.Status.MachineID, err)
+			return ctrl.Result{}, fmt.Errorf("failed to delete the VIP %s for interface %s : %w", client.ObjectKeyFromObject(virtualIP), virtualIP.Status.InterfaceID, err)
 		}
 
-		if err := status.Error; err != dpdkExitSuccess && err != dpdkMachineNotFound {
-			log.V(1).Info("failed to add MachineVIP", "Status", status.Error, "Message", status.Message)
+		if err := status.Error; err != dpdkExitSuccess && err != dpdkInterfaceNotFound {
+			log.V(1).Info("failed to add InterfaceVIP", "Status", status.Error, "Message", status.Message)
 			return ctrl.Result{Requeue: true}, nil
 		}
 
 		if virtualIP.Status.UnderlayIP != nil {
 			// Withdraw VIP from MetalBond
 			log.V(1).Info("Withdrawing PublicIP route", "PublicIP", virtualIP.Spec.IP)
-			if err := r.announceMachinePublicVIPRoute(ctx, log, virtualIP, r.PublicVNI, networkingv1alpha1.ROUTEREMOVE); err != nil {
+			if err := r.announceInterfacePublicVIPRoute(ctx, log, virtualIP, r.PublicVNI, networkingv1alpha1.ROUTEREMOVE); err != nil {
 				if !strings.Contains(fmt.Sprint(err), "Nexthop does not exist") {
 					log.Error(err, "failed to remove route")
 					return ctrl.Result{}, err
@@ -158,7 +158,7 @@ func (r *VirtualIPReconciler) reconcileBound(ctx context.Context, log logr.Logge
 	case networkingv1alpha1.VirtualIPTypePublic:
 		log.V(1).Info("Registering public VirtualIP")
 
-		vipIp := &dpdkproto.MachineVIPIP{}
+		vipIp := &dpdkproto.InterfaceVIPIP{}
 		switch virtualIP.Spec.IPFamily {
 		case corev1.IPv4Protocol:
 			vipIp.IpVersion = dpdkproto.IPVersion_IPv4
@@ -169,40 +169,40 @@ func (r *VirtualIPReconciler) reconcileBound(ctx context.Context, log logr.Logge
 			vipIp.Address = []byte(virtualIP.Spec.IP.String())
 		}
 
-		var machineID string
+		var interfaceID string
 		var underlayIP *v1alpha1.IP
 		if nicAccess := nic.Status.Access; nicAccess != nil {
-			// get machine UID
-			machineID = string(nicAccess.UID)
+			// get interface UID
+			interfaceID = string(nicAccess.UID)
 			// get underlay IP
 			underlayIP = v1alpha1.MustParseNewIP(nicAccess.NetworkAttributes[UnderlayRoute])
 		}
 
 		// Register VIP
-		extStatus, err := r.DPDKClient.AddMachineVIP(ctx, &dpdkproto.MachineVIPMsg{
-			MachineID:    []byte(machineID),
-			MachineVIPIP: vipIp,
+		resp, err := r.DPDKClient.AddInterfaceVIP(ctx, &dpdkproto.InterfaceVIPMsg{
+			InterfaceID:    []byte(interfaceID),
+			InterfaceVIPIP: vipIp,
 		})
 
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to add VirtualIP %s to NetworkInterface %s: %w", client.ObjectKeyFromObject(virtualIP), client.ObjectKeyFromObject(nic), err)
 		}
 
-		if extStatus.Error != dpdkExitSuccess && extStatus.Error != dpdkRouteAlreadyExists {
-			if err := r.patchStatus(ctx, virtualIP, networkingv1alpha1.VirtualIPPhasePending, virtualIP.Status.MachineID, underlayIP); err != nil {
+		if resp.Status.Error != dpdkExitSuccess && resp.Status.Error != dpdkRouteAlreadyExists {
+			if err := r.patchStatus(ctx, virtualIP, networkingv1alpha1.VirtualIPPhasePending, virtualIP.Status.InterfaceID, underlayIP); err != nil {
 				return ctrl.Result{}, err
 			}
-			log.V(1).Info("failed to add MachineVIP", "ExtStatus", extStatus.Error, "ExtMessage", extStatus.Message)
+			log.V(1).Info("failed to add InterfaceVIP", "ExtStatus", resp.Status.Error, "ExtMessage", resp.Status.Message)
 			return ctrl.Result{Requeue: true}, nil
 		}
 
-		if err := r.patchStatus(ctx, virtualIP, networkingv1alpha1.VirtualIPPhaseBound, machineID, underlayIP); err != nil {
+		if err := r.patchStatus(ctx, virtualIP, networkingv1alpha1.VirtualIPPhaseBound, interfaceID, underlayIP); err != nil {
 			return ctrl.Result{}, err
 		}
 
 		// Announce MetalBond VIP
 		log.V(1).Info("Announcing PublicIP route", "NIC", nic.Name, "PublicIP", nic.Spec.IP)
-		if err := r.announceMachinePublicVIPRoute(ctx, log, virtualIP, r.PublicVNI, networkingv1alpha1.ROUTEADD); err != nil {
+		if err := r.announceInterfacePublicVIPRoute(ctx, log, virtualIP, r.PublicVNI, networkingv1alpha1.ROUTEADD); err != nil {
 			if !strings.Contains(fmt.Sprint(err), "Nexthop already exists") {
 				log.Error(err, "failed to announce route")
 				return ctrl.Result{}, err
@@ -221,14 +221,14 @@ func (r *VirtualIPReconciler) reconcileBound(ctx context.Context, log logr.Logge
 	return ctrl.Result{}, nil
 }
 
-func (r *VirtualIPReconciler) patchStatus(ctx context.Context, vip *networkingv1alpha1.VirtualIP, phase networkingv1alpha1.VirtualIPPhase, machineID string, underlayIP *v1alpha1.IP) error {
+func (r *VirtualIPReconciler) patchStatus(ctx context.Context, vip *networkingv1alpha1.VirtualIP, phase networkingv1alpha1.VirtualIPPhase, interfaceID string, underlayIP *v1alpha1.IP) error {
 	base := vip.DeepCopy()
 	now := metav1.Now()
 	if vip.Status.Phase != phase {
 		vip.Status.LastPhaseTransitionTime = &now
 	}
 	vip.Status.Phase = phase
-	vip.Status.MachineID = machineID
+	vip.Status.InterfaceID = interfaceID
 	vip.Status.UnderlayIP = underlayIP
 	return r.Status().Patch(ctx, vip, client.MergeFrom(base))
 }
@@ -284,21 +284,21 @@ func (r *VirtualIPReconciler) enqueueByTargetNameReferencingNetworkInterface(log
 }
 
 func (r *VirtualIPReconciler) reconcileUnbound(ctx context.Context, log logr.Logger, vip *networkingv1alpha1.VirtualIP) (ctrl.Result, error) {
-	if vip.Status.MachineID == "" {
+	if vip.Status.InterfaceID == "" {
 		if err := r.patchStatus(ctx, vip, networkingv1alpha1.VirtualIPPhaseUnbound, "", nil); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
 	}
 
-	msg := &dpdkproto.MachineIDMsg{MachineID: []byte(vip.Status.MachineID)}
-	status, err := r.DPDKClient.DelMachineVIP(ctx, msg)
+	msg := &dpdkproto.InterfaceIDMsg{InterfaceID: []byte(vip.Status.InterfaceID)}
+	status, err := r.DPDKClient.DeleteInterfaceVIP(ctx, msg)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to delete the VIP %s for machine %s : %w", client.ObjectKeyFromObject(vip), vip.Status.MachineID, err)
+		return ctrl.Result{}, fmt.Errorf("failed to delete the VIP %s for machine %s : %w", client.ObjectKeyFromObject(vip), vip.Status.InterfaceID, err)
 	}
 
-	if err := status.Error; err != dpdkExitSuccess && err != dpdkMachineNotFound {
-		log.V(1).Info("failed to delete MachineVIP", "Status", status.Error, "Message", status.Message)
+	if err := status.Error; err != dpdkExitSuccess && err != dpdkInterfaceNotFound {
+		log.V(1).Info("failed to delete InterfaceVIP", "Status", status.Error, "Message", status.Message)
 		return ctrl.Result{Requeue: true}, nil
 	}
 
@@ -308,7 +308,7 @@ func (r *VirtualIPReconciler) reconcileUnbound(ctx context.Context, log logr.Log
 	return ctrl.Result{}, nil
 }
 
-func (r *VirtualIPReconciler) announceMachinePublicVIPRoute(ctx context.Context, log logr.Logger, vip *networkingv1alpha1.VirtualIP, publicVNI int, action int) error {
+func (r *VirtualIPReconciler) announceInterfacePublicVIPRoute(ctx context.Context, log logr.Logger, vip *networkingv1alpha1.VirtualIP, publicVNI int, action int) error {
 
 	if vip.Spec.IP == nil {
 		log.V(1).Info("NetworkInterface is not populated, or Public IP is not set in NIC")

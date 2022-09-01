@@ -99,8 +99,8 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		clone := ni.DeepCopy()
 
 		if ni.Status.Access != nil {
-			machineID := string(ni.Status.Access.UID)
-			if err := r.deleteMachineDPSKServerCall(ctx, machineID); err != nil {
+			interfaceID := string(ni.Status.Access.UID)
+			if err := r.deleteInterfaceDPSKServerCall(ctx, interfaceID); err != nil {
 				ni.Status.State = networkingv1alpha1.NetworkInterfaceStateError
 				if err := r.Status().Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
 					return ctrl.Result{}, err
@@ -110,7 +110,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 
 		log.V(1).Info("Withdrawing Private route", "NIC", ni.Name, "PublicIP", ni.Spec.IP, "VNI", network.Spec.ID)
-		if err := r.announceMachineLocalRoute(ctx, ni.Spec, network.Spec, ni.Status.Access, networkingv1alpha1.ROUTEREMOVE); err != nil {
+		if err := r.announceInterfaceLocalRoute(ctx, ni.Spec, network.Spec, ni.Status.Access, networkingv1alpha1.ROUTEREMOVE); err != nil {
 			if !strings.Contains(fmt.Sprint(err), "Nexthop does not exist") {
 				return ctrl.Result{}, fmt.Errorf("failed to withdraw a route. %v", err)
 			} else {
@@ -196,11 +196,11 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, client.IgnoreNotFound(err)
 	}
 
-	machineID, resp, err := r.addMachineDPSKServerCall(ctx, ni.Spec, n.Spec, nf.Status.PCIAddress)
+	interfaceID, resp, err := r.addInterfaceDPSKServerCall(ctx, ni.Spec, n.Spec, nf.Status.PCIAddress)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	log.Info("AddMachine GRPC call", "resp", resp)
+	log.Info("AddInterface GRPC call", "resp", resp)
 
 	clone := ni.DeepCopy()
 
@@ -212,16 +212,16 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 	ni = clone
 	na := &networkingv1alpha1.NetworkInterfaceAccess{}
-	na.UID = types.UID(machineID)
+	na.UID = types.UID(interfaceID)
 	na.NetworkAttributes = map[string]string{
 		UnderlayRoute: "",
 	}
-	na.NetworkAttributes[UnderlayRoute] = string(resp.Status.UnderlayRoute)
+	na.NetworkAttributes[UnderlayRoute] = string(resp.Response.UnderlayRoute)
 	if err := r.MbInstance.Subscribe(mb.VNI(n.Spec.ID)); err != nil {
 		log.Info("duplicate subscription, IGNORED for now due to boostrap of virt networks")
 	}
 
-	if err := r.announceMachineLocalRoute(ctx, ni.Spec, n.Spec, na, networkingv1alpha1.ROUTEADD); err != nil {
+	if err := r.announceInterfaceLocalRoute(ctx, ni.Spec, n.Spec, na, networkingv1alpha1.ROUTEADD); err != nil {
 		if !strings.Contains(fmt.Sprint(err), "Nexthop already exists") {
 			log.Error(err, "failed to announce route")
 			return ctrl.Result{}, err
@@ -262,28 +262,28 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	return ctrl.Result{}, nil
 }
 
-func (r *NetworkInterfaceReconciler) deleteMachineDPSKServerCall(ctx context.Context, machineID string) error {
-	delMachineReq := &dpdkproto.MachineIDMsg{
-		MachineID: []byte(machineID),
+func (r *NetworkInterfaceReconciler) deleteInterfaceDPSKServerCall(ctx context.Context, interfaceID string) error {
+	delInterfaceReq := &dpdkproto.InterfaceIDMsg{
+		InterfaceID: []byte(interfaceID),
 	}
-	status, err := r.DPDKClient.DeleteMachine(ctx, delMachineReq)
+	status, err := r.DPDKClient.DeleteInterface(ctx, delInterfaceReq)
 	if err != nil {
 		return err
 	}
-	if status.Error != 0 && status.Error != 151 { // 151 - machine not found
-		return fmt.Errorf("eror during Grpc call, DeleteMachine, code=%v", status.Error)
+	if status.Error != 0 && status.Error != 151 { // 151 - interface not found
+		return fmt.Errorf("eror during Grpc call, DeleteInterface, code=%v", status.Error)
 	}
 	return nil
 }
 
-func (r *NetworkInterfaceReconciler) addMachineDPSKServerCall(ctx context.Context, niSpec networkingv1alpha1.NetworkInterfaceSpec, nSpec networkingv1alpha1.NetworkSpec, pciAddr string) (string, *dpdkproto.AddMachineResponse, error) {
-	machineID := uuid.New().String()
+func (r *NetworkInterfaceReconciler) addInterfaceDPSKServerCall(ctx context.Context, niSpec networkingv1alpha1.NetworkInterfaceSpec, nSpec networkingv1alpha1.NetworkSpec, pciAddr string) (string, *dpdkproto.CreateInterfaceResponse, error) {
+	interfaceID := uuid.New().String()
 	ip := niSpec.IP.String()
-	addMachineReq := &dpdkproto.AddMachineRequest{
-		MachineType: dpdkproto.MachineType_VirtualMachine,
-		MachineID:   []byte(machineID),
-		Vni:         uint32(nSpec.ID),
-		DeviceName:  pciAddr,
+	createInterfaceReq := &dpdkproto.CreateInterfaceRequest{
+		InterfaceType: dpdkproto.InterfaceType_VirtualInterface,
+		InterfaceID:   []byte(interfaceID),
+		Vni:           uint32(nSpec.ID),
+		DeviceName:    pciAddr,
 		Ipv4Config: &dpdkproto.IPConfig{
 			IpVersion:      dpdkproto.IPVersion_IPv4,
 			PrimaryAddress: []byte(ip),
@@ -293,19 +293,19 @@ func (r *NetworkInterfaceReconciler) addMachineDPSKServerCall(ctx context.Contex
 			PrimaryAddress: []byte(RandomIpV6Address()),
 		},
 	}
-	resp, err := r.DPDKClient.AddMachine(ctx, addMachineReq)
+	resp, err := r.DPDKClient.CreateInterface(ctx, createInterfaceReq)
 
 	if err != nil {
 		return "", nil, err
 	}
-	if resp.Status.Error != 0 && resp.Status.Error != 106 {
-		return "", nil, fmt.Errorf("eror during Grpc call, AddMachine, code=%v", resp.Status.Error)
+	if resp.Response.Status.Error != 0 && resp.Response.Status.Error != 106 {
+		return "", nil, fmt.Errorf("eror during Grpc call, CreateInterface, code=%v", resp.Response.Status.Error)
 	}
 
-	return machineID, resp, nil
+	return interfaceID, resp, nil
 }
 
-func (r *NetworkInterfaceReconciler) announceMachineLocalRoute(ctx context.Context, niSpec networkingv1alpha1.NetworkInterfaceSpec, nSpec networkingv1alpha1.NetworkSpec, na *networkingv1alpha1.NetworkInterfaceAccess, action int) error {
+func (r *NetworkInterfaceReconciler) announceInterfaceLocalRoute(ctx context.Context, niSpec networkingv1alpha1.NetworkInterfaceSpec, nSpec networkingv1alpha1.NetworkSpec, na *networkingv1alpha1.NetworkInterfaceAccess, action int) error {
 
 	if niSpec.IP == nil || na == nil {
 		return nil

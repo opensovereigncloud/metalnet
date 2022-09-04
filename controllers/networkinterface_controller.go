@@ -132,6 +132,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	if ni.Status.Phase == networkingv1alpha1.NetworkInterfacePhaseUnbound {
+		// Are we still synchron with dp-service internal state ?
 		if ni.Status.Access != nil {
 			interfaceID := string(ni.Status.Access.UID)
 			_, err := r.getInterfaceDPSKServerCall(ctx, interfaceID)

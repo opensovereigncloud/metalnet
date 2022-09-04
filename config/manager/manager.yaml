@@ -6,7 +6,7 @@ metadata:
   name: system
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
   name: controller-manager
   namespace: system
@@ -16,55 +16,50 @@ spec:
   selector:
     matchLabels:
       control-plane: controller-manager
-  replicas: 1
   template:
     metadata:
-      annotations:
-        kubectl.kubernetes.io/default-container: manager
       labels:
         control-plane: controller-manager
     spec:
-      securityContext:
-        runAsNonRoot: true
-        # TODO(user): For common cases that do not require escalating privileges
-        # it is recommended to ensure that all your Pods/Containers are restrictive.
-        # More info: https://kubernetes.io/docs/concepts/security/pod-security-standards/#restricted
-        # Please uncomment the following code if your project does NOT have to work on old Kubernetes
-        # versions < 1.19 or on vendors versions which do NOT support this field by default (i.e. Openshift < 4.11 ).
-        # seccompProfile:
-        #   type: RuntimeDefault
       containers:
       - command:
         - /manager
         args:
-        - --leader-elect
-        image: controller:latest
+        - --dpservice-address=127.0.0.1:1337
+        - --metalbondserver-address=2a10:afc0:e01f:f4::2
+        - --metalbondserver-port=4711
+        image: localhost:5000/controller:latest
         name: manager
-        securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-              - "ALL"
-        livenessProbe:
-          httpGet:
-            path: /healthz
-            port: 8081
-          initialDelaySeconds: 15
-          periodSeconds: 20
-        readinessProbe:
-          httpGet:
-            path: /readyz
-            port: 8081
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        # TODO(user): Configure the resources accordingly based on the project requirements.
-        # More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
         resources:
-          limits:
-            cpu: 500m
-            memory: 128Mi
           requests:
-            cpu: 10m
-            memory: 64Mi
+            cpu: 1000m
+            memory: 200Mi
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - mountPath: /sys
+          name: sysfs
+        - mountPath: /usr/share/misc/
+          name: pciids
+        env:
+          - name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+          - name: NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+      volumes:
+      - hostPath:
+          path: /sys
+          type: ""
+        name: sysfs
+      - hostPath:
+          path: /usr/share/misc/
+          type: ""
+        name: pciids
+      hostNetwork: true
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10

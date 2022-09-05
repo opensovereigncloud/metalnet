@@ -28,6 +28,7 @@ spec:
         - --dpservice-address=127.0.0.1:1337
         - --metalbondserver-address=2a10:afc0:e01f:f4::2
         - --metalbondserver-port=4711
+        - --public-vni=100
         image: localhost:5000/controller:latest
         name: manager
         resources:
@@ -35,6 +36,13 @@ spec:
             cpu: 1000m
             memory: 200Mi
         imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          failureThreshold: 1
+          initialDelaySeconds: 10
+          periodSeconds: 10
         securityContext:
           privileged: true
         volumeMounts:

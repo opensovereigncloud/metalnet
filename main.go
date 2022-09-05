@@ -18,8 +18,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"time"
 
@@ -65,6 +67,7 @@ func main() {
 	var metalbondServerAddr string
 	var metalbondServerPort string
 	var publicVNI int
+	var dpUUID string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -154,6 +157,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	em := dpdkproto.Empty{}
+	uuid, err := dpdkClient.Initialized(context.Background(), &em)
+	if err != nil {
+		setupLog.Error(err, "dp-service down")
+		os.Exit(1)
+	}
+	dpUUID = (*uuid).Uuid
+
 	// if err = (&controllers.NetworkFunctionReconciler{
 	// 	Client:          mgr.GetClient(),
 	// 	Scheme:          mgr.GetScheme(),
@@ -206,7 +217,17 @@ func main() {
 	}
 	//+kubebuilder:scaffold:builder
 
-	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+	var dpChecker healthz.Checker = func(_ *http.Request) error {
+		uuid, err := dpdkClient.Initialized(context.Background(), &em)
+		if err != nil {
+			return errors.New("dp-service down")
+		}
+		if dpUUID != (*uuid).Uuid {
+			return errors.New("dp-service restart detected")
+		}
+		return nil
+	}
+	if err := mgr.AddHealthzCheck("healthz", dpChecker); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}

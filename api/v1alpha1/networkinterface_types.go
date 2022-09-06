@@ -26,17 +26,11 @@ import (
 type NetworkInterfaceSpec struct {
 	// NetworkRef is the Network this NetworkInterface is connected to
 	NetworkRef corev1.LocalObjectReference `json:"networkRef"`
-	// VirtualMachineRef is the VirtualMachine this NetworkInterface is used by
-	VirtualMachineRef *LocalUIDReference `json:"virtualMachineRef,omitempty"`
 	// IPFamilies defines which IPFamilies this NetworkInterface is supporting
 	IPFamilies []corev1.IPFamily `json:"ipFamilies"`
 	// IP is the provided IP or EphemeralIP which should be assigned to this NetworkInterface
 	// +optional
 	IP *IP `json:"ip,omitempty"`
-	// VirtualIP specifies the virtual ip that should be assigned to this NetworkInterface.
-	VirtualIP *VirtualIPSource `json:"virtualIp,omitempty"`
-	// NetworkFunction specifies the network function that should be assigned to this NetworkInterface.
-	NetworkFN *NetworkFunctionSource `json:"networkFn,omitempty"`
 	// NodeName is the name of the host machine on which the VM should be scheduled.
 	// If it is non-empty then scheduler simply schedules the VM on that host assuming it has enough resources.
 	// +optional

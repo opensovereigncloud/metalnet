@@ -395,11 +395,6 @@ func (in *NetworkInterfaceList) DeepCopyObject() runtime.Object {
 func (in *NetworkInterfaceSpec) DeepCopyInto(out *NetworkInterfaceSpec) {
 	*out = *in
 	out.NetworkRef = in.NetworkRef
-	if in.VirtualMachineRef != nil {
-		in, out := &in.VirtualMachineRef, &out.VirtualMachineRef
-		*out = new(LocalUIDReference)
-		**out = **in
-	}
 	if in.IPFamilies != nil {
 		in, out := &in.IPFamilies, &out.IPFamilies
 		*out = make([]corev1.IPFamily, len(*in))
@@ -408,16 +403,6 @@ func (in *NetworkInterfaceSpec) DeepCopyInto(out *NetworkInterfaceSpec) {
 	if in.IP != nil {
 		in, out := &in.IP, &out.IP
 		*out = (*in).DeepCopy()
-	}
-	if in.VirtualIP != nil {
-		in, out := &in.VirtualIP, &out.VirtualIP
-		*out = new(VirtualIPSource)
-		(*in).DeepCopyInto(*out)
-	}
-	if in.NetworkFN != nil {
-		in, out := &in.NetworkFN, &out.NetworkFN
-		*out = new(NetworkFunctionSource)
-		(*in).DeepCopyInto(*out)
 	}
 	if in.NodeName != nil {
 		in, out := &in.NodeName, &out.NodeName

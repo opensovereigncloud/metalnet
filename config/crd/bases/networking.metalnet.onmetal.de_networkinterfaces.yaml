@@ -59,20 +59,6 @@ spec:
                     (e.g. service.spec.ipFamilies).
                   type: string
                 type: array
-              networkFn:
-                description: NetworkFunction specifies the network function that should
-                  be assigned to this NetworkInterface.
-                properties:
-                  networkFuncionRef:
-                    description: NetworkFunctionRef references a NetworkFunction to
-                      use.
-                    properties:
-                      name:
-                        description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                          TODO: Add other useful fields. apiVersion, kind, uid?'
-                        type: string
-                    type: object
-                type: object
               networkRef:
                 description: NetworkRef is the Network this NetworkInterface is connected
                   to
@@ -87,32 +73,6 @@ spec:
                   VM should be scheduled. If it is non-empty then scheduler simply
                   schedules the VM on that host assuming it has enough resources.
                 type: string
-              virtualIp:
-                description: VirtualIP specifies the virtual ip that should be assigned
-                  to this NetworkInterface.
-                properties:
-                  virtualIPRef:
-                    description: VirtualIPRef references a VirtualIP to use.
-                    properties:
-                      name:
-                        description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                          TODO: Add other useful fields. apiVersion, kind, uid?'
-                        type: string
-                    type: object
-                type: object
-              virtualMachineRef:
-                description: VirtualMachineRef is the VirtualMachine this NetworkInterface
-                  is used by
-                properties:
-                  name:
-                    description: Name is the name of the referenced entity.
-                    type: string
-                  uid:
-                    description: UID is the UID of the referenced entity.
-                    type: string
-                required:
-                - name
-                type: object
             required:
             - ipFamilies
             - networkRef

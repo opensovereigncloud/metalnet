@@ -41,8 +41,12 @@ import (
 
 const (
 	NetworkInterfaceFinalizerName = "networking.metalnet.onmetal.de/networkInterface"
-	UnderlayRoute                 = "dpdk.metalnet.onmetal.de/underlayRoute"
-	DpPciAddr                     = "dpdk.metalnet.onmetal.de/dpPciAddr"
+	UnderlayRoute                 = "networking.metalnet.onmetal.de/underlayRoute"
+	DpPciAddr                     = "networking.metalnet.onmetal.de/dpPciAddr"
+	PciDomain                     = "networking.metalnet.onmetal.de/domain"
+	PciSlot                       = "networking.metalnet.onmetal.de/slot"
+	PciBus                        = "networking.metalnet.onmetal.de/bus"
+	PciFunction                   = "networking.metalnet.onmetal.de/function"
 	DpRouteAlreadyAddedError      = 251
 )
 
@@ -201,6 +205,11 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		UnderlayRoute: "",
 	}
 	na.NetworkAttributes[UnderlayRoute] = string(resp.Response.UnderlayRoute)
+	detailPci, _ := r.DeviceAllocator.GetDeviceWithName(dpPci)
+	na.NetworkAttributes[PciBus] = detailPci.pciBus
+	na.NetworkAttributes[PciDomain] = detailPci.pciDomain
+	na.NetworkAttributes[PciSlot] = detailPci.pciSlot
+	na.NetworkAttributes[PciFunction] = detailPci.pciFunc
 	na.NetworkAttributes[DpPciAddr] = string(resp.Vf.Name)
 	if err := r.MbInstance.Subscribe(mb.VNI(n.Spec.ID)); err != nil {
 		log.Info("duplicate subscription, IGNORED for now due to boostrap of virt networks")

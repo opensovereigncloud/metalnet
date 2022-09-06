@@ -14,14 +14,23 @@ const (
 )
 
 type DeviceAllocator interface {
+	GetDeviceWithName(string) (*DetailPCIAddr, error)
 	ReserveDeviceWithName(string) error
 	ReserveDevice() (string, error)
 	FreeDevice(dev string) error
 }
 
+type DetailPCIAddr struct {
+	pciDomain string
+	pciBus    string
+	pciSlot   string
+	pciFunc   string
+}
+
 type NFDevice struct {
-	pci_addr string
-	reserved bool
+	pciAddr   string
+	pciDetail DetailPCIAddr
+	reserved  bool
 }
 
 type NFDeviceBase struct {
@@ -38,9 +47,9 @@ func NewNFDeviceBase() (*NFDeviceBase, error) {
 
 func (d *NFDeviceBase) ReserveDevice() (string, error) {
 	for i := 0; i < len(d.devices); i++ {
-		if !d.devices[i].reserved && d.devices[i].pci_addr != "" {
+		if !d.devices[i].reserved && d.devices[i].pciAddr != "" {
 			d.devices[i].reserved = true
-			return d.devices[i].pci_addr, nil
+			return d.devices[i].pciAddr, nil
 		}
 	}
 	return "", errors.New("no available device found")
@@ -48,7 +57,7 @@ func (d *NFDeviceBase) ReserveDevice() (string, error) {
 
 func (d *NFDeviceBase) ReserveDeviceWithName(dev string) error {
 	for i := 0; i < len(d.devices); i++ {
-		if !d.devices[i].reserved && d.devices[i].pci_addr == dev {
+		if !d.devices[i].reserved && d.devices[i].pciAddr == dev {
 			d.devices[i].reserved = true
 			return nil
 		}
@@ -56,9 +65,18 @@ func (d *NFDeviceBase) ReserveDeviceWithName(dev string) error {
 	return nil
 }
 
+func (d *NFDeviceBase) GetDeviceWithName(dev string) (*DetailPCIAddr, error) {
+	for i := 0; i < len(d.devices); i++ {
+		if d.devices[i].reserved && d.devices[i].pciAddr == dev {
+			return &d.devices[i].pciDetail, nil
+		}
+	}
+	return nil, errors.New("no available device found")
+}
+
 func (d *NFDeviceBase) FreeDevice(dev string) error {
 	for i := 0; i < len(d.devices); i++ {
-		if d.devices[i].reserved && d.devices[i].pci_addr == dev {
+		if d.devices[i].reserved && d.devices[i].pciAddr == dev {
 			d.devices[i].reserved = false
 			return nil
 		}
@@ -78,7 +96,11 @@ func fillDeviceList(nfd *NFDeviceBase) error {
 			if count >= maxNumOfDevices {
 				return errors.New("num of devices exceeds max possible")
 			}
-			nfd.devices[count].pci_addr = convertToDPDKPCI(device.Address, count)
+			nfd.devices[count].pciAddr = convertToDPDKPCI(device.Address, count)
+			nfd.devices[count].pciDetail.pciDomain = device.Address[0:4]
+			nfd.devices[count].pciDetail.pciBus = device.Address[5:7]
+			nfd.devices[count].pciDetail.pciSlot = device.Address[8:10]
+			nfd.devices[count].pciDetail.pciFunc = device.Address[11:]
 			nfd.devices[count].reserved = false
 			count += 1
 		}

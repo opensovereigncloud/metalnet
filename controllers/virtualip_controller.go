@@ -42,11 +42,12 @@ import (
 )
 
 const (
-	virtualIPFinalizer           = "networking.metalnet.onmetal.de/virtualip"
-	virtualIPField               = ".spec.targetRef.name"
-	dpdkExitSuccess        int32 = 0
-	dpdkInterfaceNotFound  int32 = 450
-	dpdkRouteAlreadyExists int32 = 351
+	virtualIPFinalizer                = "networking.metalnet.onmetal.de/virtualip"
+	virtualIPField                    = ".spec.targetRef.name"
+	dpdkExitSuccess             int32 = 0
+	dpdkInterfaceNotFound       int32 = 450
+	dpdkRouteAlreadyExists      int32 = 351
+	dpdkPrefixInterfaceNotFound int32 = 701
 )
 
 // VirtualIPReconciler reconciles a VirtualIP object

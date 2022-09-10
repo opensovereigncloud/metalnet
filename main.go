@@ -157,6 +157,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	initConf := dpdkproto.InitConfig{}
+	_, err = dpdkClient.Init(context.Background(), &initConf)
+
+	if err != nil {
+		setupLog.Error(err, "dp-service can not be initialized")
+		os.Exit(1)
+	}
+
 	em := dpdkproto.Empty{}
 	uuid, err := dpdkClient.Initialized(context.Background(), &em)
 	if err != nil {
@@ -211,6 +219,7 @@ func main() {
 		Client:     mgr.GetClient(),
 		Scheme:     mgr.GetScheme(),
 		DPDKClient: dpdkClient,
+		HostName:   hostName,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AliasPrefix")
 		os.Exit(1)

@@ -119,11 +119,6 @@ func (r *AliasPrefixReconciler) reconcile(ctx context.Context, log logr.Logger, 
 		return ctrl.Result{}, fmt.Errorf("only one related NetworkInterface is supported now")
 	}
 
-	err = r.deletePrefixForNI(ctx, log, aliasPrefix, niList, false)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
 	if err := r.addPrefixes(ctx, log, aliasPrefix, niList); err != nil {
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
@@ -267,6 +262,11 @@ func (r *AliasPrefixReconciler) deletePrefixForNI(ctx context.Context, log logr.
 			},
 			Prefix: prefix,
 		}
+
+		if !r.prefixExists(ctx, log, aliasPrefix, ni) {
+			continue
+		}
+
 		log.V(1).Info("DELETE", "reg", reg)
 
 		status, err := r.DPDKClient.DeleteInterfacePrefix(ctx, reg)

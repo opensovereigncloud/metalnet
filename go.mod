@@ -7,7 +7,7 @@ require (
 	github.com/google/uuid v1.1.2
 	github.com/jaypipes/ghw v0.9.0
 	github.com/onmetal/controller-utils v0.6.0
-	github.com/onmetal/metalbond v0.2.0
+	github.com/onmetal/metalbond v0.2.1-0.20220911163506-469cc9ab651a
 	github.com/onmetal/net-dpservice-go v0.1.3-0.20220901075245-e11be6221ddd
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.19.0
@@ -106,3 +106,5 @@ require (
 replace github.com/vishvananda/netlink v1.1.0 => github.com/byteocean/netlink v1.1.1-0.20220608143109-d6cf8228de69
 
 replace github.com/onmetal/net-dpservice-go v0.1.1 => github.com/onmetal/net-dpservice-go v0.1.3-0.20220901075245-e11be6221ddd
+
+replace github.com/onmetal/metalbond v0.2.0 => github.com/onmetal/metalbond v0.2.1-0.20220911163506-469cc9ab651a

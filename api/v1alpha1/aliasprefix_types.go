@@ -43,6 +43,8 @@ type PrefixSource struct {
 type AliasPrefixStatus struct {
 	// Prefix is the Prefix reserved by this AliasPrefix
 	Prefix *IPPrefix `json:"prefix,omitempty"`
+	// UnderlayIP of the prefix
+	UnderlayIP *IP `json:"underlayIP,omitempty"`
 }
 
 //+kubebuilder:object:root=true

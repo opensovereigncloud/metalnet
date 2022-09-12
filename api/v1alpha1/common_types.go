@@ -9,11 +9,6 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 )
 
-const (
-	ROUTEADD = iota
-	ROUTEREMOVE
-)
-
 // LocalUIDReference is a reference to another entity including its UID
 type LocalUIDReference struct {
 	// Name is the name of the referenced entity.

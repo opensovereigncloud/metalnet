@@ -106,5 +106,3 @@ require (
 replace github.com/vishvananda/netlink v1.1.0 => github.com/byteocean/netlink v1.1.1-0.20220608143109-d6cf8228de69
 
 replace github.com/onmetal/net-dpservice-go v0.1.1 => github.com/onmetal/net-dpservice-go v0.1.3-0.20220901075245-e11be6221ddd
-
-replace github.com/onmetal/metalbond v0.2.0 => github.com/onmetal/metalbond v0.2.1-0.20220911163506-469cc9ab651a

@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
-	"net/netip"
 	"strings"
 	"time"
 
@@ -117,7 +116,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 
 		log.V(1).Info("Withdrawing Private route", "NIC", ni.Name, "PublicIP", ni.Spec.IP, "VNI", network.Spec.ID)
-		if err := r.announceInterfaceLocalRoute(ctx, ni.Spec, network.Spec, ni.Status.Access, networkingv1alpha1.ROUTEREMOVE); err != nil {
+		if err := r.announceInterfaceLocalRoute(ctx, ni.Spec, network.Spec, ni.Status.Access, ROUTEREMOVE); err != nil {
 			if !strings.Contains(fmt.Sprint(err), "Nexthop does not exist") {
 				return ctrl.Result{}, fmt.Errorf("failed to withdraw a route. %v", err)
 			} else {
@@ -165,7 +164,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 			isAnnounced, err := r.isInterfaceLocalRouteAnnounced(ctx, ni.Spec, n.Spec, ni.Status.Access)
 			if err == nil && !isAnnounced {
-				if err := r.announceInterfaceLocalRoute(ctx, ni.Spec, n.Spec, ni.Status.Access, networkingv1alpha1.ROUTEADD); err != nil {
+				if err := r.announceInterfaceLocalRoute(ctx, ni.Spec, n.Spec, ni.Status.Access, ROUTEADD); err != nil {
 					if !strings.Contains(fmt.Sprint(err), "Nexthop already exists") {
 						log.Error(err, "failed to announce route")
 						return ctrl.Result{}, err
@@ -242,7 +241,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		log.Info("duplicate subscription, IGNORED for now due to boostrap of virt networks")
 	}
 
-	if err := r.announceInterfaceLocalRoute(ctx, ni.Spec, n.Spec, na, networkingv1alpha1.ROUTEADD); err != nil {
+	if err := r.announceInterfaceLocalRoute(ctx, ni.Spec, n.Spec, na, ROUTEADD); err != nil {
 		if !strings.Contains(fmt.Sprint(err), "Nexthop already exists") {
 			log.Error(err, "failed to announce route")
 			return ctrl.Result{}, err
@@ -340,46 +339,13 @@ func (r *NetworkInterfaceReconciler) addInterfaceDPSKServerCall(ctx context.Cont
 	return interfaceID, resp, nil
 }
 
-func (r *NetworkInterfaceReconciler) prepareMbParameters(ctx context.Context, ip string, ulRoute string) (*mb.NextHop, *mb.Destination, error) {
-
-	prefix, err := netip.ParsePrefix(ip)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to convert interface ip to prefix version, reson=%v", err)
-	}
-
-	var ipversion mb.IPVersion
-	if prefix.Addr().Is4() {
-		ipversion = mb.IPV4
-	} else {
-		ipversion = mb.IPV6
-	}
-
-	dest := mb.Destination{
-		IPVersion: ipversion,
-		Prefix:    prefix,
-	}
-
-	hopIP, err := netip.ParseAddr(ulRoute)
-	if err != nil {
-		return nil, nil, fmt.Errorf("invalid nexthop address: %s - %v", ulRoute, err)
-	}
-
-	hop := mb.NextHop{
-		TargetAddress: hopIP,
-		TargetVNI:     0,
-		NAT:           false,
-	}
-
-	return &hop, &dest, nil
-}
-
 func (r *NetworkInterfaceReconciler) isInterfaceLocalRouteAnnounced(ctx context.Context, niSpec networkingv1alpha1.NetworkInterfaceSpec, nSpec networkingv1alpha1.NetworkSpec, na *networkingv1alpha1.NetworkInterfaceAccess) (bool, error) {
 
 	if niSpec.IP == nil || na == nil {
 		return false, errors.New("parameter nil")
 	}
 	ip := niSpec.IP.String() + "/32"
-	hop, dest, err := r.prepareMbParameters(ctx, ip, na.NetworkAttributes[UnderlayRoute])
+	hop, dest, err := prepareMbParameters(ctx, ip, na.NetworkAttributes[UnderlayRoute])
 
 	if err != nil {
 		return false, err
@@ -398,13 +364,13 @@ func (r *NetworkInterfaceReconciler) announceInterfaceLocalRoute(ctx context.Con
 	}
 
 	ip := niSpec.IP.String() + "/32"
-	hop, dest, err := r.prepareMbParameters(ctx, ip, na.NetworkAttributes[UnderlayRoute])
+	hop, dest, err := prepareMbParameters(ctx, ip, na.NetworkAttributes[UnderlayRoute])
 
 	if err != nil {
 		return err
 	}
 
-	if action == networkingv1alpha1.ROUTEADD {
+	if action == ROUTEADD {
 		if err = r.MbInstance.AnnounceRoute(mb.VNI(nSpec.ID), *dest, *hop); err != nil {
 			return fmt.Errorf("failed to announce a local route, reason: %v", err)
 		}

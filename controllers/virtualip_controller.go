@@ -101,7 +101,7 @@ func (r *VirtualIPReconciler) delete(ctx context.Context, log logr.Logger, virtu
 		if virtualIP.Status.UnderlayIP != nil {
 			// Withdraw VIP from MetalBond
 			log.V(1).Info("Withdrawing PublicIP route", "PublicIP", virtualIP.Spec.IP)
-			if err := r.announceInterfacePublicVIPRoute(ctx, log, virtualIP, r.PublicVNI, networkingv1alpha1.ROUTEREMOVE); err != nil {
+			if err := r.announceInterfacePublicVIPRoute(ctx, log, virtualIP, r.PublicVNI, ROUTEREMOVE); err != nil {
 				if !strings.Contains(fmt.Sprint(err), "Nexthop does not exist") {
 					log.Error(err, "failed to remove route")
 					return ctrl.Result{}, err
@@ -203,7 +203,7 @@ func (r *VirtualIPReconciler) reconcileBound(ctx context.Context, log logr.Logge
 
 		// Announce MetalBond VIP
 		log.V(1).Info("Announcing PublicIP route", "NIC", nic.Name, "PublicIP", nic.Spec.IP)
-		if err := r.announceInterfacePublicVIPRoute(ctx, log, virtualIP, r.PublicVNI, networkingv1alpha1.ROUTEADD); err != nil {
+		if err := r.announceInterfacePublicVIPRoute(ctx, log, virtualIP, r.PublicVNI, ROUTEADD); err != nil {
 			if !strings.Contains(fmt.Sprint(err), "Nexthop already exists") {
 				log.Error(err, "failed to announce route")
 				return ctrl.Result{}, err
@@ -348,7 +348,7 @@ func (r *VirtualIPReconciler) announceInterfacePublicVIPRoute(ctx context.Contex
 		NAT:           false,
 	}
 
-	if action == networkingv1alpha1.ROUTEADD {
+	if action == ROUTEADD {
 		if err = r.MbInstance.AnnounceRoute(mb.VNI(publicVNI), dest, hop); err != nil {
 			return fmt.Errorf("failed to announce a local route, reason: %v", err)
 		}

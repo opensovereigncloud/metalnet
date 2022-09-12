@@ -38,6 +38,8 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/onmetal/controller-utils/clientutils"
+	mb "github.com/onmetal/metalbond"
+	"github.com/onmetal/metalnet/api/v1alpha1"
 	networkingv1alpha1 "github.com/onmetal/metalnet/api/v1alpha1"
 	dpdkproto "github.com/onmetal/net-dpservice-go/proto"
 )
@@ -49,6 +51,7 @@ type AliasPrefixReconciler struct {
 	client.Client
 	Scheme     *runtime.Scheme
 	DPDKClient dpdkproto.DPDKonmetalClient
+	MbInstance *mb.MetalBond
 	HostName   string
 }
 
@@ -93,6 +96,18 @@ func (r *AliasPrefixReconciler) delete(ctx context.Context, log logr.Logger, ali
 		return ctrl.Result{}, err
 	}
 	for _, ni := range niList {
+		n := &networkingv1alpha1.Network{}
+		key := types.NamespacedName{
+			Namespace: aliasPrefix.Namespace,
+			Name:      ni.Spec.NetworkRef.Name,
+		}
+		if err := r.Get(ctx, key, n); err != nil {
+			log.Info("unable to fetch Network", "Error", err)
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
+		if err := r.announcePrefix(ctx, log, aliasPrefix, aliasPrefix.Status.UnderlayIP.String(), n.Spec.ID, ROUTEREMOVE); err != nil {
+			return ctrl.Result{}, err
+		}
 		if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, &ni, aliasPrefixFinalizer); err != nil {
 			return ctrl.Result{}, client.IgnoreNotFound(err)
 		}
@@ -174,19 +189,48 @@ func (r *AliasPrefixReconciler) addPrefixes(ctx context.Context, log logr.Logger
 		prefix.Address = []byte(aliasPrefix.Spec.Prefix.Value.IPPrefix.IP().String())
 		prefix.PrefixLength = uint32(aliasPrefix.Spec.Prefix.Value.IPPrefix.Bits())
 
-		if r.prefixExists(ctx, log, aliasPrefix, ni) {
-			continue
+		n := &networkingv1alpha1.Network{}
+		key := types.NamespacedName{
+			Namespace: aliasPrefix.Namespace,
+			Name:      ni.Spec.NetworkRef.Name,
 		}
+		if err := r.Get(ctx, key, n); err != nil {
+			log.Info("unable to fetch Network", "Error", err)
+			return client.IgnoreNotFound(err)
+		}
+
+		if aliasPrefix.Status.Prefix != nil {
+			log.Info("test 1")
+			if r.prefixExists(ctx, log, aliasPrefix, ni) {
+				log.Info("test 2")
+				isAnnounced, err := r.isPrefixAnnounced(ctx, log, aliasPrefix, aliasPrefix.Status.UnderlayIP.String(), n.Spec.ID)
+				log.Info("test 3")
+				if err == nil && !isAnnounced {
+					log.Info("test 4")
+					if err := r.announcePrefix(ctx, log, aliasPrefix, aliasPrefix.Status.UnderlayIP.String(), n.Spec.ID, ROUTEADD); err != nil {
+						return err
+					}
+				}
+				continue
+			}
+		}
+
 		reg := &dpdkproto.InterfacePrefixMsg{
 			InterfaceID: machineID,
 			Prefix:      prefix,
 		}
 		status, err := r.DPDKClient.AddInterfacePrefix(ctx, reg)
+		log.Info("test 5", "error code", status.Status.Error)
 		if err != nil {
+			log.Info("test 6")
 			return err
 		}
 		if status.Status.Error != dpdkExitSuccess {
-			return fmt.Errorf("eror during AddInterfacePrefix call: Error code - %v", status.Status.Error)
+			return fmt.Errorf("error during AddInterfacePrefix call: Error code - %v", status.Status.Error)
+		}
+		log.Info("test 7")
+		if err := r.announcePrefix(ctx, log, aliasPrefix, string(status.UnderlayRoute), n.Spec.ID, ROUTEADD); err != nil {
+			return err
 		}
 
 		if err := clientutils.PatchAddFinalizer(ctx, r.Client, &ni, aliasPrefixFinalizer); err != nil {
@@ -194,6 +238,7 @@ func (r *AliasPrefixReconciler) addPrefixes(ctx context.Context, log logr.Logger
 		}
 		clone := aliasPrefix.DeepCopy()
 		clone.Status.Prefix = aliasPrefix.Spec.Prefix.Value
+		clone.Status.UnderlayIP = v1alpha1.MustParseNewIP(string(status.UnderlayRoute))
 
 		if err := r.Status().Patch(ctx, clone, client.MergeFrom(aliasPrefix)); err != nil {
 			log.Info("unable to update AliasPrefix", "AliasPrefix", aliasPrefix, "Error", err)
@@ -219,6 +264,9 @@ func (r *AliasPrefixReconciler) prefixExists(ctx context.Context, log logr.Logge
 
 	prefixMsg, err := r.DPDKClient.ListInterfacePrefixes(ctx, machineID)
 	if err != nil {
+		return false
+	}
+	if len(prefixMsg.Prefixes) == 0 {
 		return false
 	}
 	isPresent := true
@@ -282,6 +330,40 @@ func (r *AliasPrefixReconciler) deletePrefixForNI(ctx context.Context, log logr.
 		}
 
 	}
+	return nil
+}
+
+func (r *AliasPrefixReconciler) isPrefixAnnounced(ctx context.Context, log logr.Logger, aliasPrefix *networkingv1alpha1.AliasPrefix, ulRoute string, nID int32) (bool, error) {
+	ip := aliasPrefix.Spec.Prefix.Value.String()
+	hop, dest, err := prepareMbParameters(ctx, ip, ulRoute)
+	if err != nil {
+		return false, err
+	}
+
+	if r.MbInstance.IsRouteAnnounced(mb.VNI(nID), *dest, *hop) {
+		return true, nil
+	}
+	return false, nil
+}
+
+func (r *AliasPrefixReconciler) announcePrefix(ctx context.Context, log logr.Logger, aliasPrefix *networkingv1alpha1.AliasPrefix, ulRoute string, nID int32, action int) error {
+	ip := aliasPrefix.Spec.Prefix.Value.String()
+	hop, dest, err := prepareMbParameters(ctx, ip, ulRoute)
+	if err != nil {
+		return err
+	}
+
+	if action == ROUTEADD {
+		if err = r.MbInstance.AnnounceRoute(mb.VNI(nID), *dest, *hop); err != nil {
+			return fmt.Errorf("failed to announce a local route, reason: %v", err)
+		}
+	} else {
+		log.V(1).Info("Deleting AliasPrefix flow 6")
+		if err = r.MbInstance.WithdrawRoute(mb.VNI(nID), *dest, *hop); err != nil {
+			return fmt.Errorf("failed to withdraw a local route, reason: %v", err)
+		}
+	}
+
 	return nil
 }
 

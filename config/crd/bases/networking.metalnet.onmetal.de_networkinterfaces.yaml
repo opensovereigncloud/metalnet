@@ -70,8 +70,7 @@ spec:
                 type: object
               nodeName:
                 description: NodeName is the name of the host machine on which the
-                  VM should be scheduled. If it is non-empty then scheduler simply
-                  schedules the VM on that host assuming it has enough resources.
+                  Interface should be created.
                 type: string
             required:
             - ipFamilies
@@ -80,38 +79,38 @@ spec:
           status:
             description: Status defines the observed state of NetworkInterface.
             properties:
-              access:
-                description: Access
-                properties:
-                  networkAttributes:
-                    additionalProperties:
-                      type: string
-                    type: object
-                  uid:
-                    description: UID is the UID of network object
-                    type: string
-                required:
-                - uid
-                type: object
-              ips:
-                description: IPs represent the effective IP addresses of the NetworkInterface
-                items:
-                  type: string
-                type: array
+              pcibus:
+                description: PCI Address details of this interface, Bus
+                type: string
+              pcidomain:
+                description: PCI Address details of this interface, Domain
+                type: string
+              pcidpaddr:
+                description: DPDK PCI Address details of this interface
+                type: string
+              pcifunction:
+                description: PCI Address details of this interface, Function
+                type: string
+              pcislot:
+                description: PCI Address details of this interface, Slot
+                type: string
               phase:
                 description: Phase is the NetworkInterfacePhase of the NetworkInterface.
-                type: string
-              phaseLastTransitionTime:
-                description: LastPhaseTransitionTime is the last time the Phase transitioned
-                  from one value to another.
-                format: date-time
                 type: string
               state:
                 description: State is the NetworkInterfacePhase of the NetworkInterface.
                 type: string
+              uid:
+                description: UID is the UID of NetworkInterface
+                type: string
+              underlayIP:
+                description: Underlay IP of this interface
+                type: string
               virtualIP:
                 description: VirtualIP is any virtual ip assigned to the NetworkInterface.
                 type: string
+            required:
+            - uid
             type: object
         type: object
     served: true

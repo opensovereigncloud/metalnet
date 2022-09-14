@@ -31,9 +31,11 @@ type NetworkInterfaceSpec struct {
 	// IP is the provided IP or EphemeralIP which should be assigned to this NetworkInterface
 	// +optional
 	IP *IP `json:"ip,omitempty"`
-	// NodeName is the name of the host machine on which the VM should be scheduled.
-	// If it is non-empty then scheduler simply schedules the VM on that host assuming it has enough resources.
-	// +optional
+	// Virtual IP
+	VIP *IP `json:"vip,omitempty"`
+	// Prefix is the provided Prefix
+	Prefix PrefixSource `json:"prefix,omitempty"`
+	// NodeName is the name of the host machine on which the Interface should be created.
 	NodeName *string `json:"nodeName,omitempty"`
 }
 
@@ -41,6 +43,12 @@ type NetworkInterfaceSpec struct {
 type IPSource struct {
 	// Value specifies an IP by using an IP literal.
 	Value *IP `json:"value,omitempty"`
+}
+
+// PrefixSource is the source of the Prefix definition in an AliasPrefix
+type PrefixSource struct {
+	// Value is a single IPPrefix value as defined in the AliasPrefix
+	Value *IPPrefix `json:"value,omitempty"`
 }
 
 // VirtualIPSource is the definition of how to obtain a VirtualIP.
@@ -55,43 +63,38 @@ type NetworkFunctionSource struct {
 	NetworkFunctionRef *corev1.LocalObjectReference `json:"networkFuncionRef,omitempty"`
 }
 
-// NetworkInterfaceAccess is the definition of how to ....
-type NetworkInterfaceAccess struct {
-	// UID is the UID of network object
-	UID               types.UID         `json:"uid"`
-	NetworkAttributes map[string]string `json:"networkAttributes,omitempty"`
-}
-
 // NetworkInterfaceStatus defines the observed state of NetworkInterface
 type NetworkInterfaceStatus struct {
-	// IPs represent the effective IP addresses of the NetworkInterface
-	IPs []IP `json:"ips,omitempty"`
+	// PCI Address details of this interface, Bus
+	PCIBus string `json:"pcibus,omitempty"`
+
+	// PCI Address details of this interface, Domain
+	PCIDomain string `json:"pcidomain,omitempty"`
+
+	// PCI Address details of this interface, Function
+	PCIFunction string `json:"pcifunction,omitempty"`
+
+	// PCI Address details of this interface, Slot
+	PCISlot string `json:"pcislot,omitempty"`
+
+	// DPDK PCI Address details of this interface
+	PCIDpAddr string `json:"pcidpaddr,omitempty"`
+
+	// Underlay IP of this interface
+	UnderlayIP *IP `json:"underlayIP,omitempty"`
+
+	// UID is the UID of NetworkInterface
+	UID types.UID `json:"uid,omitempty"`
+
 	// VirtualIP is any virtual ip assigned to the NetworkInterface.
 	VirtualIP *IP `json:"virtualIP,omitempty"`
 
-	// Access
-	Access *NetworkInterfaceAccess `json:"access,omitempty"`
+	// Prefix is the Prefix reserved for this NetworkInterface
+	Prefix *IPPrefix `json:"prefix,omitempty"`
 
-	// State is the NetworkInterfacePhase of the NetworkInterface.
+	// State is the NetworkInterfaceState of the NetworkInterface.
 	State NetworkInterfaceState `json:"state,omitempty"` // READY, ERROR
-
-	// Phase is the NetworkInterfacePhase of the NetworkInterface.
-	Phase NetworkInterfacePhase `json:"phase,omitempty"`
-	// LastPhaseTransitionTime is the last time the Phase transitioned from one value to another.
-	LastPhaseTransitionTime *metav1.Time `json:"phaseLastTransitionTime,omitempty"`
 }
-
-// NetworkInterfacePhase is the binding phase of a NetworkInterface.
-type NetworkInterfacePhase string
-
-const (
-	// NetworkInterfacePhaseUnbound is used for any NetworkInterface that is not bound.
-	NetworkInterfacePhaseUnbound NetworkInterfacePhase = "Unbound"
-	// NetworkInterfacePhasePending is used for any NetworkInterface that is currently awaiting binding.
-	NetworkInterfacePhasePending NetworkInterfacePhase = "Pending"
-	// NetworkInterfacePhaseBound is used for any NetworkInterface that is properly bound.
-	NetworkInterfacePhaseBound NetworkInterfacePhase = "Bound"
-)
 
 // NetworkInterfaceState is the binding state of a NetworkInterface.
 type NetworkInterfaceState string
@@ -99,6 +102,8 @@ type NetworkInterfaceState string
 const (
 	// NetworkInterfaceStateReady is used for any NetworkInterface that is ready.
 	NetworkInterfaceStateReady NetworkInterfaceState = "Ready"
+	// NetworkInterfaceStateError is used for any NetworkInterface that is in intermediate state.
+	NetworkInterfaceStatePending NetworkInterfaceState = "InProgress"
 	// NetworkInterfaceStateError is used for any NetworkInterface that is some error occurred.
 	NetworkInterfaceStateError NetworkInterfaceState = "Error"
 )

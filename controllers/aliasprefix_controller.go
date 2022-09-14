@@ -172,12 +172,12 @@ func (r *AliasPrefixReconciler) addPrefixes(ctx context.Context, log logr.Logger
 		if !ni.DeletionTimestamp.IsZero() {
 			continue
 		}
-		if ni.Status.Access == nil {
+		if ni.Status.State != networkingv1alpha1.NetworkInterfaceStateReady {
 			continue
 		}
 		log = log.WithValues("NetworkInterface", ni.GetName())
 		machineID := &dpdkproto.InterfaceIDMsg{
-			InterfaceID: []byte(ni.Status.Access.UID),
+			InterfaceID: []byte(ni.Status.UID),
 		}
 
 		prefix := &dpdkproto.Prefix{}
@@ -250,7 +250,7 @@ func (r *AliasPrefixReconciler) addPrefixes(ctx context.Context, log logr.Logger
 
 func (r *AliasPrefixReconciler) prefixExists(ctx context.Context, log logr.Logger, aliasPrefix *networkingv1alpha1.AliasPrefix, ni networkingv1alpha1.NetworkInterface) bool {
 	machineID := &dpdkproto.InterfaceIDMsg{
-		InterfaceID: []byte(ni.Status.Access.UID),
+		InterfaceID: []byte(ni.Status.UID),
 	}
 
 	prefix := &dpdkproto.Prefix{}
@@ -292,7 +292,7 @@ func (r *AliasPrefixReconciler) deletePrefixForNI(ctx context.Context, log logr.
 		if ni.DeletionTimestamp.IsZero() && !deleteAll {
 			continue
 		}
-		if ni.Status.Access == nil {
+		if ni.Status.State != networkingv1alpha1.NetworkInterfaceStateReady {
 			continue
 		}
 		prefix := &dpdkproto.Prefix{}
@@ -306,7 +306,7 @@ func (r *AliasPrefixReconciler) deletePrefixForNI(ctx context.Context, log logr.
 
 		reg := &dpdkproto.InterfacePrefixMsg{
 			InterfaceID: &dpdkproto.InterfaceIDMsg{
-				InterfaceID: []byte(ni.Status.Access.UID),
+				InterfaceID: []byte(ni.Status.UID),
 			},
 			Prefix: prefix,
 		}

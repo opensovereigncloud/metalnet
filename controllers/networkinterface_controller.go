@@ -22,13 +22,14 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"net/netip"
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	mb "github.com/onmetal/metalbond"
 	dpdkproto "github.com/onmetal/net-dpservice-go/proto"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -59,6 +60,7 @@ type NetworkInterfaceReconciler struct {
 	DPDKClient      dpdkproto.DPDKonmetalClient
 	HostName        string
 	RouterAddress   string
+	PublicVNI       int
 	MbInstance      *mb.MetalBond
 	DeviceAllocator DeviceAllocator
 }
@@ -102,8 +104,8 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		log.Info("Delete flow")
 		clone := ni.DeepCopy()
 
-		if ni.Status.Access != nil {
-			interfaceID := string(ni.Status.Access.UID)
+		if ni.Status.State == networkingv1alpha1.NetworkInterfaceStateReady {
+			interfaceID := string(ni.Status.UID)
 			if err := r.deleteInterfaceDPSKServerCall(ctx, interfaceID); err != nil {
 				ni.Status.State = networkingv1alpha1.NetworkInterfaceStateError
 				if err := r.Status().Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
@@ -111,12 +113,37 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				}
 				return ctrl.Result{}, err
 			}
-			r.DeviceAllocator.FreeDevice(ni.Status.Access.NetworkAttributes[DpPciAddr])
-			ni.Status.Access.NetworkAttributes[DpPciAddr] = ""
+			r.DeviceAllocator.FreeDevice(ni.Status.PCIDpAddr)
+			ni.Status.PCIDpAddr = ""
+		}
+
+		log.V(1).Info("VirtualIP will be deleted as well")
+		if ni.Status.VirtualIP != nil && ni.Status.UID != "" {
+			msg := &dpdkproto.InterfaceIDMsg{InterfaceID: []byte(ni.Status.UID)}
+			status, err := r.DPDKClient.DeleteInterfaceVIP(ctx, msg)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to delete the VIP %s : %w", ni.Status.VirtualIP, err)
+			}
+
+			if err := status.Error; err != dpdkExitSuccess && err != dpdkInterfaceNotFound {
+				log.V(1).Info("failed to add InterfaceVIP", "Status", status.Error, "Message", status.Message)
+				return ctrl.Result{Requeue: true}, nil
+			}
+
+			// Withdraw VIP from MetalBond
+			log.V(1).Info("Withdrawing PublicIP route", "PublicIP", ni.Status.VirtualIP)
+			if err := r.announceInterfacePublicVIPRoute(ctx, log, ni, r.PublicVNI, ROUTEREMOVE); err != nil {
+				if !strings.Contains(fmt.Sprint(err), "Nexthop does not exist") {
+					log.Error(err, "failed to remove route")
+					return ctrl.Result{}, err
+				} else {
+					log.Info("Tried to remove the same route for the same VM.")
+				}
+			}
 		}
 
 		log.V(1).Info("Withdrawing Private route", "NIC", ni.Name, "PublicIP", ni.Spec.IP, "VNI", network.Spec.ID)
-		if err := r.announceInterfaceLocalRoute(ctx, ni.Spec, network.Spec, ni.Status.Access, ROUTEREMOVE); err != nil {
+		if err := r.announceInterfaceLocalRoute(ctx, ni, network.Spec, ROUTEREMOVE); err != nil {
 			if !strings.Contains(fmt.Sprint(err), "Nexthop does not exist") {
 				return ctrl.Result{}, fmt.Errorf("failed to withdraw a route. %v", err)
 			} else {
@@ -131,53 +158,207 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
-	if ni.Status.Phase == networkingv1alpha1.NetworkInterfacePhaseBound {
-		return ctrl.Result{}, nil
-	}
-
-	if ni.Status.Phase == networkingv1alpha1.NetworkInterfacePhaseUnbound {
-		// Are we still synchron with dp-service and metalbond internal states ?
-		if ni.Status.Access != nil {
-			interfaceID := string(ni.Status.Access.UID)
-			_, err := r.getInterfaceDPSKServerCall(ctx, interfaceID)
-			if err != nil {
-				clone := ni.DeepCopy()
-				clone.Status.Phase = ""
-				if err := r.Status().Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
+	// Are we still synchron with dp-service and metalbond internal states ?
+	if ni.Status.State == networkingv1alpha1.NetworkInterfaceStateReady {
+		interfaceID := string(ni.Status.UID)
+		_, err := r.getInterfaceDPSKServerCall(ctx, interfaceID)
+		if err != nil {
+			clone := ni.DeepCopy()
+			clone.Status.State = networkingv1alpha1.NetworkInterfaceStateError
+			if err := r.Status().Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
+		}
+		n := &networkingv1alpha1.Network{}
+		key := types.NamespacedName{
+			Namespace: req.NamespacedName.Namespace,
+			Name:      ni.Spec.NetworkRef.Name,
+		}
+		if err := r.Get(ctx, key, n); err != nil {
+			log.Info("unable to fetch Network", "Error", err)
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, client.IgnoreNotFound(err)
+		}
+		if !r.MbInstance.IsSubscribed(mb.VNI(n.Spec.ID)) {
+			if err := r.MbInstance.Subscribe(mb.VNI(n.Spec.ID)); err != nil {
+				log.Info("duplicate subscription, IGNORED for now due to boostrap of virt networks")
+			}
+		}
+		isAnnounced, err := r.isInterfaceLocalRouteAnnounced(ctx, ni, n.Spec)
+		if err == nil && !isAnnounced {
+			if err := r.announceInterfaceLocalRoute(ctx, ni, n.Spec, ROUTEADD); err != nil {
+				if !strings.Contains(fmt.Sprint(err), "Nexthop already exists") {
+					log.Error(err, "failed to announce route")
 					return ctrl.Result{}, err
-				}
-				return ctrl.Result{}, nil
-			}
-			n := &networkingv1alpha1.Network{}
-			key := types.NamespacedName{
-				Namespace: req.NamespacedName.Namespace,
-				Name:      ni.Spec.NetworkRef.Name,
-			}
-			if err := r.Get(ctx, key, n); err != nil {
-				log.Info("unable to fetch Network", "Error", err)
-				return ctrl.Result{RequeueAfter: 5 * time.Second}, client.IgnoreNotFound(err)
-			}
-			if !r.MbInstance.IsSubscribed(mb.VNI(n.Spec.ID)) {
-				if err := r.MbInstance.Subscribe(mb.VNI(n.Spec.ID)); err != nil {
-					log.Info("duplicate subscription, IGNORED for now due to boostrap of virt networks")
+				} else {
+					log.Info("Tried to announce the same route for the same VM.")
 				}
 			}
-			isAnnounced, err := r.isInterfaceLocalRouteAnnounced(ctx, ni.Spec, n.Spec, ni.Status.Access)
-			if err == nil && !isAnnounced {
-				if err := r.announceInterfaceLocalRoute(ctx, ni.Spec, n.Spec, ni.Status.Access, ROUTEADD); err != nil {
-					if !strings.Contains(fmt.Sprint(err), "Nexthop already exists") {
-						log.Error(err, "failed to announce route")
+		}
+		if ni.Spec.VIP == nil && ni.Status.VirtualIP != nil {
+			log.V(1).Info("VirtualIP deleted")
+			if ni.Status.UID != "" {
+				msg := &dpdkproto.InterfaceIDMsg{InterfaceID: []byte(ni.Status.UID)}
+				status, err := r.DPDKClient.DeleteInterfaceVIP(ctx, msg)
+				if err != nil {
+					return ctrl.Result{}, fmt.Errorf("failed to delete the VIP %s : %w", ni.Status.VirtualIP, err)
+				}
+
+				if err := status.Error; err != dpdkExitSuccess && err != dpdkInterfaceNotFound {
+					log.V(1).Info("failed to add InterfaceVIP", "Status", status.Error, "Message", status.Message)
+					return ctrl.Result{Requeue: true}, nil
+				}
+
+				// Withdraw VIP from MetalBond
+				log.V(1).Info("Withdrawing PublicIP route", "PublicIP", ni.Status.VirtualIP)
+				if err := r.announceInterfacePublicVIPRoute(ctx, log, ni, r.PublicVNI, ROUTEREMOVE); err != nil {
+					if !strings.Contains(fmt.Sprint(err), "Nexthop does not exist") {
+						log.Error(err, "failed to remove route")
 						return ctrl.Result{}, err
 					} else {
-						log.Info("Tried to announce the same route for the same VM.")
+						log.Info("Tried to remove the same route for the same VM.")
 					}
 				}
 			}
+			clone := ni.DeepCopy()
+			clone.Status.VirtualIP = nil
+			if err := r.Status().Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
+		}
+
+		if ni.Spec.VIP != nil {
+			log.V(1).Info("Registering public VirtualIP")
+
+			vipIp := &dpdkproto.InterfaceVIPIP{}
+			vipIp.IpVersion = dpdkproto.IPVersion_IPv4
+			vipIp.Address = []byte(ni.Spec.VIP.String())
+
+			// get interface UID
+			interfaceID := string(ni.Status.UID)
+
+			// Register VIP
+			resp, err := r.DPDKClient.AddInterfaceVIP(ctx, &dpdkproto.InterfaceVIPMsg{
+				InterfaceID:    []byte(interfaceID),
+				InterfaceVIPIP: vipIp,
+			})
+
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to add VirtualIP %s err: %w", ni.Spec.VIP.String(), err)
+			}
+
+			if resp.Status.Error != dpdkExitSuccess && resp.Status.Error != dpdkRouteAlreadyExists {
+				log.V(1).Info("failed to add InterfaceVIP", "ExtStatus", resp.Status.Error, "ExtMessage", resp.Status.Message)
+				return ctrl.Result{Requeue: true}, nil
+			}
+
+			clone := ni.DeepCopy()
+			clone.Status.VirtualIP = ni.Spec.VIP
+			if err := r.Status().Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
+				return ctrl.Result{}, err
+			}
+			ni = clone
+
+			// Announce MetalBond VIP
+			log.V(1).Info("Announcing PublicIP route", "NIC", ni.Name, "PublicIP", ni.Spec.VIP)
+			if err := r.announceInterfacePublicVIPRoute(ctx, log, ni, r.PublicVNI, ROUTEADD); err != nil {
+				if !strings.Contains(fmt.Sprint(err), "Nexthop already exists") {
+					log.Error(err, "failed to announce route")
+					return ctrl.Result{}, err
+				} else {
+					log.Info("Tried to announce the same route for the same VM.")
+				}
+			}
+
+			log.V(1).Info("Successfully added VirtualIP")
+			return ctrl.Result{}, nil
+		}
+
+		if ni.Spec.Prefix.Value == nil && ni.Status.Prefix != nil {
+			log.V(1).Info("AliasPrefix deleted")
+
+			prefix := &dpdkproto.Prefix{}
+			if ni.Status.Prefix.IPPrefix.IP().Is4() {
+				prefix.IpVersion = dpdkproto.IPVersion_IPv4
+			} else {
+				prefix.IpVersion = dpdkproto.IPVersion_IPv6
+			}
+			prefix.Address = []byte(ni.Status.Prefix.IPPrefix.IP().String())
+			prefix.PrefixLength = uint32(ni.Status.Prefix.IPPrefix.Bits())
+
+			reg := &dpdkproto.InterfacePrefixMsg{
+				InterfaceID: &dpdkproto.InterfaceIDMsg{
+					InterfaceID: []byte(ni.Status.UID),
+				},
+				Prefix: prefix,
+			}
+
+			log.V(1).Info("DELETE", "reg", reg)
+
+			status, err := r.DPDKClient.DeleteInterfacePrefix(ctx, reg)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if status.Error != dpdkExitSuccess && status.Error != dpdkPrefixInterfaceNotFound {
+				return ctrl.Result{}, fmt.Errorf("eror during DeleteInterfacePrefix call: Error code - %v", status.Error)
+			}
+			if err := r.announcePrefix(ctx, log, ni, ni.Status.UnderlayIP.String(), n.Spec.ID, ROUTEREMOVE); err != nil {
+				return ctrl.Result{}, err
+			}
+			clone := ni.DeepCopy()
+			clone.Status.Prefix = nil
+
+			if err := r.Status().Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
+				log.Info("unable to update NetworkInterface", "Error", err)
+				return ctrl.Result{}, client.IgnoreNotFound(err)
+			}
+			return ctrl.Result{}, nil
+		}
+
+		if ni.Spec.Prefix.Value != nil && ni.Status.Prefix == nil {
+			log.V(1).Info("Registering AliasPrefix")
+			machineID := &dpdkproto.InterfaceIDMsg{
+				InterfaceID: []byte(ni.Status.UID),
+			}
+
+			prefix := &dpdkproto.Prefix{}
+			if ni.Spec.Prefix.Value.IPPrefix.IP().Is4() {
+				prefix.IpVersion = dpdkproto.IPVersion_IPv4
+			} else {
+				prefix.IpVersion = dpdkproto.IPVersion_IPv6
+			}
+			prefix.Address = []byte(ni.Spec.Prefix.Value.IPPrefix.IP().String())
+			prefix.PrefixLength = uint32(ni.Spec.Prefix.Value.IPPrefix.Bits())
+
+			reg := &dpdkproto.InterfacePrefixMsg{
+				InterfaceID: machineID,
+				Prefix:      prefix,
+			}
+			status, err := r.DPDKClient.AddInterfacePrefix(ctx, reg)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if status.Status.Error != dpdkExitSuccess {
+				return ctrl.Result{}, fmt.Errorf("error during AddInterfacePrefix call: Error code - %v", status.Status.Error)
+			}
+			if err := r.announcePrefix(ctx, log, ni, string(status.UnderlayRoute), n.Spec.ID, ROUTEADD); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			clone := ni.DeepCopy()
+			clone.Status.Prefix = ni.Spec.Prefix.Value
+
+			if err := r.Status().Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
+				log.Info("unable to update NetworkInterface", "Error", err)
+				return ctrl.Result{}, client.IgnoreNotFound(err)
+			}
+			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, nil
 	}
 
-	if ni.Status.Phase == networkingv1alpha1.NetworkInterfacePhasePending {
+	if ni.Status.State == networkingv1alpha1.NetworkInterfaceStatePending {
 		return ctrl.Result{}, nil
 	}
 
@@ -191,11 +372,8 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, client.IgnoreNotFound(err)
 	}
 
-	dpPci := ""
+	dpPci := ni.Status.PCIDpAddr
 
-	if ni.Status.Access != nil {
-		dpPci = ni.Status.Access.NetworkAttributes[DpPciAddr]
-	}
 	if dpPci == "" {
 		newDevice, err := r.DeviceAllocator.ReserveDevice()
 		if err != nil {
@@ -218,30 +396,24 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	clone := ni.DeepCopy()
 
-	clone.Status.Phase = networkingv1alpha1.NetworkInterfacePhasePending
-	clone.Status.LastPhaseTransitionTime = &v1.Time{Time: v1.Now().Time}
-
+	clone.Status.UID = types.UID(interfaceID)
+	clone.Status.State = networkingv1alpha1.NetworkInterfaceStatePending
+	clone.Status.UnderlayIP = networkingv1alpha1.MustParseNewIP(string(resp.Response.UnderlayRoute))
+	detailPci, _ := r.DeviceAllocator.GetDeviceWithName(dpPci)
+	clone.Status.PCIBus = detailPci.pciBus
+	clone.Status.PCIDomain = detailPci.pciDomain
+	clone.Status.PCISlot = detailPci.pciSlot
+	clone.Status.PCIFunction = detailPci.pciFunc
+	clone.Status.PCIDpAddr = string(resp.Vf.Name)
 	if err := r.Status().Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	ni = clone
-	na := &networkingv1alpha1.NetworkInterfaceAccess{}
-	na.UID = types.UID(interfaceID)
-	na.NetworkAttributes = map[string]string{
-		UnderlayRoute: "",
-	}
-	na.NetworkAttributes[UnderlayRoute] = string(resp.Response.UnderlayRoute)
-	detailPci, _ := r.DeviceAllocator.GetDeviceWithName(dpPci)
-	na.NetworkAttributes[PciBus] = detailPci.pciBus
-	na.NetworkAttributes[PciDomain] = detailPci.pciDomain
-	na.NetworkAttributes[PciSlot] = detailPci.pciSlot
-	na.NetworkAttributes[PciFunction] = detailPci.pciFunc
-	na.NetworkAttributes[DpPciAddr] = string(resp.Vf.Name)
 	if err := r.MbInstance.Subscribe(mb.VNI(n.Spec.ID)); err != nil {
 		log.Info("duplicate subscription, IGNORED for now due to boostrap of virt networks")
 	}
 
-	if err := r.announceInterfaceLocalRoute(ctx, ni.Spec, n.Spec, na, ROUTEADD); err != nil {
+	if err := r.announceInterfaceLocalRoute(ctx, ni, n.Spec, ROUTEADD); err != nil {
 		if !strings.Contains(fmt.Sprint(err), "Nexthop already exists") {
 			log.Error(err, "failed to announce route")
 			return ctrl.Result{}, err
@@ -269,9 +441,6 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	ni = clone
 
 	clone = ni.DeepCopy()
-	clone.Status.Phase = networkingv1alpha1.NetworkInterfacePhaseUnbound
-	clone.Status.LastPhaseTransitionTime = &v1.Time{Time: v1.Now().Time}
-	clone.Status.Access = na
 	clone.Status.State = networkingv1alpha1.NetworkInterfaceStateReady
 
 	if err := r.Status().Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
@@ -280,6 +449,61 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *NetworkInterfaceReconciler) announceInterfacePublicVIPRoute(ctx context.Context, log logr.Logger, ni *networkingv1alpha1.NetworkInterface, publicVNI int, action int) error {
+	niVIP := ni.Spec.VIP
+	if action == ROUTEREMOVE {
+		niVIP = ni.Status.VirtualIP
+	}
+	if niVIP == nil {
+		log.V(1).Info("Virtual IP is not set in NIC")
+		return nil
+	}
+
+	ip := niVIP.String() + "/32"
+	prefix, err := netip.ParsePrefix(ip)
+	if err != nil {
+		return fmt.Errorf("failed to convert interface ip to prefix version, reson=%v", err)
+	}
+
+	var ipversion mb.IPVersion
+	if prefix.Addr().Is4() {
+		ipversion = mb.IPV4
+	} else {
+		ipversion = mb.IPV6
+	}
+
+	dest := mb.Destination{
+		IPVersion: ipversion,
+		Prefix:    prefix,
+	}
+
+	if ni.Status.UnderlayIP == nil {
+		return fmt.Errorf("UnderlayIP is not populated yet")
+	}
+	hopIP, err := netip.ParseAddr(ni.Status.UnderlayIP.String())
+	if err != nil {
+		return fmt.Errorf("invalid nexthop address: %s : %w", ni.Status.UnderlayIP, err)
+	}
+
+	hop := mb.NextHop{
+		TargetAddress: hopIP,
+		TargetVNI:     0,
+		NAT:           false,
+	}
+
+	if action == ROUTEADD {
+		if err = r.MbInstance.AnnounceRoute(mb.VNI(publicVNI), dest, hop); err != nil {
+			return fmt.Errorf("failed to announce a local route, reason: %v", err)
+		}
+	} else {
+		if err = r.MbInstance.WithdrawRoute(mb.VNI(publicVNI), dest, hop); err != nil {
+			return fmt.Errorf("failed to withdraw a local route, reason: %v", err)
+		}
+	}
+
+	return nil
 }
 
 func (r *NetworkInterfaceReconciler) deleteInterfaceDPSKServerCall(ctx context.Context, interfaceID string) error {
@@ -339,13 +563,13 @@ func (r *NetworkInterfaceReconciler) addInterfaceDPSKServerCall(ctx context.Cont
 	return interfaceID, resp, nil
 }
 
-func (r *NetworkInterfaceReconciler) isInterfaceLocalRouteAnnounced(ctx context.Context, niSpec networkingv1alpha1.NetworkInterfaceSpec, nSpec networkingv1alpha1.NetworkSpec, na *networkingv1alpha1.NetworkInterfaceAccess) (bool, error) {
-
-	if niSpec.IP == nil || na == nil {
+func (r *NetworkInterfaceReconciler) isInterfaceLocalRouteAnnounced(ctx context.Context, ni *networkingv1alpha1.NetworkInterface, nSpec networkingv1alpha1.NetworkSpec) (bool, error) {
+	niSpec := ni.Spec
+	if niSpec.IP == nil || ni.Status.State != networkingv1alpha1.NetworkInterfaceStateReady {
 		return false, errors.New("parameter nil")
 	}
 	ip := niSpec.IP.String() + "/32"
-	hop, dest, err := prepareMbParameters(ctx, ip, na.NetworkAttributes[UnderlayRoute])
+	hop, dest, err := prepareMbParameters(ctx, ip, ni.Status.UnderlayIP.String())
 
 	if err != nil {
 		return false, err
@@ -357,14 +581,14 @@ func (r *NetworkInterfaceReconciler) isInterfaceLocalRouteAnnounced(ctx context.
 	return false, nil
 }
 
-func (r *NetworkInterfaceReconciler) announceInterfaceLocalRoute(ctx context.Context, niSpec networkingv1alpha1.NetworkInterfaceSpec, nSpec networkingv1alpha1.NetworkSpec, na *networkingv1alpha1.NetworkInterfaceAccess, action int) error {
-
-	if niSpec.IP == nil || na == nil {
+func (r *NetworkInterfaceReconciler) announceInterfaceLocalRoute(ctx context.Context, ni *networkingv1alpha1.NetworkInterface, nSpec networkingv1alpha1.NetworkSpec, action int) error {
+	niSpec := ni.Spec
+	if niSpec.IP == nil || ni.Status.State != networkingv1alpha1.NetworkInterfaceStateReady {
 		return nil
 	}
 
 	ip := niSpec.IP.String() + "/32"
-	hop, dest, err := prepareMbParameters(ctx, ip, na.NetworkAttributes[UnderlayRoute])
+	hop, dest, err := prepareMbParameters(ctx, ip, ni.Status.UnderlayIP.String())
 
 	if err != nil {
 		return err
@@ -376,6 +600,30 @@ func (r *NetworkInterfaceReconciler) announceInterfaceLocalRoute(ctx context.Con
 		}
 	} else {
 		if err = r.MbInstance.WithdrawRoute(mb.VNI(nSpec.ID), *dest, *hop); err != nil {
+			return fmt.Errorf("failed to withdraw a local route, reason: %v", err)
+		}
+	}
+
+	return nil
+}
+
+func (r *NetworkInterfaceReconciler) announcePrefix(ctx context.Context, log logr.Logger, ni *networkingv1alpha1.NetworkInterface, ulRoute string, nID int32, action int) error {
+	niPrefix := ni.Spec.Prefix.Value
+	if action == ROUTEREMOVE {
+		niPrefix = ni.Status.Prefix
+	}
+	ip := niPrefix.String()
+	hop, dest, err := prepareMbParameters(ctx, ip, ulRoute)
+	if err != nil {
+		return err
+	}
+
+	if action == ROUTEADD {
+		if err = r.MbInstance.AnnounceRoute(mb.VNI(nID), *dest, *hop); err != nil {
+			return fmt.Errorf("failed to announce a local route, reason: %v", err)
+		}
+	} else {
+		if err = r.MbInstance.WithdrawRoute(mb.VNI(nID), *dest, *hop); err != nil {
 			return fmt.Errorf("failed to withdraw a local route, reason: %v", err)
 		}
 	}

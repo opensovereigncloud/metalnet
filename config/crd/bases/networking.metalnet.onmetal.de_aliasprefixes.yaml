@@ -107,6 +107,9 @@ spec:
               prefix:
                 description: Prefix is the Prefix reserved by this AliasPrefix
                 type: string
+              underlayIP:
+                description: UnderlayIP of the prefix
+                type: string
             type: object
         type: object
     served: true

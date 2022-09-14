@@ -172,11 +172,11 @@ func (r *VirtualIPReconciler) reconcileBound(ctx context.Context, log logr.Logge
 
 		var interfaceID string
 		var underlayIP *v1alpha1.IP
-		if nicAccess := nic.Status.Access; nicAccess != nil {
+		if nic.Status.State == networkingv1alpha1.NetworkInterfaceStateReady {
 			// get interface UID
-			interfaceID = string(nicAccess.UID)
+			interfaceID = string(nic.Status.UID)
 			// get underlay IP
-			underlayIP = v1alpha1.MustParseNewIP(nicAccess.NetworkAttributes[UnderlayRoute])
+			underlayIP = v1alpha1.MustParseNewIP(nic.Status.PCIDpAddr)
 		}
 
 		// Register VIP

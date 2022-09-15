@@ -34,27 +34,9 @@ type NetworkInterfaceSpec struct {
 	// Virtual IP
 	VIP *IP `json:"vip,omitempty"`
 	// Prefix is the provided Prefix
-	Prefix PrefixSource `json:"prefix,omitempty"`
+	Prefix []IPPrefix `json:"prefix,omitempty"`
 	// NodeName is the name of the host machine on which the Interface should be created.
 	NodeName *string `json:"nodeName,omitempty"`
-}
-
-// IPSource is the definition of how to obtain an IP.
-type IPSource struct {
-	// Value specifies an IP by using an IP literal.
-	Value *IP `json:"value,omitempty"`
-}
-
-// PrefixSource is the source of the Prefix definition in an AliasPrefix
-type PrefixSource struct {
-	// Value is a single IPPrefix value as defined in the AliasPrefix
-	Value *IPPrefix `json:"value,omitempty"`
-}
-
-// VirtualIPSource is the definition of how to obtain a VirtualIP.
-type VirtualIPSource struct {
-	// VirtualIPRef references a VirtualIP to use.
-	VirtualIPRef *corev1.LocalObjectReference `json:"virtualIPRef,omitempty"`
 }
 
 // NetworkFunctionSource is the definition of how to obtain a network function.
@@ -90,7 +72,7 @@ type NetworkInterfaceStatus struct {
 	VirtualIP *IP `json:"virtualIP,omitempty"`
 
 	// Prefix is the Prefix reserved for this NetworkInterface
-	Prefix *IPPrefix `json:"prefix,omitempty"`
+	Prefix []IPPrefix `json:"prefix,omitempty"`
 
 	// State is the NetworkInterfaceState of the NetworkInterface.
 	State NetworkInterfaceState `json:"state,omitempty"` // READY, ERROR

@@ -33,11 +33,11 @@ type AliasPrefixSpec struct {
 	Prefix PrefixSource `json:"prefix,omitempty"`
 }
 
-// PrefixSource is the source of the Prefix definition in an AliasPrefix
-// type PrefixSource struct {
-// 	// Value is a single IPPrefix value as defined in the AliasPrefix
-// 	Value *IPPrefix `json:"value,omitempty"`
-// }
+//PrefixSource is the source of the Prefix definition in an AliasPrefix
+type PrefixSource struct {
+	// Value is a single IPPrefix value as defined in the AliasPrefix
+	Value *IPPrefix `json:"value,omitempty"`
+}
 
 // AliasPrefixStatus defines the observed state of AliasPrefix
 type AliasPrefixStatus struct {

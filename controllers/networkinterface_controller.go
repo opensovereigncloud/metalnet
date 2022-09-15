@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/onmetal/metalnet/api/v1alpha1"
 	networkingv1alpha1 "github.com/onmetal/metalnet/api/v1alpha1"
 )
 
@@ -148,6 +149,39 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				return ctrl.Result{}, fmt.Errorf("failed to withdraw a route. %v", err)
 			} else {
 				log.Info("Tried to remove the same route for the same VM.")
+			}
+		}
+
+		if len(ni.Status.Prefix) > 0 {
+			deletionList := ni.Status.Prefix
+			for _, prfx := range deletionList {
+				prefix := &dpdkproto.Prefix{}
+				if prfx.IP().Is4() {
+					prefix.IpVersion = dpdkproto.IPVersion_IPv4
+				} else {
+					prefix.IpVersion = dpdkproto.IPVersion_IPv6
+				}
+				prefix.Address = []byte(prfx.IP().String())
+				prefix.PrefixLength = uint32(prfx.Bits())
+
+				reg := &dpdkproto.InterfacePrefixMsg{
+					InterfaceID: &dpdkproto.InterfaceIDMsg{
+						InterfaceID: []byte(ni.Status.UID),
+					},
+					Prefix: prefix,
+				}
+
+				log.V(1).Info("DELETE", "reg", reg)
+				if err := r.announcePrefix(ctx, log, &prfx, ni.Status.UnderlayIP.String(), network.Spec.ID, ROUTEREMOVE); err != nil {
+					return ctrl.Result{}, err
+				}
+				status, err := r.DPDKClient.DeleteInterfacePrefix(ctx, reg)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+				if status.Error != dpdkExitSuccess && status.Error != dpdkPrefixInterfaceNotFound {
+					return ctrl.Result{}, err
+				}
 			}
 		}
 
@@ -275,39 +309,43 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return ctrl.Result{}, nil
 		}
 
-		if ni.Spec.Prefix.Value == nil && ni.Status.Prefix != nil {
-			log.V(1).Info("AliasPrefix deleted")
+		if r.prefixDeletionNeeded(ctx, log, ni) {
+			log.V(1).Info("AliasPrefix delete path")
+			finalStatusList := ni.Status.Prefix
+			deletionList := r.prefixCompare(ni.Status.Prefix, ni.Spec.Prefix)
 
-			prefix := &dpdkproto.Prefix{}
-			if ni.Status.Prefix.IPPrefix.IP().Is4() {
-				prefix.IpVersion = dpdkproto.IPVersion_IPv4
-			} else {
-				prefix.IpVersion = dpdkproto.IPVersion_IPv6
-			}
-			prefix.Address = []byte(ni.Status.Prefix.IPPrefix.IP().String())
-			prefix.PrefixLength = uint32(ni.Status.Prefix.IPPrefix.Bits())
+			for _, prfx := range deletionList {
+				prefix := &dpdkproto.Prefix{}
+				if prfx.IP().Is4() {
+					prefix.IpVersion = dpdkproto.IPVersion_IPv4
+				} else {
+					prefix.IpVersion = dpdkproto.IPVersion_IPv6
+				}
+				prefix.Address = []byte(prfx.IP().String())
+				prefix.PrefixLength = uint32(prfx.Bits())
 
-			reg := &dpdkproto.InterfacePrefixMsg{
-				InterfaceID: &dpdkproto.InterfaceIDMsg{
-					InterfaceID: []byte(ni.Status.UID),
-				},
-				Prefix: prefix,
-			}
+				reg := &dpdkproto.InterfacePrefixMsg{
+					InterfaceID: &dpdkproto.InterfaceIDMsg{
+						InterfaceID: []byte(ni.Status.UID),
+					},
+					Prefix: prefix,
+				}
 
-			log.V(1).Info("DELETE", "reg", reg)
-
-			status, err := r.DPDKClient.DeleteInterfacePrefix(ctx, reg)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-			if status.Error != dpdkExitSuccess && status.Error != dpdkPrefixInterfaceNotFound {
-				return ctrl.Result{}, fmt.Errorf("eror during DeleteInterfacePrefix call: Error code - %v", status.Error)
-			}
-			if err := r.announcePrefix(ctx, log, ni, ni.Status.UnderlayIP.String(), n.Spec.ID, ROUTEREMOVE); err != nil {
-				return ctrl.Result{}, err
+				log.V(1).Info("DELETE", "reg", reg)
+				if err := r.announcePrefix(ctx, log, &prfx, ni.Status.UnderlayIP.String(), n.Spec.ID, ROUTEREMOVE); err != nil {
+					return ctrl.Result{}, err
+				}
+				status, err := r.DPDKClient.DeleteInterfacePrefix(ctx, reg)
+				if err != nil {
+					continue
+				}
+				if status.Error != dpdkExitSuccess && status.Error != dpdkPrefixInterfaceNotFound {
+					continue
+				}
+				finalStatusList = r.prefixRemoveFromList(finalStatusList, &prfx)
 			}
 			clone := ni.DeepCopy()
-			clone.Status.Prefix = nil
+			clone.Status.Prefix = finalStatusList
 
 			if err := r.Status().Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
 				log.Info("unable to update NetworkInterface", "Error", err)
@@ -316,42 +354,75 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return ctrl.Result{}, nil
 		}
 
-		if ni.Spec.Prefix.Value != nil && ni.Status.Prefix == nil {
-			log.V(1).Info("Registering AliasPrefix")
+		if ni.Spec.Prefix != nil && len(ni.Spec.Prefix) > 0 {
+			var specDiffToStatus, resStatus []networkingv1alpha1.IPPrefix
+
+			log.V(1).Info("Registering AliasPrefix(es)")
+			if ni.Status.Prefix != nil {
+				specDiffToStatus = r.prefixCompare(ni.Spec.Prefix, ni.Status.Prefix)
+				if len(specDiffToStatus) == 0 {
+					dpPrefixList, err := r.getDPDKPrefixList(ctx, log, ni)
+					if err != nil {
+						return ctrl.Result{}, err
+					}
+					for _, pfx := range ni.Status.Prefix {
+						if r.prefixExists(ctx, log, &pfx, dpPrefixList) {
+							isAnnounced, err := r.isPrefixAnnounced(ctx, log, &pfx, ni, n.Spec.ID)
+							if err == nil && !isAnnounced {
+								if err := r.announcePrefix(ctx, log, &pfx, ni.Status.UnderlayIP.String(), n.Spec.ID, ROUTEADD); err != nil {
+									return ctrl.Result{}, err
+								}
+							}
+						}
+					}
+					return ctrl.Result{}, nil
+				}
+				if len(specDiffToStatus) > 0 {
+					resStatus = ni.Status.Prefix
+				}
+			} else {
+				specDiffToStatus = ni.Spec.Prefix
+			}
+
 			machineID := &dpdkproto.InterfaceIDMsg{
 				InterfaceID: []byte(ni.Status.UID),
 			}
 
-			prefix := &dpdkproto.Prefix{}
-			if ni.Spec.Prefix.Value.IPPrefix.IP().Is4() {
-				prefix.IpVersion = dpdkproto.IPVersion_IPv4
-			} else {
-				prefix.IpVersion = dpdkproto.IPVersion_IPv6
-			}
-			prefix.Address = []byte(ni.Spec.Prefix.Value.IPPrefix.IP().String())
-			prefix.PrefixLength = uint32(ni.Spec.Prefix.Value.IPPrefix.Bits())
+			for i := 0; i < len(specDiffToStatus); i++ {
+				prefix := &dpdkproto.Prefix{}
+				if specDiffToStatus[i].IP().Is4() {
+					prefix.IpVersion = dpdkproto.IPVersion_IPv4
+				} else {
+					prefix.IpVersion = dpdkproto.IPVersion_IPv6
+				}
+				prefix.Address = []byte(specDiffToStatus[i].IP().String())
+				prefix.PrefixLength = uint32(specDiffToStatus[i].Bits())
 
-			reg := &dpdkproto.InterfacePrefixMsg{
-				InterfaceID: machineID,
-				Prefix:      prefix,
-			}
-			status, err := r.DPDKClient.AddInterfacePrefix(ctx, reg)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-			if status.Status.Error != dpdkExitSuccess {
-				return ctrl.Result{}, fmt.Errorf("error during AddInterfacePrefix call: Error code - %v", status.Status.Error)
-			}
-			if err := r.announcePrefix(ctx, log, ni, string(status.UnderlayRoute), n.Spec.ID, ROUTEADD); err != nil {
-				return ctrl.Result{}, err
+				reg := &dpdkproto.InterfacePrefixMsg{
+					InterfaceID: machineID,
+					Prefix:      prefix,
+				}
+				status, err := r.DPDKClient.AddInterfacePrefix(ctx, reg)
+				if err != nil {
+					continue
+				}
+				if status.Status.Error != dpdkExitSuccess {
+					continue
+				}
+				resStatus = append(resStatus, specDiffToStatus[i])
+				if err := r.announcePrefix(ctx, log, &specDiffToStatus[i], string(status.UnderlayRoute), n.Spec.ID, ROUTEADD); err != nil {
+					continue
+				}
 			}
 
-			clone := ni.DeepCopy()
-			clone.Status.Prefix = ni.Spec.Prefix.Value
+			if len(resStatus) > 0 {
+				clone := ni.DeepCopy()
+				clone.Status.Prefix = resStatus
 
-			if err := r.Status().Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
-				log.Info("unable to update NetworkInterface", "Error", err)
-				return ctrl.Result{}, client.IgnoreNotFound(err)
+				if err := r.Status().Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
+					log.Info("unable to update NetworkInterface", "Error", err)
+					return ctrl.Result{}, client.IgnoreNotFound(err)
+				}
 			}
 			return ctrl.Result{}, nil
 		}
@@ -607,12 +678,8 @@ func (r *NetworkInterfaceReconciler) announceInterfaceLocalRoute(ctx context.Con
 	return nil
 }
 
-func (r *NetworkInterfaceReconciler) announcePrefix(ctx context.Context, log logr.Logger, ni *networkingv1alpha1.NetworkInterface, ulRoute string, nID int32, action int) error {
-	niPrefix := ni.Spec.Prefix.Value
-	if action == ROUTEREMOVE {
-		niPrefix = ni.Status.Prefix
-	}
-	ip := niPrefix.String()
+func (r *NetworkInterfaceReconciler) announcePrefix(ctx context.Context, log logr.Logger, pfx *networkingv1alpha1.IPPrefix, ulRoute string, nID int32, action int) error {
+	ip := pfx.String()
 	hop, dest, err := prepareMbParameters(ctx, ip, ulRoute)
 	if err != nil {
 		return err
@@ -624,7 +691,9 @@ func (r *NetworkInterfaceReconciler) announcePrefix(ctx context.Context, log log
 		}
 	} else {
 		if err = r.MbInstance.WithdrawRoute(mb.VNI(nID), *dest, *hop); err != nil {
-			return fmt.Errorf("failed to withdraw a local route, reason: %v", err)
+			if !strings.Contains(fmt.Sprint(err), "Nexthop does not exist") {
+				return fmt.Errorf("failed to withdraw a local route, reason: %v", err)
+			}
 		}
 	}
 
@@ -657,6 +726,109 @@ func (r *NetworkInterfaceReconciler) insertDefaultVNIPublicRoute(ctx context.Con
 	}
 
 	return nil
+}
+
+func (r *NetworkInterfaceReconciler) prefixCompare(first, second []networkingv1alpha1.IPPrefix) []networkingv1alpha1.IPPrefix {
+	var ret []networkingv1alpha1.IPPrefix
+	exists := false
+
+	for _, x := range first {
+		for _, y := range second {
+			if v1alpha1.EqualIPPrefixes(x, y) {
+				exists = true
+			}
+		}
+		if !exists {
+			ret = append(ret, x)
+		} else {
+			exists = false
+		}
+	}
+
+	return ret
+}
+
+func (r *NetworkInterfaceReconciler) prefixRemoveFromList(source []networkingv1alpha1.IPPrefix, pfx *networkingv1alpha1.IPPrefix) []networkingv1alpha1.IPPrefix {
+	for idx, x := range source {
+		if v1alpha1.EqualIPPrefixes(x, *pfx) {
+			source[idx] = source[len(source)-1]
+			return source[:len(source)-1]
+		}
+	}
+	return nil
+}
+
+func (r *NetworkInterfaceReconciler) prefixDeletionNeeded(ctx context.Context, log logr.Logger, ni *networkingv1alpha1.NetworkInterface) bool {
+	specPrefix := ni.Spec.Prefix
+	statusPrefix := ni.Status.Prefix
+
+	if statusPrefix == nil {
+		return false
+	}
+
+	if specPrefix == nil && statusPrefix != nil {
+		return true
+	}
+
+	resPrefixes := r.prefixCompare(statusPrefix, specPrefix)
+
+	if len(resPrefixes) > 0 {
+		return true
+	}
+
+	return false
+}
+
+func (r *NetworkInterfaceReconciler) getDPDKPrefixList(ctx context.Context, log logr.Logger, ni *networkingv1alpha1.NetworkInterface) (*dpdkproto.PrefixesMsg, error) {
+	machineID := &dpdkproto.InterfaceIDMsg{
+		InterfaceID: []byte(ni.Status.UID),
+	}
+
+	prefixMsg, err := r.DPDKClient.ListInterfacePrefixes(ctx, machineID)
+	if err != nil {
+		return nil, errors.New("error getting prefix list")
+	}
+	return prefixMsg, nil
+}
+
+func (r *NetworkInterfaceReconciler) prefixExists(ctx context.Context, log logr.Logger, niSpecPrefix *networkingv1alpha1.IPPrefix, prefixMsg *dpdkproto.PrefixesMsg) bool {
+
+	if len(prefixMsg.Prefixes) == 0 {
+		return false
+	}
+	prefix := &dpdkproto.Prefix{}
+	if niSpecPrefix.IP().Is4() {
+		prefix.IpVersion = dpdkproto.IPVersion_IPv4
+	} else {
+		prefix.IpVersion = dpdkproto.IPVersion_IPv6
+	}
+	prefix.Address = []byte(niSpecPrefix.IP().String())
+	prefix.PrefixLength = uint32(niSpecPrefix.Bits())
+
+	isPresent := true
+	for _, p := range prefixMsg.Prefixes {
+		isPresent = true
+		isPresent = (isPresent && (p.IpVersion == prefix.IpVersion))
+		isPresent = (isPresent && (string(p.Address) == string(prefix.Address)))
+		isPresent = (isPresent && (p.PrefixLength == prefix.PrefixLength))
+		if isPresent {
+			break
+		}
+	}
+	return isPresent
+}
+
+func (r *NetworkInterfaceReconciler) isPrefixAnnounced(ctx context.Context, log logr.Logger, pfx *networkingv1alpha1.IPPrefix, ni *networkingv1alpha1.NetworkInterface, nID int32) (bool, error) {
+	ip := pfx.String()
+	hop, dest, err := prepareMbParameters(ctx, ip, ni.Status.UnderlayIP.String())
+	if err != nil {
+		return false, err
+	}
+
+	if r.MbInstance.IsRouteAnnounced(mb.VNI(nID), *dest, *hop) {
+		return true, nil
+	}
+	return false, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

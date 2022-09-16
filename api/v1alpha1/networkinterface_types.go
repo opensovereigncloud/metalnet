@@ -19,7 +19,6 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 )
 
 // NetworkInterfaceSpec defines the desired state of NetworkInterface
@@ -31,11 +30,11 @@ type NetworkInterfaceSpec struct {
 	// IPs are the provided IPs or EphemeralIPs which should be assigned to this NetworkInterface
 	// Only one IP supported at the moment.
 	// +optional
-	IPs []IP `json:"ip,omitempty"`
+	IPs []IP `json:"ips,omitempty"`
 	// Virtual IP
-	VIP *IP `json:"vip,omitempty"`
+	VirtualIP *IP `json:"virtualIP,omitempty"`
 	// Prefixes are the provided Prefix
-	Prefixes []IPPrefix `json:"prefix,omitempty"`
+	Prefixes []IPPrefix `json:"prefixes,omitempty"`
 	// NodeName is the name of the host machine on which the Interface should be created.
 	NodeName *string `json:"nodeName,omitempty"`
 }
@@ -48,35 +47,27 @@ type NetworkFunctionSource struct {
 
 // NetworkInterfaceStatus defines the observed state of NetworkInterface
 type NetworkInterfaceStatus struct {
-	// PCI Address details of this interface, Bus
-	PCIBus string `json:"pcibus,omitempty"`
-
-	// PCI Address details of this interface, Domain
-	PCIDomain string `json:"pcidomain,omitempty"`
-
-	// PCI Address details of this interface, Function
-	PCIFunction string `json:"pcifunction,omitempty"`
-
-	// PCI Address details of this interface, Slot
-	PCISlot string `json:"pcislot,omitempty"`
-
-	// DPDK PCI Address details of this interface
-	PCIDpAddr string `json:"pcidpaddr,omitempty"`
+	PCIDevice *PCIDevice `json:"pciDevice,omitempty"`
 
 	// Underlay IP of this interface
 	UnderlayIP *IP `json:"underlayIP,omitempty"`
-
-	// UID is the UID of NetworkInterface
-	UID types.UID `json:"uid,omitempty"`
 
 	// VirtualIP is any virtual ip assigned to the NetworkInterface.
 	VirtualIP *IP `json:"virtualIP,omitempty"`
 
 	// Prefixes are the Prefixes reserved for this NetworkInterface
-	Prefixes []IPPrefix `json:"prefix,omitempty"`
+	Prefixes []IPPrefix `json:"prefixes,omitempty"`
 
 	// State is the NetworkInterfaceState of the NetworkInterface.
 	State NetworkInterfaceState `json:"state,omitempty"` // READY, INPROGRESS, ERROR
+}
+
+//The details of the pci Device where interface is bound
+type PCIDevice struct {
+	Bus      string `json:"bus,omitempty"`
+	Domain   string `json:"domain,omitempty"`
+	Function string `json:"function,omitempty"`
+	Slot     string `json:"slot,omitempty"`
 }
 
 // NetworkInterfaceState is the binding state of a NetworkInterface.

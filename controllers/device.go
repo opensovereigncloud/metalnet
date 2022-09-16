@@ -15,6 +15,7 @@ const (
 
 type DeviceAllocator interface {
 	GetDeviceWithName(string) (*DetailPCIAddr, error)
+	GetNameWithDetails(*DetailPCIAddr) string
 	ReserveDeviceWithName(string) error
 	ReserveDevice() (string, error)
 	FreeDevice(dev string) error
@@ -72,6 +73,15 @@ func (d *NFDeviceBase) GetDeviceWithName(dev string) (*DetailPCIAddr, error) {
 		}
 	}
 	return nil, errors.New("no available device found")
+}
+
+func (d *NFDeviceBase) GetNameWithDetails(detailPciAddr *DetailPCIAddr) string {
+	for i := 0; i < len(d.devices); i++ {
+		if d.devices[i].pciDetail == *detailPciAddr {
+			return d.devices[i].pciAddr
+		}
+	}
+	return ""
 }
 
 func (d *NFDeviceBase) FreeDevice(dev string) error {

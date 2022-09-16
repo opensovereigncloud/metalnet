@@ -8,14 +8,6 @@ rules:
 - apiGroups:
   - networking.metalnet.onmetal.de
   resources:
-  - networkfunctions/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - networking.metalnet.onmetal.de
-  resources:
   - networkinterfaces
   verbs:
   - create

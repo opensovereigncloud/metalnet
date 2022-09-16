@@ -46,10 +46,6 @@ spec:
           spec:
             description: Spec defines the desired state of NetworkInterface.
             properties:
-              ip:
-                description: IP is the provided IP or EphemeralIP which should be
-                  assigned to this NetworkInterface
-                type: string
               ipFamilies:
                 description: IPFamilies defines which IPFamilies this NetworkInterface
                   is supporting
@@ -57,6 +53,13 @@ spec:
                   description: IPFamily represents the IP Family (IPv4 or IPv6). This
                     type is used to express the family of an IP expressed by a type
                     (e.g. service.spec.ipFamilies).
+                  type: string
+                type: array
+              ips:
+                description: IPs are the provided IPs or EphemeralIPs which should
+                  be assigned to this NetworkInterface Only one IP supported at the
+                  moment.
+                items:
                   type: string
                 type: array
               networkRef:
@@ -71,6 +74,14 @@ spec:
               nodeName:
                 description: NodeName is the name of the host machine on which the
                   Interface should be created.
+                type: string
+              prefixes:
+                description: Prefixes are the provided Prefix
+                items:
+                  type: string
+                type: array
+              virtualIP:
+                description: Virtual IP
                 type: string
             required:
             - ipFamilies
@@ -94,11 +105,13 @@ spec:
               pcislot:
                 description: PCI Address details of this interface, Slot
                 type: string
-              phase:
-                description: Phase is the NetworkInterfacePhase of the NetworkInterface.
-                type: string
+              prefixes:
+                description: Prefixes are the Prefixes reserved for this NetworkInterface
+                items:
+                  type: string
+                type: array
               state:
-                description: State is the NetworkInterfacePhase of the NetworkInterface.
+                description: State is the NetworkInterfaceState of the NetworkInterface.
                 type: string
               uid:
                 description: UID is the UID of NetworkInterface
@@ -109,8 +122,6 @@ spec:
               virtualIP:
                 description: VirtualIP is any virtual ip assigned to the NetworkInterface.
                 type: string
-            required:
-            - uid
             type: object
         type: object
     served: true

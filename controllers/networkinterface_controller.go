@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/google/uuid"
 	mb "github.com/onmetal/metalbond"
 	dpdkproto "github.com/onmetal/net-dpservice-go/proto"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -114,7 +113,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		clone := ni.DeepCopy()
 
 		if ni.Status.State == networkingv1alpha1.NetworkInterfaceStateReady {
-			interfaceID := string(ni.Status.UID)
+			interfaceID := string(ni.UID)
 			if err := r.deleteInterfaceDPSKServerCall(ctx, interfaceID); err != nil {
 				ni.Status.State = networkingv1alpha1.NetworkInterfaceStateError
 				if err := r.Status().Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
@@ -122,13 +121,20 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				}
 				return ctrl.Result{}, err
 			}
-			r.DeviceAllocator.FreeDevice(ni.Status.PCIDpAddr)
-			ni.Status.PCIDpAddr = ""
+			pciAddrDetails := &DetailPCIAddr{
+				pciDomain: ni.Status.PCIDevice.Domain,
+				pciSlot:   ni.Status.PCIDevice.Slot,
+				pciBus:    ni.Status.PCIDevice.Bus,
+				pciFunc:   ni.Status.PCIDevice.Function,
+			}
+			dpStr := r.DeviceAllocator.GetNameWithDetails(pciAddrDetails)
+			r.DeviceAllocator.FreeDevice(dpStr)
+			ni.Status.PCIDevice = nil
 		}
 
 		log.V(1).Info("VirtualIP will be deleted as well")
-		if ni.Status.VirtualIP != nil && ni.Status.UID != "" {
-			msg := &dpdkproto.InterfaceIDMsg{InterfaceID: []byte(ni.Status.UID)}
+		if ni.Status.VirtualIP != nil && ni.UID != "" {
+			msg := &dpdkproto.InterfaceIDMsg{InterfaceID: []byte(ni.UID)}
 			status, err := r.DPDKClient.DeleteInterfaceVIP(ctx, msg)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to delete the VIP %s : %w", ni.Status.VirtualIP, err)
@@ -174,7 +180,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 				reg := &dpdkproto.InterfacePrefixMsg{
 					InterfaceID: &dpdkproto.InterfaceIDMsg{
-						InterfaceID: []byte(ni.Status.UID),
+						InterfaceID: []byte(ni.UID),
 					},
 					Prefix: prefix,
 				}
@@ -202,7 +208,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Are we still synchron with dp-service and metalbond internal states ?
 	if ni.Status.State == networkingv1alpha1.NetworkInterfaceStateReady {
-		interfaceID := string(ni.Status.UID)
+		interfaceID := string(ni.UID)
 		_, err := r.getInterfaceDPSKServerCall(ctx, interfaceID)
 		if err != nil {
 			clone := ni.DeepCopy()
@@ -237,10 +243,10 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				}
 			}
 		}
-		if ni.Spec.VIP == nil && ni.Status.VirtualIP != nil {
+		if ni.Spec.VirtualIP == nil && ni.Status.VirtualIP != nil {
 			log.V(1).Info("VirtualIP deleted")
-			if ni.Status.UID != "" {
-				msg := &dpdkproto.InterfaceIDMsg{InterfaceID: []byte(ni.Status.UID)}
+			if ni.UID != "" {
+				msg := &dpdkproto.InterfaceIDMsg{InterfaceID: []byte(ni.UID)}
 				status, err := r.DPDKClient.DeleteInterfaceVIP(ctx, msg)
 				if err != nil {
 					return ctrl.Result{}, fmt.Errorf("failed to delete the VIP %s : %w", ni.Status.VirtualIP, err)
@@ -270,15 +276,15 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return ctrl.Result{}, nil
 		}
 
-		if ni.Spec.VIP != nil {
+		if ni.Spec.VirtualIP != nil {
 			log.V(1).Info("Registering public VirtualIP")
 
 			vipIp := &dpdkproto.InterfaceVIPIP{}
 			vipIp.IpVersion = dpdkproto.IPVersion_IPv4
-			vipIp.Address = []byte(ni.Spec.VIP.String())
+			vipIp.Address = []byte(ni.Spec.VirtualIP.String())
 
 			// get interface UID
-			interfaceID := string(ni.Status.UID)
+			interfaceID := string(ni.UID)
 
 			// Register VIP
 			resp, err := r.DPDKClient.AddInterfaceVIP(ctx, &dpdkproto.InterfaceVIPMsg{
@@ -287,7 +293,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			})
 
 			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to add VirtualIP %s err: %w", ni.Spec.VIP.String(), err)
+				return ctrl.Result{}, fmt.Errorf("failed to add VirtualIP %s err: %w", ni.Spec.VirtualIP.String(), err)
 			}
 
 			if resp.Status.Error != dpdkExitSuccess && resp.Status.Error != dpdkRouteAlreadyExists {
@@ -296,14 +302,14 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 
 			clone := ni.DeepCopy()
-			clone.Status.VirtualIP = ni.Spec.VIP
+			clone.Status.VirtualIP = ni.Spec.VirtualIP
 			if err := r.Status().Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
 				return ctrl.Result{}, err
 			}
 			ni = clone
 
 			// Announce MetalBond VIP
-			log.V(1).Info("Announcing PublicIP route", "NIC", ni.Name, "PublicIP", ni.Spec.VIP)
+			log.V(1).Info("Announcing PublicIP route", "NIC", ni.Name, "PublicIP", ni.Spec.VirtualIP)
 			if err := r.announceInterfacePublicVIPRoute(ctx, log, ni, r.PublicVNI, ROUTEADD); err != nil {
 				if !strings.Contains(fmt.Sprint(err), "Nexthop already exists") {
 					log.Error(err, "failed to announce route")
@@ -334,7 +340,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 				reg := &dpdkproto.InterfacePrefixMsg{
 					InterfaceID: &dpdkproto.InterfaceIDMsg{
-						InterfaceID: []byte(ni.Status.UID),
+						InterfaceID: []byte(ni.UID),
 					},
 					Prefix: prefix,
 				}
@@ -393,7 +399,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 
 			machineID := &dpdkproto.InterfaceIDMsg{
-				InterfaceID: []byte(ni.Status.UID),
+				InterfaceID: []byte(ni.UID),
 			}
 
 			for i := 0; i < len(specDiffToStatus); i++ {
@@ -451,7 +457,16 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, client.IgnoreNotFound(err)
 	}
 
-	dpPci := ni.Status.PCIDpAddr
+	dpPci := ""
+	if ni.Status.PCIDevice != nil {
+		pciAddrDetails := &DetailPCIAddr{
+			pciDomain: ni.Status.PCIDevice.Domain,
+			pciSlot:   ni.Status.PCIDevice.Slot,
+			pciBus:    ni.Status.PCIDevice.Bus,
+			pciFunc:   ni.Status.PCIDevice.Function,
+		}
+		dpPci = r.DeviceAllocator.GetNameWithDetails(pciAddrDetails)
+	}
 
 	if dpPci == "" {
 		newDevice, err := r.DeviceAllocator.ReserveDevice()
@@ -466,7 +481,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		r.DeviceAllocator.ReserveDeviceWithName(dpPci)
 	}
 
-	interfaceID, resp, err := r.addInterfaceDPSKServerCall(ctx, ni.Spec, n.Spec, dpPci)
+	_, resp, err := r.addInterfaceDPSKServerCall(ctx, ni, n.Spec, dpPci)
 	if err != nil {
 		r.DeviceAllocator.FreeDevice(dpPci)
 		return ctrl.Result{}, err
@@ -475,15 +490,16 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	clone := ni.DeepCopy()
 
-	clone.Status.UID = types.UID(interfaceID)
 	clone.Status.State = networkingv1alpha1.NetworkInterfaceStatePending
 	clone.Status.UnderlayIP = networkingv1alpha1.MustParseNewIP(string(resp.Response.UnderlayRoute))
 	detailPci, _ := r.DeviceAllocator.GetDeviceWithName(dpPci)
-	clone.Status.PCIBus = detailPci.pciBus
-	clone.Status.PCIDomain = detailPci.pciDomain
-	clone.Status.PCISlot = detailPci.pciSlot
-	clone.Status.PCIFunction = detailPci.pciFunc
-	clone.Status.PCIDpAddr = string(resp.Vf.Name)
+	PCIDeviceDetails := &networkingv1alpha1.PCIDevice{
+		Bus:      detailPci.pciBus,
+		Domain:   detailPci.pciDomain,
+		Slot:     detailPci.pciSlot,
+		Function: detailPci.pciFunc,
+	}
+	clone.Status.PCIDevice = PCIDeviceDetails
 	if err := r.Status().Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -531,7 +547,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 }
 
 func (r *NetworkInterfaceReconciler) announceInterfacePublicVIPRoute(ctx context.Context, log logr.Logger, ni *networkingv1alpha1.NetworkInterface, publicVNI int, action int) error {
-	niVIP := ni.Spec.VIP
+	niVIP := ni.Spec.VirtualIP
 	if action == ROUTEREMOVE {
 		niVIP = ni.Status.VirtualIP
 	}
@@ -613,9 +629,9 @@ func (r *NetworkInterfaceReconciler) getInterfaceDPSKServerCall(ctx context.Cont
 	return resp, nil
 }
 
-func (r *NetworkInterfaceReconciler) addInterfaceDPSKServerCall(ctx context.Context, niSpec networkingv1alpha1.NetworkInterfaceSpec, nSpec networkingv1alpha1.NetworkSpec, pciAddr string) (string, *dpdkproto.CreateInterfaceResponse, error) {
-	interfaceID := uuid.New().String()
-	ip := niSpec.IPs[0].String()
+func (r *NetworkInterfaceReconciler) addInterfaceDPSKServerCall(ctx context.Context, ni *networkingv1alpha1.NetworkInterface, nSpec networkingv1alpha1.NetworkSpec, pciAddr string) (string, *dpdkproto.CreateInterfaceResponse, error) {
+	interfaceID := string(ni.UID)
+	ip := ni.Spec.IPs[0].String()
 	createInterfaceReq := &dpdkproto.CreateInterfaceRequest{
 		InterfaceType: dpdkproto.InterfaceType_VirtualInterface,
 		InterfaceID:   []byte(interfaceID),
@@ -780,16 +796,12 @@ func (r *NetworkInterfaceReconciler) prefixDeletionNeeded(ctx context.Context, l
 
 	resPrefixes := r.prefixCompare(statusPrefixes, specPrefixes)
 
-	if len(resPrefixes) > 0 {
-		return true
-	}
-
-	return false
+	return (len(resPrefixes) > 0)
 }
 
 func (r *NetworkInterfaceReconciler) getDPDKPrefixList(ctx context.Context, log logr.Logger, ni *networkingv1alpha1.NetworkInterface) (*dpdkproto.PrefixesMsg, error) {
 	machineID := &dpdkproto.InterfaceIDMsg{
-		InterfaceID: []byte(ni.Status.UID),
+		InterfaceID: []byte(ni.UID),
 	}
 
 	prefixMsg, err := r.DPDKClient.ListInterfacePrefixes(ctx, machineID)

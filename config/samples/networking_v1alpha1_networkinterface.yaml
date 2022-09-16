@@ -5,10 +5,10 @@ metadata:
 spec:
   ipFamilies:
     - "IPv4"
-  ip:
+  ips:
     - 10.0.0.2
-#  vip: 194.11.242.11
-  prefix: 
+#  virtualIP: 194.11.242.11
+  prefixes: 
     - 10.1.1.0/24
     - 10.3.3.0/24
     - 10.4.4.0/24

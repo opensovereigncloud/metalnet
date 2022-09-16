@@ -1,9 +1,0 @@
-apiVersion: networking.metalnet.onmetal.de/v1alpha1
-kind: NetworkFunction
-metadata:
-  name: networkfunction-sample
-spec:
-  type: virtual
-  nodeName:
-  targetRef:
-    name: networkinterface-sample

@@ -1,9 +1,0 @@
-apiVersion: networking.metalnet.onmetal.de/v1alpha1
-kind: NetworkFunction
-metadata:
-  name: networkfunction-sample2
-spec:
-  type: virtual
-  nodeName: fra4-lab-dell-2
-  targetRef:
-    name: networkinterface-sample2

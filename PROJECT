@@ -40,13 +40,4 @@ resources:
   kind: VirtualIP
   path: github.com/onmetal/metalnet/api/v1alpha1
   version: v1alpha1
-- api:
-    crdVersion: v1
-    namespaced: true
-  controller: true
-  domain: metalnet.onmetal.de
-  group: networking
-  kind: AliasPrefix
-  path: github.com/onmetal/metalnet/api/v1alpha1
-  version: v1alpha1
 version: "3"

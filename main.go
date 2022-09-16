@@ -173,15 +173,6 @@ func main() {
 	}
 	dpUUID = (*uuid).Uuid
 
-	// if err = (&controllers.NetworkFunctionReconciler{
-	// 	Client:          mgr.GetClient(),
-	// 	Scheme:          mgr.GetScheme(),
-	// 	DeviceAllocator: nfDeviceBase,
-	// 	Hostname:        hostName,
-	// }).SetupWithManager(mgr); err != nil {
-	// 	setupLog.Error(err, "unable to create controller", "controller", "NetworkFunction")
-	// 	os.Exit(1)
-	// }
 	if err = (&controllers.NetworkReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
@@ -204,28 +195,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// if err = (&controllers.VirtualIPReconciler{
-	// 	Client:          mgr.GetClient(),
-	// 	Scheme:          mgr.GetScheme(),
-	// 	DPDKClient:      dpdkClient,
-	// 	PublicVNI:       publicVNI,
-	// 	MbInstance:      mbInstance,
-	// 	MetalbondServer: metalbondServerAddr,
-	// 	Hostname:        hostName,
-	// }).SetupWithManager(mgr); err != nil {
-	// 	setupLog.Error(err, "unable to create controller", "controller", "VirtualIP")
-	// 	os.Exit(1)
-	// }
-	// if err = (&controllers.AliasPrefixReconciler{
-	// 	Client:     mgr.GetClient(),
-	// 	Scheme:     mgr.GetScheme(),
-	// 	DPDKClient: dpdkClient,
-	// 	MbInstance: mbInstance,
-	// 	HostName:   hostName,
-	// }).SetupWithManager(mgr); err != nil {
-	// 	setupLog.Error(err, "unable to create controller", "controller", "AliasPrefix")
-	// 	os.Exit(1)
-	// }
 	//+kubebuilder:scaffold:builder
 
 	var dpChecker healthz.Checker = func(_ *http.Request) error {

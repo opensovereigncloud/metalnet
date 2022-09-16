@@ -50,6 +50,10 @@ const (
 	PciBus                        = "networking.metalnet.onmetal.de/bus"
 	PciFunction                   = "networking.metalnet.onmetal.de/function"
 	DpRouteAlreadyAddedError      = 251
+	dpdkExitSuccess               = 0
+	dpdkInterfaceNotFound         = 450
+	dpdkRouteAlreadyExists        = 351
+	dpdkPrefixInterfaceNotFound   = 701
 )
 
 type NodeDevPCIInfo func(string, int) (map[string]string, error)
@@ -82,6 +86,10 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			log.Info("unable to fetch NetworkInterface", "NetworkInterface", req, "Error", err)
 		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	if *ni.Spec.NodeName != r.HostName {
+		return ctrl.Result{}, nil
 	}
 
 	network := &networkingv1alpha1.Network{}
@@ -143,7 +151,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 		}
 
-		log.V(1).Info("Withdrawing Private route", "NIC", ni.Name, "PublicIP", ni.Spec.IP, "VNI", network.Spec.ID)
+		log.V(1).Info("Withdrawing Private route", "NIC", ni.Name, "PublicIP", ni.Spec.IPs[0], "VNI", network.Spec.ID)
 		if err := r.announceInterfaceLocalRoute(ctx, ni, network.Spec, ROUTEREMOVE); err != nil {
 			if !strings.Contains(fmt.Sprint(err), "Nexthop does not exist") {
 				return ctrl.Result{}, fmt.Errorf("failed to withdraw a route. %v", err)
@@ -152,8 +160,8 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 		}
 
-		if len(ni.Status.Prefix) > 0 {
-			deletionList := ni.Status.Prefix
+		if len(ni.Status.Prefixes) > 0 {
+			deletionList := ni.Status.Prefixes
 			for _, prfx := range deletionList {
 				prefix := &dpdkproto.Prefix{}
 				if prfx.IP().Is4() {
@@ -311,8 +319,8 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 		if r.prefixDeletionNeeded(ctx, log, ni) {
 			log.V(1).Info("AliasPrefix delete path")
-			finalStatusList := ni.Status.Prefix
-			deletionList := r.prefixCompare(ni.Status.Prefix, ni.Spec.Prefix)
+			finalStatusList := ni.Status.Prefixes
+			deletionList := r.prefixCompare(ni.Status.Prefixes, ni.Spec.Prefixes)
 
 			for _, prfx := range deletionList {
 				prefix := &dpdkproto.Prefix{}
@@ -345,7 +353,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				finalStatusList = r.prefixRemoveFromList(finalStatusList, &prfx)
 			}
 			clone := ni.DeepCopy()
-			clone.Status.Prefix = finalStatusList
+			clone.Status.Prefixes = finalStatusList
 
 			if err := r.Status().Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
 				log.Info("unable to update NetworkInterface", "Error", err)
@@ -354,18 +362,18 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return ctrl.Result{}, nil
 		}
 
-		if ni.Spec.Prefix != nil && len(ni.Spec.Prefix) > 0 {
+		if ni.Spec.Prefixes != nil && len(ni.Spec.Prefixes) > 0 {
 			var specDiffToStatus, resStatus []networkingv1alpha1.IPPrefix
 
 			log.V(1).Info("Registering AliasPrefix(es)")
-			if ni.Status.Prefix != nil {
-				specDiffToStatus = r.prefixCompare(ni.Spec.Prefix, ni.Status.Prefix)
+			if ni.Status.Prefixes != nil {
+				specDiffToStatus = r.prefixCompare(ni.Spec.Prefixes, ni.Status.Prefixes)
 				if len(specDiffToStatus) == 0 {
 					dpPrefixList, err := r.getDPDKPrefixList(ctx, log, ni)
 					if err != nil {
 						return ctrl.Result{}, err
 					}
-					for _, pfx := range ni.Status.Prefix {
+					for _, pfx := range ni.Status.Prefixes {
 						if r.prefixExists(ctx, log, &pfx, dpPrefixList) {
 							isAnnounced, err := r.isPrefixAnnounced(ctx, log, &pfx, ni, n.Spec.ID)
 							if err == nil && !isAnnounced {
@@ -378,10 +386,10 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 					return ctrl.Result{}, nil
 				}
 				if len(specDiffToStatus) > 0 {
-					resStatus = ni.Status.Prefix
+					resStatus = ni.Status.Prefixes
 				}
 			} else {
-				specDiffToStatus = ni.Spec.Prefix
+				specDiffToStatus = ni.Spec.Prefixes
 			}
 
 			machineID := &dpdkproto.InterfaceIDMsg{
@@ -417,7 +425,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 			if len(resStatus) > 0 {
 				clone := ni.DeepCopy()
-				clone.Status.Prefix = resStatus
+				clone.Status.Prefixes = resStatus
 
 				if err := r.Status().Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
 					log.Info("unable to update NetworkInterface", "Error", err)
@@ -607,7 +615,7 @@ func (r *NetworkInterfaceReconciler) getInterfaceDPSKServerCall(ctx context.Cont
 
 func (r *NetworkInterfaceReconciler) addInterfaceDPSKServerCall(ctx context.Context, niSpec networkingv1alpha1.NetworkInterfaceSpec, nSpec networkingv1alpha1.NetworkSpec, pciAddr string) (string, *dpdkproto.CreateInterfaceResponse, error) {
 	interfaceID := uuid.New().String()
-	ip := niSpec.IP.String()
+	ip := niSpec.IPs[0].String()
 	createInterfaceReq := &dpdkproto.CreateInterfaceRequest{
 		InterfaceType: dpdkproto.InterfaceType_VirtualInterface,
 		InterfaceID:   []byte(interfaceID),
@@ -636,10 +644,10 @@ func (r *NetworkInterfaceReconciler) addInterfaceDPSKServerCall(ctx context.Cont
 
 func (r *NetworkInterfaceReconciler) isInterfaceLocalRouteAnnounced(ctx context.Context, ni *networkingv1alpha1.NetworkInterface, nSpec networkingv1alpha1.NetworkSpec) (bool, error) {
 	niSpec := ni.Spec
-	if niSpec.IP == nil || ni.Status.State != networkingv1alpha1.NetworkInterfaceStateReady {
+	if niSpec.IPs == nil || ni.Status.State != networkingv1alpha1.NetworkInterfaceStateReady {
 		return false, errors.New("parameter nil")
 	}
-	ip := niSpec.IP.String() + "/32"
+	ip := niSpec.IPs[0].String() + "/32"
 	hop, dest, err := prepareMbParameters(ctx, ip, ni.Status.UnderlayIP.String())
 
 	if err != nil {
@@ -654,11 +662,11 @@ func (r *NetworkInterfaceReconciler) isInterfaceLocalRouteAnnounced(ctx context.
 
 func (r *NetworkInterfaceReconciler) announceInterfaceLocalRoute(ctx context.Context, ni *networkingv1alpha1.NetworkInterface, nSpec networkingv1alpha1.NetworkSpec, action int) error {
 	niSpec := ni.Spec
-	if niSpec.IP == nil || ni.Status.State != networkingv1alpha1.NetworkInterfaceStateReady {
+	if niSpec.IPs == nil || ni.Status.State != networkingv1alpha1.NetworkInterfaceStateReady {
 		return nil
 	}
 
-	ip := niSpec.IP.String() + "/32"
+	ip := niSpec.IPs[0].String() + "/32"
 	hop, dest, err := prepareMbParameters(ctx, ip, ni.Status.UnderlayIP.String())
 
 	if err != nil {
@@ -759,18 +767,18 @@ func (r *NetworkInterfaceReconciler) prefixRemoveFromList(source []networkingv1a
 }
 
 func (r *NetworkInterfaceReconciler) prefixDeletionNeeded(ctx context.Context, log logr.Logger, ni *networkingv1alpha1.NetworkInterface) bool {
-	specPrefix := ni.Spec.Prefix
-	statusPrefix := ni.Status.Prefix
+	specPrefixes := ni.Spec.Prefixes
+	statusPrefixes := ni.Status.Prefixes
 
-	if statusPrefix == nil {
+	if statusPrefixes == nil {
 		return false
 	}
 
-	if specPrefix == nil && statusPrefix != nil {
+	if specPrefixes == nil && statusPrefixes != nil {
 		return true
 	}
 
-	resPrefixes := r.prefixCompare(statusPrefix, specPrefix)
+	resPrefixes := r.prefixCompare(statusPrefixes, specPrefixes)
 
 	if len(resPrefixes) > 0 {
 		return true

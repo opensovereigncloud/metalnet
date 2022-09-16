@@ -28,13 +28,14 @@ type NetworkInterfaceSpec struct {
 	NetworkRef corev1.LocalObjectReference `json:"networkRef"`
 	// IPFamilies defines which IPFamilies this NetworkInterface is supporting
 	IPFamilies []corev1.IPFamily `json:"ipFamilies"`
-	// IP is the provided IP or EphemeralIP which should be assigned to this NetworkInterface
+	// IPs are the provided IPs or EphemeralIPs which should be assigned to this NetworkInterface
+	// Only one IP supported at the moment.
 	// +optional
-	IP *IP `json:"ip,omitempty"`
+	IPs []IP `json:"ip,omitempty"`
 	// Virtual IP
 	VIP *IP `json:"vip,omitempty"`
-	// Prefix is the provided Prefix
-	Prefix []IPPrefix `json:"prefix,omitempty"`
+	// Prefixes are the provided Prefix
+	Prefixes []IPPrefix `json:"prefix,omitempty"`
 	// NodeName is the name of the host machine on which the Interface should be created.
 	NodeName *string `json:"nodeName,omitempty"`
 }
@@ -71,11 +72,11 @@ type NetworkInterfaceStatus struct {
 	// VirtualIP is any virtual ip assigned to the NetworkInterface.
 	VirtualIP *IP `json:"virtualIP,omitempty"`
 
-	// Prefix is the Prefix reserved for this NetworkInterface
-	Prefix []IPPrefix `json:"prefix,omitempty"`
+	// Prefixes are the Prefixes reserved for this NetworkInterface
+	Prefixes []IPPrefix `json:"prefix,omitempty"`
 
 	// State is the NetworkInterfaceState of the NetworkInterface.
-	State NetworkInterfaceState `json:"state,omitempty"` // READY, ERROR
+	State NetworkInterfaceState `json:"state,omitempty"` // READY, INPROGRESS, ERROR
 }
 
 // NetworkInterfaceState is the binding state of a NetworkInterface.

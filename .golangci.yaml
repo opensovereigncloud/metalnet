@@ -1,5 +1,4 @@
 run:
-  modules-download-mode: vendor
   timeout: 3m
 
 linters:
@@ -9,7 +8,7 @@ linters:
     - misspell
     - goimports
   disable:
-    -typecheck
+    - typecheck
 
 severity:
   default-severity: error

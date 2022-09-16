@@ -128,7 +128,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				pciFunc:   ni.Status.PCIDevice.Function,
 			}
 			dpStr := r.DeviceAllocator.GetNameWithDetails(pciAddrDetails)
-			r.DeviceAllocator.FreeDevice(dpStr)
+			_ = r.DeviceAllocator.FreeDevice(dpStr)
 			ni.Status.PCIDevice = nil
 		}
 
@@ -478,12 +478,14 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		log.V(1).Info("Assigning new Network PCI Device", "PCI:", newDevice)
 	} else {
 		log.V(1).Info("Using assigned Network PCI Device", "PCI:", dpPci)
-		r.DeviceAllocator.ReserveDeviceWithName(dpPci)
+		if err := r.DeviceAllocator.ReserveDeviceWithName(dpPci); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error reserving device with name %s: %w", dpPci, err)
+		}
 	}
 
 	_, resp, err := r.addInterfaceDPSKServerCall(ctx, ni, n.Spec, dpPci)
 	if err != nil {
-		r.DeviceAllocator.FreeDevice(dpPci)
+		_ = r.DeviceAllocator.FreeDevice(dpPci)
 		return ctrl.Result{}, err
 	}
 	log.Info("AddInterface GRPC call", "resp", resp)

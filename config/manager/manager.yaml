@@ -18,6 +18,8 @@ spec:
       control-plane: controller-manager
   template:
     metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
       labels:
         control-plane: controller-manager
     spec:
@@ -29,12 +31,15 @@ spec:
         - --metalbondserver-address=2a10:afc0:e01f:f4::2
         - --metalbondserver-port=4711
         - --public-vni=100
-        image: localhost:5000/controller:latest
+        image: controller:latest
         name: manager
         resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
           requests:
-            cpu: 1000m
-            memory: 200Mi
+            cpu: 10m
+            memory: 64Mi
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:

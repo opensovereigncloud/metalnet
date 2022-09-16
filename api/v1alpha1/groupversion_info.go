@@ -15,8 +15,8 @@ limitations under the License.
 */
 
 // Package v1alpha1 contains API Schema definitions for the networking v1alpha1 API group
-//+kubebuilder:object:generate=true
-//+groupName=networking.metalnet.onmetal.de
+// +kubebuilder:object:generate=true
+// +groupName=networking.metalnet.onmetal.de
 package v1alpha1
 
 import (

@@ -62,7 +62,7 @@ type NetworkInterfaceStatus struct {
 	State NetworkInterfaceState `json:"state,omitempty"` // READY, INPROGRESS, ERROR
 }
 
-//The details of the pci Device where interface is bound
+// The details of the pci Device where interface is bound
 type PCIDevice struct {
 	Bus      string `json:"bus,omitempty"`
 	Domain   string `json:"domain,omitempty"`

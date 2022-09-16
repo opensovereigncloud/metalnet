@@ -276,7 +276,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return ctrl.Result{}, nil
 		}
 
-		if ni.Spec.VirtualIP != nil {
+		if ni.Spec.VirtualIP != nil && ni.Status.VirtualIP == nil {
 			log.V(1).Info("Registering public VirtualIP")
 
 			vipIp := &dpdkproto.InterfaceVIPIP{}

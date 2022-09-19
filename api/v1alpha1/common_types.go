@@ -16,8 +16,8 @@ package v1alpha1
 
 import (
 	"encoding/json"
+	"net/netip"
 
-	"inet.af/netaddr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -35,7 +35,7 @@ type LocalUIDReference struct {
 // IP is an IP address.
 // +kubebuilder:validation:Type=string
 type IP struct {
-	netaddr.IP `json:"-"`
+	netip.Addr `json:"-"`
 }
 
 func (in *IP) DeepCopyInto(out *IP) {
@@ -43,7 +43,7 @@ func (in *IP) DeepCopyInto(out *IP) {
 }
 
 func (in *IP) DeepCopy() *IP {
-	return &IP{in.IP}
+	return &IP{in.Addr}
 }
 
 func (i IP) GomegaString() string {
@@ -52,7 +52,7 @@ func (i IP) GomegaString() string {
 
 func (i *IP) UnmarshalJSON(b []byte) error {
 	if len(b) == 4 && string(b) == "null" {
-		i.IP = netaddr.IP{}
+		i.Addr = netip.Addr{}
 		return nil
 	}
 
@@ -62,12 +62,12 @@ func (i *IP) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
-	p, err := netaddr.ParseIP(str)
+	p, err := netip.ParseAddr(str)
 	if err != nil {
 		return err
 	}
 
-	i.IP = p
+	i.Addr = p
 	return nil
 }
 
@@ -83,15 +83,15 @@ func (i IP) ToUnstructured() interface{} {
 	if i.IsZero() {
 		return nil
 	}
-	return i.IP.String()
+	return i.Addr.String()
 }
 
 func (i *IP) IsValid() bool {
-	return i != nil && i.IP.IsValid()
+	return i != nil && i.Addr.IsValid()
 }
 
 func (i *IP) IsZero() bool {
-	return i == nil || i.IP.IsZero()
+	return i == nil || !i.Addr.IsValid()
 }
 
 func (i IP) Family() corev1.IPFamily {
@@ -109,12 +109,12 @@ func (_ IP) OpenAPISchemaType() []string { return []string{"string"} }
 
 func (_ IP) OpenAPISchemaFormat() string { return "ip" }
 
-func NewIP(ip netaddr.IP) IP {
+func NewIP(ip netip.Addr) IP {
 	return IP{ip}
 }
 
 func ParseIP(s string) (IP, error) {
-	addr, err := netaddr.ParseIP(s)
+	addr, err := netip.ParseAddr(s)
 	if err != nil {
 		return IP{}, err
 	}
@@ -130,7 +130,7 @@ func ParseNewIP(s string) (*IP, error) {
 }
 
 func MustParseIP(s string) IP {
-	return IP{netaddr.MustParseIP(s)}
+	return IP{netip.MustParseAddr(s)}
 }
 
 func MustParseNewIP(s string) *IP {
@@ -139,7 +139,7 @@ func MustParseNewIP(s string) *IP {
 	return ip
 }
 
-func NewIPPtr(ip netaddr.IP) *IP {
+func NewIPPtr(ip netip.Addr) *IP {
 	return &IP{ip}
 }
 
@@ -155,7 +155,7 @@ func EqualIPs(a, b IP) bool {
 // +kubebuilder:validation:Type=string
 // +nullable
 type IPPrefix struct {
-	netaddr.IPPrefix `json:"-"`
+	netip.Prefix `json:"-"`
 }
 
 func (i IPPrefix) GomegaString() string {
@@ -163,12 +163,12 @@ func (i IPPrefix) GomegaString() string {
 }
 
 func (i IPPrefix) IP() IP {
-	return IP{i.IPPrefix.IP()}
+	return IP{i.Prefix.Addr()}
 }
 
 func (i *IPPrefix) UnmarshalJSON(b []byte) error {
 	if len(b) == 4 && string(b) == "null" {
-		i.IPPrefix = netaddr.IPPrefix{}
+		i.Prefix = netip.Prefix{}
 		return nil
 	}
 
@@ -178,12 +178,12 @@ func (i *IPPrefix) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
-	p, err := netaddr.ParseIPPrefix(str)
+	p, err := netip.ParsePrefix(str)
 	if err != nil {
 		return err
 	}
 
-	i.IPPrefix = p
+	i.Prefix = p
 	return nil
 }
 
@@ -207,27 +207,27 @@ func (in *IPPrefix) DeepCopyInto(out *IPPrefix) {
 }
 
 func (in *IPPrefix) DeepCopy() *IPPrefix {
-	return &IPPrefix{in.IPPrefix}
+	return &IPPrefix{in.Prefix}
 }
 
 func (in *IPPrefix) IsValid() bool {
-	return in != nil && in.IPPrefix.IsValid()
+	return in != nil && in.Prefix.IsValid()
 }
 
 func (in *IPPrefix) IsZero() bool {
-	return in == nil || in.IPPrefix.IsZero()
+	return in == nil || !in.Prefix.IsValid()
 }
 
 func (_ IPPrefix) OpenAPISchemaType() []string { return []string{"string"} }
 
 func (_ IPPrefix) OpenAPISchemaFormat() string { return "ip-prefix" }
 
-func NewIPPrefix(prefix netaddr.IPPrefix) *IPPrefix {
-	return &IPPrefix{IPPrefix: prefix}
+func NewIPPrefix(prefix netip.Prefix) *IPPrefix {
+	return &IPPrefix{Prefix: prefix}
 }
 
 func ParseIPPrefix(s string) (IPPrefix, error) {
-	prefix, err := netaddr.ParseIPPrefix(s)
+	prefix, err := netip.ParsePrefix(s)
 	if err != nil {
 		return IPPrefix{}, err
 	}
@@ -243,7 +243,7 @@ func ParseNewIPPrefix(s string) (*IPPrefix, error) {
 }
 
 func MustParseIPPrefix(s string) IPPrefix {
-	return IPPrefix{netaddr.MustParseIPPrefix(s)}
+	return IPPrefix{netip.MustParsePrefix(s)}
 }
 
 func MustParseNewIPPrefix(s string) *IPPrefix {

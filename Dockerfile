@@ -26,6 +26,7 @@ RUN --mount=type=ssh --mount=type=secret,id=github_pat \
 # Copy the go source
 COPY main.go main.go
 COPY api/ api/
+COPY client/ client/
 COPY controllers/ controllers/
 
 ARG TARGETOS TARGETARCH

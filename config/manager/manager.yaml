@@ -26,11 +26,13 @@ spec:
       containers:
       - command:
         - /manager
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
         args:
-        - --dpservice-address=127.0.0.1:1337
-        - --metalbondserver-address=2a10:afc0:e01f:f4::2
-        - --metalbondserver-port=4711
-        - --public-vni=100
+        - --node-name=$(NODE_NAME)
         image: controller:latest
         name: manager
         resources:
@@ -55,15 +57,6 @@ spec:
           name: sysfs
         - mountPath: /usr/share/misc/
           name: pciids
-        env:
-          - name: NODE_NAME
-            valueFrom:
-              fieldRef:
-                fieldPath: spec.nodeName
-          - name: NAMESPACE
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.namespace
       volumes:
       - hostPath:
           path: /sys

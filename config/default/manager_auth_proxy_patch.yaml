@@ -24,6 +24,4 @@ spec:
         args:
         - "--health-probe-bind-address=:8081"
         - "--metrics-bind-address=127.0.0.1:8080"
-        - "--dpservice-address=127.0.0.1:1337"
-        - "--metalbondserver-address=2a10:afc0:e01f:f4::2"
-        - "--metalbondserver-port=4711"
+        - "--node-name=$(NODE_NAME)"

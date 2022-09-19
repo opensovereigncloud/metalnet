@@ -28,7 +28,6 @@ const (
 )
 
 func prepareMbParameters(ctx context.Context, ip string, ulRoute string) (*mb.NextHop, *mb.Destination, error) {
-
 	prefix, err := netip.ParsePrefix(ip)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to convert interface ip to prefix version, reson=%v", err)

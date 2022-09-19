@@ -18,103 +18,100 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 
-	networkingv1alpha1 "github.com/onmetal/metalnet/api/v1alpha1"
-	"k8s.io/apimachinery/pkg/fields"
+	"github.com/go-logr/logr"
+	"github.com/onmetal/controller-utils/clientutils"
+	metalnetv1alpha1 "github.com/onmetal/metalnet/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const (
-	NetworkFinalizerName = "networking.metalnet.onmetal.de/network"
-	networkRefField      = ".spec.networkRef.name"
+	networkFinalizer = "networking.metalnet.onmetal.de/network"
+	networkRefField  = ".spec.networkRef.name"
 )
 
 // NetworkReconciler reconciles a Network object
 type NetworkReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	HostName string
+	Scheme *runtime.Scheme
 }
 
 //+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networks,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networks/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networks/finalizers,verbs=update
-//+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networkinterfaces,verbs=get;list;watch
+//+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networks/finalizers,verbs=update;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (r *NetworkReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	network := &networkingv1alpha1.Network{}
-
+	log := ctrl.LoggerFrom(ctx)
+	network := &metalnetv1alpha1.Network{}
 	if err := r.Get(ctx, req.NamespacedName, network); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	refNetworkInterfaces := &networkingv1alpha1.NetworkInterfaceList{}
-	listOps := &client.ListOptions{
-		FieldSelector: fields.OneTermEqualSelector(networkRefField, req.Name),
-		Namespace:     req.Namespace,
-	}
-	err := r.List(ctx, refNetworkInterfaces, listOps)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
+	return r.reconcileExists(ctx, log, network)
+}
 
-	changeFinalizerFunc := controllerutil.AddFinalizer
-	if !network.DeletionTimestamp.IsZero() && len(refNetworkInterfaces.Items) == 0 {
-		changeFinalizerFunc = controllerutil.RemoveFinalizer
+func (r *NetworkReconciler) reconcileExists(ctx context.Context, log logr.Logger, network *metalnetv1alpha1.Network) (ctrl.Result, error) {
+	if !network.DeletionTimestamp.IsZero() {
+		return r.delete(ctx, log, network)
 	}
+	return r.reconcile(ctx, log, network)
+}
 
-	clone := network.DeepCopy()
-	if !changeFinalizerFunc(clone, NetworkFinalizerName) {
+func (r *NetworkReconciler) delete(ctx context.Context, log logr.Logger, network *metalnetv1alpha1.Network) (ctrl.Result, error) {
+	log.V(1).Info("Delete")
+
+	if !controllerutil.ContainsFinalizer(network, networkFinalizer) {
+		log.V(1).Info("No finalizer present, nothing to do.")
 		return ctrl.Result{}, nil
 	}
 
-	if err := r.Patch(ctx, clone, client.MergeFrom(network)); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+	log.V(1).Info("Finalizer present, doing cleanup")
+	// TODO: Add required cleanup steps
+
+	log.V(1).Info("Cleanup done, removing finalizer")
+	if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, network, networkFinalizer); err != nil {
+		return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
 	}
+
+	log.V(1).Info("Removed finalizer")
+	return ctrl.Result{}, nil
+}
+
+func (r *NetworkReconciler) reconcile(ctx context.Context, log logr.Logger, network *metalnetv1alpha1.Network) (ctrl.Result, error) {
+	log.V(1).Info("Reconcile")
+
+	log.V(1).Info("Ensuring finalizer")
+	modified, err := clientutils.PatchEnsureNoFinalizer(ctx, r.Client, network, networkInterfaceFinalizer)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("error ensuring finalizer: %w", err)
+	}
+	if modified {
+		log.V(1).Info("Added finalizer, requeueing")
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	log.V(1).Info("Finalizer is present")
 	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *NetworkReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &networkingv1alpha1.NetworkInterface{}, networkRefField, func(rawObj client.Object) []string {
-		ni := rawObj.(*networkingv1alpha1.NetworkInterface)
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &metalnetv1alpha1.NetworkInterface{}, networkRefField, func(rawObj client.Object) []string {
+		ni := rawObj.(*metalnetv1alpha1.NetworkInterface)
 		return []string{ni.Spec.NetworkRef.Name}
 	}); err != nil {
 		return err
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&networkingv1alpha1.Network{}).
+		For(&metalnetv1alpha1.Network{}).
 		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
-		Watches(
-			&source.Kind{Type: &networkingv1alpha1.NetworkInterface{}},
-			handler.EnqueueRequestsFromMapFunc(r.findObjectsForNetworkInterface),
-			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
-		).
 		Complete(r)
-}
-
-func (r *NetworkReconciler) findObjectsForNetworkInterface(obj client.Object) []reconcile.Request {
-	networkInterface, ok := obj.(*networkingv1alpha1.NetworkInterface)
-	if !ok {
-		return []reconcile.Request{}
-	}
-
-	return []reconcile.Request{{
-		NamespacedName: types.NamespacedName{
-			Name:      networkInterface.Spec.NetworkRef.Name,
-			Namespace: networkInterface.GetNamespace(),
-		},
-	}}
 }

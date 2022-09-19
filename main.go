@@ -63,6 +63,7 @@ func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
+	var nodeName string
 	var dpserviceAddr string
 	var metalbondServerAddr string
 	var metalbondServerPort string
@@ -71,6 +72,7 @@ func main() {
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	flag.StringVar(&nodeName, "node-name", hostName, "The node name to react to when reconciling network interfaces.")
 	flag.StringVar(&dpserviceAddr, "dpservice-address", "", "The address of net-dpservice.")
 	flag.StringVar(&metalbondServerAddr, "metalbondserver-address", "", "The address of metal bond address server.")
 	flag.StringVar(&metalbondServerPort, "metalbondserver-port", "", "The port of metal bond server.")
@@ -174,9 +176,8 @@ func main() {
 	dpUUID = (*uuid).Uuid
 
 	if err = (&controllers.NetworkReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		HostName: hostName,
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Network")
 		os.Exit(1)
@@ -185,7 +186,7 @@ func main() {
 		Client:          mgr.GetClient(),
 		Scheme:          mgr.GetScheme(),
 		DPDKClient:      dpdkClient,
-		HostName:        hostName,
+		NodeName:        nodeName,
 		PublicVNI:       publicVNI,
 		MbInstance:      mbInstance,
 		RouterAddress:   metalbondServerAddr,

@@ -39,7 +39,6 @@ func NewMetalbondClient(config MetalbondClientConfig) (*MetalbondClient, error) 
 }
 
 func (c *MetalbondClient) AddRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error {
-
 	ctx := context.Background()
 
 	if c.config.IPv4Only && dest.IPVersion != mb.IPV4 {
@@ -78,7 +77,6 @@ func (c *MetalbondClient) AddRoute(vni mb.VNI, dest mb.Destination, hop mb.NextH
 }
 
 func (c *MetalbondClient) RemoveRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error {
-
 	ctx := context.Background()
 
 	if c.config.IPv4Only && dest.IPVersion != mb.IPV4 {

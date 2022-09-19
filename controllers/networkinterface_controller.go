@@ -28,31 +28,26 @@ import (
 
 	"github.com/go-logr/logr"
 	mb "github.com/onmetal/metalbond"
+	metalnetv1alpha1 "github.com/onmetal/metalnet/api/v1alpha1"
+	metalnetclient "github.com/onmetal/metalnet/client"
 	dpdkproto "github.com/onmetal/net-dpservice-go/proto"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	"github.com/onmetal/metalnet/api/v1alpha1"
-	networkingv1alpha1 "github.com/onmetal/metalnet/api/v1alpha1"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const (
-	NetworkInterfaceFinalizerName = "networking.metalnet.onmetal.de/networkInterface"
-	UnderlayRoute                 = "networking.metalnet.onmetal.de/underlayRoute"
-	DpPciAddr                     = "networking.metalnet.onmetal.de/dpPciAddr"
-	PciDomain                     = "networking.metalnet.onmetal.de/domain"
-	PciSlot                       = "networking.metalnet.onmetal.de/slot"
-	PciBus                        = "networking.metalnet.onmetal.de/bus"
-	PciFunction                   = "networking.metalnet.onmetal.de/function"
-	DpRouteAlreadyAddedError      = 251
-	dpdkExitSuccess               = 0
-	dpdkInterfaceNotFound         = 450
-	dpdkRouteAlreadyExists        = 351
-	dpdkPrefixInterfaceNotFound   = 701
+	networkInterfaceFinalizer = "networking.metalnet.onmetal.de/networkInterface"
+
+	dpdkRouteAlreadyAddedError  = 251
+	dpdkExitSuccess             = 0
+	dpdkInterfaceNotFound       = 450
+	dpdkRouteAlreadyExists      = 351
+	dpdkPrefixInterfaceNotFound = 701
 )
 
 type NodeDevPCIInfo func(string, int) (map[string]string, error)
@@ -62,7 +57,7 @@ type NetworkInterfaceReconciler struct {
 	client.Client
 	Scheme          *runtime.Scheme
 	DPDKClient      dpdkproto.DPDKonmetalClient
-	HostName        string
+	NodeName        string
 	RouterAddress   string
 	PublicVNI       int
 	MbInstance      *mb.MetalBond
@@ -72,13 +67,14 @@ type NetworkInterfaceReconciler struct {
 //+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networkinterfaces,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networkinterfaces/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networkinterfaces/finalizers,verbs=update
+//+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networks,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
+	log := ctrl.LoggerFrom(ctx)
 
-	ni := &networkingv1alpha1.NetworkInterface{}
+	ni := &metalnetv1alpha1.NetworkInterface{}
 
 	if err := r.Get(ctx, req.NamespacedName, ni); err != nil {
 		if client.IgnoreNotFound(err) != nil {
@@ -87,11 +83,11 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if *ni.Spec.NodeName != r.HostName {
+	if *ni.Spec.NodeName != r.NodeName {
 		return ctrl.Result{}, nil
 	}
 
-	network := &networkingv1alpha1.Network{}
+	network := &metalnetv1alpha1.Network{}
 	networkKey := client.ObjectKey{
 		Namespace: req.NamespacedName.Namespace,
 		Name:      ni.Spec.NetworkRef.Name,
@@ -105,17 +101,17 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// delete flow
 	if !ni.DeletionTimestamp.IsZero() {
-		if ni.Spec.NodeName != nil && *ni.Spec.NodeName != r.HostName {
+		if ni.Spec.NodeName != nil && *ni.Spec.NodeName != r.NodeName {
 			return ctrl.Result{}, nil
 		}
 
 		log.Info("Delete flow")
 		clone := ni.DeepCopy()
 
-		if ni.Status.State == networkingv1alpha1.NetworkInterfaceStateReady {
+		if ni.Status.State == metalnetv1alpha1.NetworkInterfaceStateReady {
 			interfaceID := string(ni.UID)
 			if err := r.deleteInterfaceDPSKServerCall(ctx, interfaceID); err != nil {
-				ni.Status.State = networkingv1alpha1.NetworkInterfaceStateError
+				ni.Status.State = metalnetv1alpha1.NetworkInterfaceStateError
 				if err := r.Status().Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
 					return ctrl.Result{}, err
 				}
@@ -199,7 +195,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 		}
 
-		controllerutil.RemoveFinalizer(clone, NetworkInterfaceFinalizerName)
+		controllerutil.RemoveFinalizer(clone, networkInterfaceFinalizer)
 		if err := r.Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -207,18 +203,18 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	// Are we still synchron with dp-service and metalbond internal states ?
-	if ni.Status.State == networkingv1alpha1.NetworkInterfaceStateReady {
+	if ni.Status.State == metalnetv1alpha1.NetworkInterfaceStateReady {
 		interfaceID := string(ni.UID)
 		_, err := r.getInterfaceDPSKServerCall(ctx, interfaceID)
 		if err != nil {
 			clone := ni.DeepCopy()
-			clone.Status.State = networkingv1alpha1.NetworkInterfaceStateError
+			clone.Status.State = metalnetv1alpha1.NetworkInterfaceStateError
 			if err := r.Status().Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, nil
 		}
-		n := &networkingv1alpha1.Network{}
+		n := &metalnetv1alpha1.Network{}
 		key := types.NamespacedName{
 			Namespace: req.NamespacedName.Namespace,
 			Name:      ni.Spec.NetworkRef.Name,
@@ -369,7 +365,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 
 		if ni.Spec.Prefixes != nil && len(ni.Spec.Prefixes) > 0 {
-			var specDiffToStatus, resStatus []networkingv1alpha1.IPPrefix
+			var specDiffToStatus, resStatus []metalnetv1alpha1.IPPrefix
 
 			log.V(1).Info("Registering AliasPrefix(es)")
 			if ni.Status.Prefixes != nil {
@@ -443,11 +439,11 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
-	if ni.Status.State == networkingv1alpha1.NetworkInterfaceStatePending {
+	if ni.Status.State == metalnetv1alpha1.NetworkInterfaceStatePending {
 		return ctrl.Result{}, nil
 	}
 
-	n := &networkingv1alpha1.Network{}
+	n := &metalnetv1alpha1.Network{}
 	key := types.NamespacedName{
 		Namespace: req.NamespacedName.Namespace,
 		Name:      ni.Spec.NetworkRef.Name,
@@ -492,16 +488,15 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	clone := ni.DeepCopy()
 
-	clone.Status.State = networkingv1alpha1.NetworkInterfaceStatePending
-	clone.Status.UnderlayIP = networkingv1alpha1.MustParseNewIP(string(resp.Response.UnderlayRoute))
+	clone.Status.State = metalnetv1alpha1.NetworkInterfaceStatePending
+	clone.Status.UnderlayIP = metalnetv1alpha1.MustParseNewIP(string(resp.Response.UnderlayRoute))
 	detailPci, _ := r.DeviceAllocator.GetDeviceWithName(dpPci)
-	PCIDeviceDetails := &networkingv1alpha1.PCIDevice{
+	clone.Status.PCIDevice = &metalnetv1alpha1.PCIDevice{
 		Bus:      detailPci.pciBus,
 		Domain:   detailPci.pciDomain,
 		Slot:     detailPci.pciSlot,
 		Function: detailPci.pciFunc,
 	}
-	clone.Status.PCIDevice = PCIDeviceDetails
 	if err := r.Status().Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -526,10 +521,10 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	clone = ni.DeepCopy()
 
-	if clone.DeletionTimestamp.IsZero() && !controllerutil.ContainsFinalizer(clone, NetworkInterfaceFinalizerName) {
-		controllerutil.AddFinalizer(clone, NetworkInterfaceFinalizerName)
+	if clone.DeletionTimestamp.IsZero() && !controllerutil.ContainsFinalizer(clone, networkInterfaceFinalizer) {
+		controllerutil.AddFinalizer(clone, networkInterfaceFinalizer)
 	}
-	clone.Spec.NodeName = &r.HostName
+	clone.Spec.NodeName = &r.NodeName
 
 	if err := r.Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
 		log.Info("unable to update NetworkInterface", "NetworkInterface", req, "Error", err)
@@ -538,7 +533,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	ni = clone
 
 	clone = ni.DeepCopy()
-	clone.Status.State = networkingv1alpha1.NetworkInterfaceStateReady
+	clone.Status.State = metalnetv1alpha1.NetworkInterfaceStateReady
 
 	if err := r.Status().Patch(ctx, clone, client.MergeFrom(ni)); err != nil {
 		log.Info("unable to update NetworkInterface", "NetworkInterface", req, "Error", err)
@@ -548,7 +543,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	return ctrl.Result{}, nil
 }
 
-func (r *NetworkInterfaceReconciler) announceInterfacePublicVIPRoute(ctx context.Context, log logr.Logger, ni *networkingv1alpha1.NetworkInterface, publicVNI int, action int) error {
+func (r *NetworkInterfaceReconciler) announceInterfacePublicVIPRoute(ctx context.Context, log logr.Logger, ni *metalnetv1alpha1.NetworkInterface, publicVNI int, action int) error {
 	niVIP := ni.Spec.VirtualIP
 	if action == ROUTEREMOVE {
 		niVIP = ni.Status.VirtualIP
@@ -631,7 +626,7 @@ func (r *NetworkInterfaceReconciler) getInterfaceDPSKServerCall(ctx context.Cont
 	return resp, nil
 }
 
-func (r *NetworkInterfaceReconciler) addInterfaceDPSKServerCall(ctx context.Context, ni *networkingv1alpha1.NetworkInterface, nSpec networkingv1alpha1.NetworkSpec, pciAddr string) (string, *dpdkproto.CreateInterfaceResponse, error) {
+func (r *NetworkInterfaceReconciler) addInterfaceDPSKServerCall(ctx context.Context, ni *metalnetv1alpha1.NetworkInterface, nSpec metalnetv1alpha1.NetworkSpec, pciAddr string) (string, *dpdkproto.CreateInterfaceResponse, error) {
 	interfaceID := string(ni.UID)
 	ip := ni.Spec.IPs[0].String()
 	createInterfaceReq := &dpdkproto.CreateInterfaceRequest{
@@ -660,9 +655,9 @@ func (r *NetworkInterfaceReconciler) addInterfaceDPSKServerCall(ctx context.Cont
 	return interfaceID, resp, nil
 }
 
-func (r *NetworkInterfaceReconciler) isInterfaceLocalRouteAnnounced(ctx context.Context, ni *networkingv1alpha1.NetworkInterface, nSpec networkingv1alpha1.NetworkSpec) (bool, error) {
+func (r *NetworkInterfaceReconciler) isInterfaceLocalRouteAnnounced(ctx context.Context, ni *metalnetv1alpha1.NetworkInterface, nSpec metalnetv1alpha1.NetworkSpec) (bool, error) {
 	niSpec := ni.Spec
-	if niSpec.IPs == nil || ni.Status.State != networkingv1alpha1.NetworkInterfaceStateReady {
+	if niSpec.IPs == nil || ni.Status.State != metalnetv1alpha1.NetworkInterfaceStateReady {
 		return false, errors.New("parameter nil")
 	}
 	ip := niSpec.IPs[0].String() + "/32"
@@ -678,9 +673,9 @@ func (r *NetworkInterfaceReconciler) isInterfaceLocalRouteAnnounced(ctx context.
 	return false, nil
 }
 
-func (r *NetworkInterfaceReconciler) announceInterfaceLocalRoute(ctx context.Context, ni *networkingv1alpha1.NetworkInterface, nSpec networkingv1alpha1.NetworkSpec, action int) error {
+func (r *NetworkInterfaceReconciler) announceInterfaceLocalRoute(ctx context.Context, ni *metalnetv1alpha1.NetworkInterface, nSpec metalnetv1alpha1.NetworkSpec, action int) error {
 	niSpec := ni.Spec
-	if niSpec.IPs == nil || ni.Status.State != networkingv1alpha1.NetworkInterfaceStateReady {
+	if niSpec.IPs == nil || ni.Status.State != metalnetv1alpha1.NetworkInterfaceStateReady {
 		return nil
 	}
 
@@ -704,7 +699,7 @@ func (r *NetworkInterfaceReconciler) announceInterfaceLocalRoute(ctx context.Con
 	return nil
 }
 
-func (r *NetworkInterfaceReconciler) announcePrefix(ctx context.Context, log logr.Logger, pfx *networkingv1alpha1.IPPrefix, ulRoute string, nID int32, action int) error {
+func (r *NetworkInterfaceReconciler) announcePrefix(ctx context.Context, log logr.Logger, pfx *metalnetv1alpha1.IPPrefix, ulRoute string, nID int32, action int) error {
 	ip := pfx.String()
 	hop, dest, err := prepareMbParameters(ctx, ip, ulRoute)
 	if err != nil {
@@ -727,7 +722,6 @@ func (r *NetworkInterfaceReconciler) announcePrefix(ctx context.Context, log log
 }
 
 func (r *NetworkInterfaceReconciler) insertDefaultVNIPublicRoute(ctx context.Context, vni int32) error {
-
 	prefix := &dpdkproto.Prefix{
 		PrefixLength: uint32(0),
 	}
@@ -747,20 +741,20 @@ func (r *NetworkInterfaceReconciler) insertDefaultVNIPublicRoute(ctx context.Con
 	}
 
 	status, err := r.DPDKClient.AddRoute(ctx, req)
-	if err != nil || (status.Error != 0 && status.Error != DpRouteAlreadyAddedError) {
+	if err != nil || (status.Error != 0 && status.Error != dpdkRouteAlreadyAddedError) {
 		return fmt.Errorf("cannot add route to dpdk service: %v Status from DPDKClient: %d", err, status.Error)
 	}
 
 	return nil
 }
 
-func (r *NetworkInterfaceReconciler) prefixCompare(first, second []networkingv1alpha1.IPPrefix) []networkingv1alpha1.IPPrefix {
-	var ret []networkingv1alpha1.IPPrefix
+func (r *NetworkInterfaceReconciler) prefixCompare(first, second []metalnetv1alpha1.IPPrefix) []metalnetv1alpha1.IPPrefix {
+	var ret []metalnetv1alpha1.IPPrefix
 	exists := false
 
 	for _, x := range first {
 		for _, y := range second {
-			if v1alpha1.EqualIPPrefixes(x, y) {
+			if metalnetv1alpha1.EqualIPPrefixes(x, y) {
 				exists = true
 			}
 		}
@@ -774,9 +768,9 @@ func (r *NetworkInterfaceReconciler) prefixCompare(first, second []networkingv1a
 	return ret
 }
 
-func (r *NetworkInterfaceReconciler) prefixRemoveFromList(source []networkingv1alpha1.IPPrefix, pfx *networkingv1alpha1.IPPrefix) []networkingv1alpha1.IPPrefix {
+func (r *NetworkInterfaceReconciler) prefixRemoveFromList(source []metalnetv1alpha1.IPPrefix, pfx *metalnetv1alpha1.IPPrefix) []metalnetv1alpha1.IPPrefix {
 	for idx, x := range source {
-		if v1alpha1.EqualIPPrefixes(x, *pfx) {
+		if metalnetv1alpha1.EqualIPPrefixes(x, *pfx) {
 			source[idx] = source[len(source)-1]
 			return source[:len(source)-1]
 		}
@@ -784,7 +778,7 @@ func (r *NetworkInterfaceReconciler) prefixRemoveFromList(source []networkingv1a
 	return nil
 }
 
-func (r *NetworkInterfaceReconciler) prefixDeletionNeeded(ctx context.Context, log logr.Logger, ni *networkingv1alpha1.NetworkInterface) bool {
+func (r *NetworkInterfaceReconciler) prefixDeletionNeeded(ctx context.Context, log logr.Logger, ni *metalnetv1alpha1.NetworkInterface) bool {
 	specPrefixes := ni.Spec.Prefixes
 	statusPrefixes := ni.Status.Prefixes
 
@@ -798,10 +792,10 @@ func (r *NetworkInterfaceReconciler) prefixDeletionNeeded(ctx context.Context, l
 
 	resPrefixes := r.prefixCompare(statusPrefixes, specPrefixes)
 
-	return (len(resPrefixes) > 0)
+	return len(resPrefixes) > 0
 }
 
-func (r *NetworkInterfaceReconciler) getDPDKPrefixList(ctx context.Context, log logr.Logger, ni *networkingv1alpha1.NetworkInterface) (*dpdkproto.PrefixesMsg, error) {
+func (r *NetworkInterfaceReconciler) getDPDKPrefixList(ctx context.Context, log logr.Logger, ni *metalnetv1alpha1.NetworkInterface) (*dpdkproto.PrefixesMsg, error) {
 	machineID := &dpdkproto.InterfaceIDMsg{
 		InterfaceID: []byte(ni.UID),
 	}
@@ -813,8 +807,7 @@ func (r *NetworkInterfaceReconciler) getDPDKPrefixList(ctx context.Context, log 
 	return prefixMsg, nil
 }
 
-func (r *NetworkInterfaceReconciler) prefixExists(ctx context.Context, log logr.Logger, niSpecPrefix *networkingv1alpha1.IPPrefix, prefixMsg *dpdkproto.PrefixesMsg) bool {
-
+func (r *NetworkInterfaceReconciler) prefixExists(ctx context.Context, log logr.Logger, niSpecPrefix *metalnetv1alpha1.IPPrefix, prefixMsg *dpdkproto.PrefixesMsg) bool {
 	if len(prefixMsg.Prefixes) == 0 {
 		return false
 	}
@@ -830,9 +823,9 @@ func (r *NetworkInterfaceReconciler) prefixExists(ctx context.Context, log logr.
 	isPresent := true
 	for _, p := range prefixMsg.Prefixes {
 		isPresent = true
-		isPresent = (isPresent && (p.IpVersion == prefix.IpVersion))
-		isPresent = (isPresent && (string(p.Address) == string(prefix.Address)))
-		isPresent = (isPresent && (p.PrefixLength == prefix.PrefixLength))
+		isPresent = isPresent && (p.IpVersion == prefix.IpVersion)
+		isPresent = isPresent && (string(p.Address) == string(prefix.Address))
+		isPresent = isPresent && (p.PrefixLength == prefix.PrefixLength)
 		if isPresent {
 			break
 		}
@@ -840,7 +833,7 @@ func (r *NetworkInterfaceReconciler) prefixExists(ctx context.Context, log logr.
 	return isPresent
 }
 
-func (r *NetworkInterfaceReconciler) isPrefixAnnounced(ctx context.Context, log logr.Logger, pfx *networkingv1alpha1.IPPrefix, ni *networkingv1alpha1.NetworkInterface, nID int32) (bool, error) {
+func (r *NetworkInterfaceReconciler) isPrefixAnnounced(ctx context.Context, log logr.Logger, pfx *metalnetv1alpha1.IPPrefix, ni *metalnetv1alpha1.NetworkInterface, nID int32) (bool, error) {
 	ip := pfx.String()
 	hop, dest, err := prepareMbParameters(ctx, ip, ni.Status.UnderlayIP.String())
 	if err != nil {
@@ -855,9 +848,36 @@ func (r *NetworkInterfaceReconciler) isPrefixAnnounced(ctx context.Context, log 
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *NetworkInterfaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	log := ctrl.Log.WithName("networkinterface").WithName("setup")
+	ctx := ctrl.LoggerInto(context.TODO(), log)
+
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&networkingv1alpha1.NetworkInterface{}).
+		For(&metalnetv1alpha1.NetworkInterface{}).
+		Watches(
+			&source.Kind{Type: &metalnetv1alpha1.Network{}},
+			r.enqueueNetworkInterfacesReferencingNetwork(ctx, log),
+		).
 		Complete(r)
+}
+
+func (r *NetworkInterfaceReconciler) enqueueNetworkInterfacesReferencingNetwork(ctx context.Context, log logr.Logger) handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(func(obj client.Object) []ctrl.Request {
+		network := obj.(*metalnetv1alpha1.Network)
+		nicList := &metalnetv1alpha1.NetworkInterfaceList{}
+		if err := r.List(ctx, nicList,
+			client.InNamespace(network.Namespace),
+			client.MatchingFields{metalnetclient.NetworkInterfaceNetworkRefNameField: network.Name},
+		); err != nil {
+			log.Error(err, "Error listing network interfaces referencing network", "NetworkKey", client.ObjectKeyFromObject(network))
+			return nil
+		}
+
+		reqs := make([]ctrl.Request, len(nicList.Items))
+		for i, nic := range nicList.Items {
+			reqs[i] = ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&nic)}
+		}
+		return reqs
+	})
 }
 
 func RandomIpV6Address() string {

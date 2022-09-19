@@ -40,6 +40,10 @@ help: ## Display this help.
 
 ##@ Development
 
+.PHONY: manifests
+manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
+	$(CONTROLLER_GEN) rbac:roleName=manager-role paths="./..." output:rbac:artifacts:config=config/rbac
+
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
@@ -61,11 +65,11 @@ lint: ## Run golangci-lint against code.
 	golangci-lint run ./...
 
 .PHONY: check
-check: generate addlicense lint test
+check: manifests generate addlicense lint test
 
 ENVTEST_ASSETS_DIR=$(shell pwd)/testbin
 .PHONY: test
-test: envtest generate fmt checklicense ## Run tests.
+test: envtest manifests generate fmt checklicense ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
 
 .PHONY: check
@@ -74,7 +78,7 @@ check: generate fmt addlicense lint test ## Lint and run tests.
 ##@ Build
 
 .PHONY: build
-build: generate fmt addlicense lint ## Build the binary
+build: manifests generate fmt addlicense lint ## Build the binary
 	go build -o bin/virtlet ./main.go
 
 .PHONY: run

@@ -269,8 +269,8 @@ func (r *NetworkInterfaceReconciler) deleteDPDKInterfaceIfExists(ctx context.Con
 }
 
 func (r *NetworkInterfaceReconciler) reconcileVirtualIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, underlayRoute netip.Addr) error {
-	if nic.Status.VirtualIP != nil {
-		virtualIP := nic.Status.VirtualIP.Addr
+	if nic.Spec.VirtualIP != nil {
+		virtualIP := nic.Spec.VirtualIP.Addr
 		log = log.WithValues("VirtualIP", virtualIP)
 		log.V(1).Info("Apply virtual ip")
 		return r.applyVirtualIP(ctx, log, nic, virtualIP, underlayRoute)

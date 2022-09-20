@@ -256,6 +256,7 @@ func (c *client) GetVirtualIP(ctx context.Context, interfaceUID types.UID) (*Vir
 
 func (c *client) CreateVirtualIP(ctx context.Context, virtualIP *VirtualIP) (*VirtualIP, error) {
 	res, err := c.DPDKonmetalClient.AddInterfaceVIP(ctx, &dpdkproto.InterfaceVIPMsg{
+		InterfaceID: []byte(virtualIP.InterfaceUID),
 		InterfaceVIPIP: &dpdkproto.InterfaceVIPIP{
 			IpVersion: netipAddrToDPDKIPVersion(virtualIP.Spec.Address),
 			Address:   []byte(virtualIP.Spec.Address.String()),

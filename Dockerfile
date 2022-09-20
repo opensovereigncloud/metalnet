@@ -28,6 +28,12 @@ COPY main.go main.go
 COPY api/ api/
 COPY client/ client/
 COPY controllers/ controllers/
+COPY dpdk/ dpdk/
+COPY dpdkmetalbond/ dpdkmetalbond/
+COPY encoding/ encoding/
+COPY metalbond/ metalbond/
+COPY netfns/ netfns/
+COPY sysfs/ sysfs/
 
 ARG TARGETOS TARGETARCH
 

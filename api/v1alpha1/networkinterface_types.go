@@ -35,22 +35,13 @@ type NetworkInterfaceSpec struct {
 	VirtualIP *IP `json:"virtualIP,omitempty"`
 	// Prefixes are the provided Prefix
 	Prefixes []IPPrefix `json:"prefixes,omitempty"`
-	// NodeName is the name of the host machine on which the Interface should be created.
+	// NodeName is the name of the node on which the interface should be created.
 	NodeName *string `json:"nodeName,omitempty"`
-}
-
-// NetworkFunctionSource is the definition of how to obtain a network function.
-type NetworkFunctionSource struct {
-	// NetworkFunctionRef references a NetworkFunction to use.
-	NetworkFunctionRef *corev1.LocalObjectReference `json:"networkFuncionRef,omitempty"`
 }
 
 // NetworkInterfaceStatus defines the observed state of NetworkInterface
 type NetworkInterfaceStatus struct {
-	PCIDevice *PCIDevice `json:"pciDevice,omitempty"`
-
-	// Underlay IP of this interface
-	UnderlayIP *IP `json:"underlayIP,omitempty"`
+	PCIAddress *PCIAddress `json:"pciAddress,omitempty"`
 
 	// VirtualIP is any virtual ip assigned to the NetworkInterface.
 	VirtualIP *IP `json:"virtualIP,omitempty"`
@@ -59,15 +50,15 @@ type NetworkInterfaceStatus struct {
 	Prefixes []IPPrefix `json:"prefixes,omitempty"`
 
 	// State is the NetworkInterfaceState of the NetworkInterface.
-	State NetworkInterfaceState `json:"state,omitempty"` // READY, INPROGRESS, ERROR
+	State NetworkInterfaceState `json:"state,omitempty"`
 }
 
-// The details of the pci Device where interface is bound
-type PCIDevice struct {
-	Bus      string `json:"bus,omitempty"`
+// PCIAddress is a PCI address.
+type PCIAddress struct {
 	Domain   string `json:"domain,omitempty"`
-	Function string `json:"function,omitempty"`
+	Bus      string `json:"bus,omitempty"`
 	Slot     string `json:"slot,omitempty"`
+	Function string `json:"function,omitempty"`
 }
 
 // NetworkInterfaceState is the binding state of a NetworkInterface.
@@ -76,8 +67,8 @@ type NetworkInterfaceState string
 const (
 	// NetworkInterfaceStateReady is used for any NetworkInterface that is ready.
 	NetworkInterfaceStateReady NetworkInterfaceState = "Ready"
-	// NetworkInterfaceStateError is used for any NetworkInterface that is in intermediate state.
-	NetworkInterfaceStatePending NetworkInterfaceState = "InProgress"
+	// NetworkInterfaceStatePending is used for any NetworkInterface that is in an intermediate state.
+	NetworkInterfaceStatePending NetworkInterfaceState = "Pending"
 	// NetworkInterfaceStateError is used for any NetworkInterface that is some error occurred.
 	NetworkInterfaceStateError NetworkInterfaceState = "Error"
 )
@@ -85,8 +76,8 @@ const (
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=ni
-// +kubebuilder:printcolumn:name="Status",type=string,description="Current status of the network interface.",JSONPath=`.status.phase`,priority=0
-// +kubebuilder:printcolumn:name="Host",type=string,description="Current baremetal host of the Network Interface.",JSONPath=`.spec.nodeName`,priority=0
+// +kubebuilder:printcolumn:name="Status",type=string,description="Status of the network interface.",JSONPath=`.status.state`,priority=0
+// +kubebuilder:printcolumn:name="NodeName",type=string,description="Node the network interface is running on.",JSONPath=`.spec.nodeName`,priority=0
 
 // NetworkInterface is the Schema for the networkinterfaces API
 type NetworkInterface struct {

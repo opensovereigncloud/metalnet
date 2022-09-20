@@ -19,10 +19,13 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"net/netip"
 
 	"github.com/go-logr/logr"
 	"github.com/onmetal/controller-utils/clientutils"
 	metalnetv1alpha1 "github.com/onmetal/metalnet/api/v1alpha1"
+	"github.com/onmetal/metalnet/dpdk"
+	"github.com/onmetal/metalnet/metalbond"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,13 +35,17 @@ import (
 
 const (
 	networkFinalizer = "networking.metalnet.onmetal.de/network"
-	networkRefField  = ".spec.networkRef.name"
 )
 
-// NetworkReconciler reconciles a Network object
+// NetworkReconciler reconciles metalnetv1alpha1.Network.
 type NetworkReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	DPDK      dpdk.Client
+	Metalbond metalbond.Client
+
+	RouterAddress netip.Addr
 }
 
 //+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networks,verbs=get;list;watch;create;update;patch;delete
@@ -58,6 +65,7 @@ func (r *NetworkReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 }
 
 func (r *NetworkReconciler) reconcileExists(ctx context.Context, log logr.Logger, network *metalnetv1alpha1.Network) (ctrl.Result, error) {
+	log = log.WithValues("VNI", network.Spec.ID)
 	if !network.DeletionTimestamp.IsZero() {
 		return r.delete(ctx, log, network)
 	}
@@ -73,7 +81,20 @@ func (r *NetworkReconciler) delete(ctx context.Context, log logr.Logger, network
 	}
 
 	log.V(1).Info("Finalizer present, doing cleanup")
-	// TODO: Add required cleanup steps
+
+	vni := uint32(network.Spec.ID)
+
+	log.V(1).Info("Unsubscribing from metalbond if not subscribed")
+	if err := r.unsubscribeIfSubscribed(ctx, vni); err != nil {
+		return ctrl.Result{}, err
+	}
+	log.V(1).Info("Unsubscribed from metalbond if subscribed")
+
+	log.V(1).Info("Deleting default route if exists")
+	if err := r.deleteDefaultRouteIfExists(ctx, vni); err != nil {
+		return ctrl.Result{}, err
+	}
+	log.V(1).Info("Deleted default route if existed")
 
 	log.V(1).Info("Cleanup done, removing finalizer")
 	if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, network, networkFinalizer); err != nil {
@@ -96,20 +117,77 @@ func (r *NetworkReconciler) reconcile(ctx context.Context, log logr.Logger, netw
 		log.V(1).Info("Added finalizer, requeueing")
 		return ctrl.Result{Requeue: true}, nil
 	}
+	log.V(1).Info("Ensured finalizer")
 
-	log.V(1).Info("Finalizer is present")
+	vni := uint32(network.Spec.ID)
+
+	log.V(1).Info("Creating dpdk default route if not exists")
+	if err := r.createDefaultRouteIfNotExists(ctx, vni); err != nil {
+		return ctrl.Result{}, err
+	}
+	log.V(1).Info("Created dpdk default route if not existed")
+
+	log.V(1).Info("Subscribing to metalbond if not subscribed")
+	if err := r.subscribeIfNotSubscribed(ctx, vni); err != nil {
+		return ctrl.Result{}, err
+	}
+	log.V(1).Info("Subscribed to metalbond if not subscribed")
+
 	return ctrl.Result{}, nil
+}
+
+func (r *NetworkReconciler) createDefaultRouteIfNotExists(ctx context.Context, vni uint32) error {
+	if _, err := r.DPDK.CreateRoute(ctx, &dpdk.Route{
+		RouteMetadata: dpdk.RouteMetadata{
+			VNI: vni,
+		},
+		Spec: dpdk.RouteSpec{
+			Prefix: netip.MustParsePrefix("0.0.0.0/0"),
+			NextHop: dpdk.RouteNextHop{
+				VNI:     vni,
+				Address: r.RouterAddress,
+			},
+		},
+	}); dpdk.IgnoreStatusErrorCode(err, dpdk.ADD_RT_FAIL4) != nil {
+		return fmt.Errorf("error creating route: %w", err)
+	}
+	return nil
+}
+
+func (r *NetworkReconciler) deleteDefaultRouteIfExists(ctx context.Context, vni uint32) error {
+	if _, err := r.DPDK.CreateRoute(ctx, &dpdk.Route{
+		RouteMetadata: dpdk.RouteMetadata{
+			VNI: vni,
+		},
+		Spec: dpdk.RouteSpec{
+			Prefix: netip.MustParsePrefix("0.0.0.0/0"),
+			NextHop: dpdk.RouteNextHop{
+				VNI:     vni,
+				Address: r.RouterAddress,
+			},
+		},
+	}); dpdk.IgnoreStatusErrorCode(err, dpdk.DEL_RT) != nil {
+		return fmt.Errorf("error deleting route: %w", err)
+	}
+	return nil
+}
+
+func (r *NetworkReconciler) subscribeIfNotSubscribed(ctx context.Context, vni uint32) error {
+	if err := r.Metalbond.Subscribe(ctx, metalbond.VNI(vni)); metalbond.IgnoreAlreadySubscribedToVNIError(err) != nil {
+		return fmt.Errorf("error subscribing to vni: %w", err)
+	}
+	return nil
+}
+
+func (r *NetworkReconciler) unsubscribeIfSubscribed(ctx context.Context, vni uint32) error {
+	if err := r.Metalbond.Unsubscribe(ctx, metalbond.VNI(vni)); metalbond.IgnoreNotSubscribedToVNIError(err) != nil {
+		return fmt.Errorf("error subscribing to vni: %w", err)
+	}
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *NetworkReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &metalnetv1alpha1.NetworkInterface{}, networkRefField, func(rawObj client.Object) []string {
-		ni := rawObj.(*metalnetv1alpha1.NetworkInterface)
-		return []string{ni.Spec.NetworkRef.Name}
-	}); err != nil {
-		return err
-	}
-
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&metalnetv1alpha1.Network{}).
 		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).

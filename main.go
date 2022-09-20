@@ -18,16 +18,25 @@ package main
 
 import (
 	"context"
-	"errors"
-	"flag"
+	goflag "flag"
 	"fmt"
+	"net"
 	"net/http"
+	"net/netip"
 	"os"
+	"path/filepath"
 	"time"
+
+	flag "github.com/spf13/pflag"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 
+	"github.com/onmetal/metalnet/dpdk"
+	"github.com/onmetal/metalnet/dpdkmetalbond"
+	"github.com/onmetal/metalnet/metalbond"
+	"github.com/onmetal/metalnet/netfns"
+	"github.com/onmetal/metalnet/sysfs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -65,31 +74,39 @@ func main() {
 	var probeAddr string
 	var nodeName string
 	var dpserviceAddr string
-	var metalbondServerAddr string
-	var metalbondServerPort string
+	var metalbondPeers []string
+	var routerAddress net.IP
 	var publicVNI int
-	var dpUUID string
+	var metalnetDir string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.StringVar(&nodeName, "node-name", hostName, "The node name to react to when reconciling network interfaces.")
-	flag.StringVar(&dpserviceAddr, "dpservice-address", "127.0.0.1:1337", "The address of net-dpservice.")
-	flag.StringVar(&metalbondServerAddr, "metalbondserver-address", "", "The address of metal bond address server.")
-	flag.StringVar(&metalbondServerPort, "metalbondserver-port", "4711", "The port of metal bond server.")
+	flag.StringVar(&dpserviceAddr, "dp-service-address", "127.0.0.1:1337", "The address of net-dpservice.")
+	flag.StringSliceVar(&metalbondPeers, "metalbond-peer", nil, "The addresses of the metalbond peers.")
+	flag.IPVar(&routerAddress, "router-address", net.IP{}, "The address of the next router.")
 	flag.IntVar(&publicVNI, "public-vni", 100, "Virtual network identifier used for public routing announcements.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	flag.StringVar(&metalnetDir, "metalnet-dir", "/var/lib/metalnet", "Directory to store metalnet data at.")
 	opts := zap.Options{
 		Development: true,
 	}
-	opts.BindFlags(flag.CommandLine)
+	opts.BindFlags(goflag.CommandLine)
+	flag.CommandLine.AddGoFlagSet(goflag.CommandLine)
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	if metalbondServerAddr == "" {
-		setupLog.Error(fmt.Errorf("must specify --metalbondserver-address"), "Invalid command line flags")
+	if routerAddress.Equal(net.IP{}) {
+		setupLog.Error(fmt.Errorf("must specify --router-address"), "invalid flags")
+		os.Exit(1)
+	}
+
+	sysFS, err := sysfs.NewDefaultFS()
+	if err != nil {
+		setupLog.Error(err, "error creating sysfs")
 		os.Exit(1)
 	}
 
@@ -106,85 +123,97 @@ func main() {
 		os.Exit(1)
 	}
 
-	// setup net-dpservice client
-	var dpdkClient dpdkproto.DPDKonmetalClient
-	if dpserviceAddr != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-		defer cancel()
-
-		conn, err := grpc.DialContext(ctx, dpserviceAddr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-		defer func() {
-			if err := conn.Close(); err != nil {
-				setupLog.Error(err, "unable to close dpdk connection")
-			}
-		}()
-
-		if err != nil {
-			setupLog.Error(err, "unable create dpdk client")
-			os.Exit(1)
-		}
-		dpdkClient = dpdkproto.NewDPDKonmetalClient(conn)
+	claimStore, err := netfns.NewFileClaimStore(filepath.Join(metalnetDir, "netfns", "claims"))
+	if err != nil {
+		setupLog.Error(err, "unable to create claim store")
+		os.Exit(1)
 	}
 
-	var metalbondClient mb.Client
+	initAvailable, err := netfns.CollectVirtualFunctions(sysFS)
+	if err != nil {
+		setupLog.Error(err, "unable to collect virtual functions")
+		os.Exit(1)
+	}
+
+	netFnsManager, err := netfns.NewManager(claimStore, initAvailable)
+	if err != nil {
+		setupLog.Error(err, "unable to create netfns manager")
+		os.Exit(1)
+	}
+
+	// setup net-dpservice client
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	conn, err := grpc.DialContext(ctx, dpserviceAddr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	if err != nil {
+		setupLog.Error(err, "unable create dpdk client")
+		os.Exit(1)
+	}
+	defer func() {
+		if err := conn.Close(); err != nil {
+			setupLog.Error(err, "unable to close dpdk connection")
+		}
+	}()
+
+	dpdkProtoClient := dpdkproto.NewDPDKonmetalClient(conn)
+	dpdkClient := dpdk.NewClient(dpdkProtoClient)
+
+	var mbClient mb.Client
 	config := mb.Config{
 		KeepaliveInterval: 3,
 	}
 
-	metalbondClient, err = controllers.NewMetalbondClient(controllers.MetalbondClientConfig{
-		IPv4Only:          true,
-		DPDKonmetalClient: dpdkClient,
+	mbClient, err = dpdkmetalbond.NewClient(dpdkClient, dpdkmetalbond.ClientOptions{
+		IPv4Only: true,
 	})
 	if err != nil {
-		setupLog.Error(err, "failed to initiliaze metalbond client")
-		os.Exit(1)
-	}
-	mbInstance := mb.NewMetalBond(config, metalbondClient)
-
-	// for now, only one metalbond server is used
-	if err := mbInstance.AddPeer(fmt.Sprintf("[%s]:%s", metalbondServerAddr, metalbondServerPort)); err != nil {
-		setupLog.Error(err, "failed to add/connect metalbond server")
+		setupLog.Error(err, "unable to initialize metalbond client")
 		os.Exit(1)
 	}
 
-	nfDeviceBase, err := controllers.NewNFDeviceBase()
-	if err != nil {
-		setupLog.Error(err, "unable to start manager, Devicebase init failure")
-		os.Exit(1)
+	mbInstance := mb.NewMetalBond(config, mbClient)
+	metalbondClient := metalbond.NewClient(mbInstance)
+
+	for _, metalbondPeer := range metalbondPeers {
+		if err := mbInstance.AddPeer(metalbondPeer); err != nil {
+			setupLog.Error(err, "failed to add metalbond peer", "MetalbondPeer", metalbondPeer)
+			os.Exit(1)
+		}
 	}
 
-	initConf := dpdkproto.InitConfig{}
-	_, err = dpdkClient.Init(context.Background(), &initConf)
-
+	_, err = dpdkProtoClient.Init(context.Background(), &dpdkproto.InitConfig{})
 	if err != nil {
 		setupLog.Error(err, "dp-service can not be initialized")
 		os.Exit(1)
 	}
 
-	em := dpdkproto.Empty{}
-	uuid, err := dpdkClient.Initialized(context.Background(), &em)
+	dpdkUUID, err := dpdkProtoClient.Initialized(context.Background(), &dpdkproto.Empty{})
 	if err != nil {
 		setupLog.Error(err, "dp-service down")
 		os.Exit(1)
 	}
-	dpUUID = (*uuid).Uuid
 
 	if err = (&controllers.NetworkReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:        mgr.GetClient(),
+		Scheme:        mgr.GetScheme(),
+		DPDK:          dpdkClient,
+		Metalbond:     metalbondClient,
+		RouterAddress: netip.MustParseAddr(routerAddress.String()),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Network")
 		os.Exit(1)
 	}
 	if err = (&controllers.NetworkInterfaceReconciler{
-		Client:          mgr.GetClient(),
-		Scheme:          mgr.GetScheme(),
-		DPDKClient:      dpdkClient,
-		NodeName:        nodeName,
-		PublicVNI:       publicVNI,
-		MbInstance:      mbInstance,
-		RouterAddress:   metalbondServerAddr,
-		DeviceAllocator: nfDeviceBase,
+		Client:        mgr.GetClient(),
+		EventRecorder: mgr.GetEventRecorderFor("networkinterface"),
+		Scheme:        mgr.GetScheme(),
+		DPDK:          dpdk.NewClient(dpdkProtoClient),
+		Metalbond:     metalbond.NewClient(mbInstance),
+		NetFnsManager: netFnsManager,
+		SysFS:         sysFS,
+		NodeName:      nodeName,
+		PublicVNI:     publicVNI,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkInterface")
 		os.Exit(1)
@@ -193,12 +222,12 @@ func main() {
 	//+kubebuilder:scaffold:builder
 
 	var dpChecker healthz.Checker = func(_ *http.Request) error {
-		uuid, err := dpdkClient.Initialized(context.Background(), &em)
+		uuid, err := dpdkProtoClient.Initialized(context.Background(), &dpdkproto.Empty{})
 		if err != nil {
-			return errors.New("dp-service down")
+			return fmt.Errorf("dp-service down: %w", err)
 		}
-		if dpUUID != (*uuid).Uuid {
-			return errors.New("dp-service restart detected")
+		if expectedUUID, actualUUID := dpdkUUID.GetUuid(), uuid.GetUuid(); expectedUUID != actualUUID {
+			return fmt.Errorf("dp-service restart detected - %s | %s", expectedUUID, actualUUID)
 		}
 		return nil
 	}

@@ -18,13 +18,13 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: Current status of the network interface.
-      jsonPath: .status.phase
+    - description: Status of the network interface.
+      jsonPath: .status.state
       name: Status
       type: string
-    - description: Current baremetal host of the Network Interface.
+    - description: Node the network interface is running on.
       jsonPath: .spec.nodeName
-      name: Host
+      name: NodeName
       type: string
     name: v1alpha1
     schema:
@@ -72,8 +72,8 @@ spec:
                     type: string
                 type: object
               nodeName:
-                description: NodeName is the name of the host machine on which the
-                  Interface should be created.
+                description: NodeName is the name of the node on which the interface
+                  should be created.
                 type: string
               prefixes:
                 description: Prefixes are the provided Prefix
@@ -90,21 +90,18 @@ spec:
           status:
             description: Status defines the observed state of NetworkInterface.
             properties:
-              pcibus:
-                description: PCI Address details of this interface, Bus
-                type: string
-              pcidomain:
-                description: PCI Address details of this interface, Domain
-                type: string
-              pcidpaddr:
-                description: DPDK PCI Address details of this interface
-                type: string
-              pcifunction:
-                description: PCI Address details of this interface, Function
-                type: string
-              pcislot:
-                description: PCI Address details of this interface, Slot
-                type: string
+              pciAddress:
+                description: PCIAddress is a PCI address.
+                properties:
+                  bus:
+                    type: string
+                  domain:
+                    type: string
+                  function:
+                    type: string
+                  slot:
+                    type: string
+                type: object
               prefixes:
                 description: Prefixes are the Prefixes reserved for this NetworkInterface
                 items:
@@ -112,12 +109,6 @@ spec:
                 type: array
               state:
                 description: State is the NetworkInterfaceState of the NetworkInterface.
-                type: string
-              uid:
-                description: UID is the UID of NetworkInterface
-                type: string
-              underlayIP:
-                description: Underlay IP of this interface
                 type: string
               virtualIP:
                 description: VirtualIP is any virtual ip assigned to the NetworkInterface.

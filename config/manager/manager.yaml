@@ -57,6 +57,8 @@ spec:
           name: sysfs
         - mountPath: /usr/share/misc/
           name: pciids
+        - mountPath: /var/lib/metalnet
+          name: metalnet
       volumes:
       - hostPath:
           path: /sys
@@ -66,6 +68,10 @@ spec:
           path: /usr/share/misc/
           type: ""
         name: pciids
+      - hostPath:
+          path: /var/lib/metalnet
+          type: DirectoryOrCreate
+        name: metalnet
       hostNetwork: true
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10

@@ -284,7 +284,7 @@ func (r *NetworkInterfaceReconciler) applyVirtualIP(ctx context.Context, log log
 	log.V(1).Info("Getting dpdk virtual ip")
 	dpdkVIP, err := r.DPDK.GetVirtualIP(ctx, nic.UID)
 	if err != nil {
-		if !dpdk.IsStatusErrorCode(err, dpdk.GET_NAT) {
+		if !dpdk.IsStatusErrorCode(err, dpdk.GET_NAT, dpdk.GET_NAT_NO_IP_SET) {
 			return fmt.Errorf("error getting dpdk virtual ip: %w", err)
 		}
 
@@ -337,7 +337,7 @@ func (r *NetworkInterfaceReconciler) deleteVirtualIP(ctx context.Context, log lo
 	log.V(1).Info("Getting dpdk virtual ip if exists")
 	dpdkVIP, err := r.DPDK.GetVirtualIP(ctx, nic.UID)
 	if err != nil {
-		if !dpdk.IsStatusErrorCode(err, dpdk.GET_NAT) {
+		if !dpdk.IsStatusErrorCode(err, dpdk.GET_NAT, dpdk.GET_NAT_NO_IP_SET) {
 			return fmt.Errorf("error getting dpdk virtual ip: %w", err)
 		}
 

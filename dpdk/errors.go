@@ -84,13 +84,18 @@ func (s *StatusError) Error() string {
 	return fmt.Sprintf("error code %d", s.errorCode)
 }
 
-func IsStatusErrorCode(err error, errorCode int32) bool {
+func IsStatusErrorCode(err error, errorCodes ...int32) bool {
 	statusError := &StatusError{}
 	if !errors.As(err, &statusError) {
 		return false
 	}
 
-	return statusError.ErrorCode() == errorCode
+	for _, errorCode := range errorCodes {
+		if statusError.ErrorCode() == errorCode {
+			return true
+		}
+	}
+	return false
 }
 
 func IgnoreStatusErrorCode(err error, errorCode int32) error {

@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"time"
 
+	metalnetclient "github.com/onmetal/metalnet/client"
 	flag "github.com/spf13/pflag"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -191,6 +192,11 @@ func main() {
 	dpdkUUID, err := dpdkProtoClient.Initialized(context.Background(), &dpdkproto.Empty{})
 	if err != nil {
 		setupLog.Error(err, "dp-service down")
+		os.Exit(1)
+	}
+
+	if err := metalnetclient.SetupNetworkInterfaceNetworkRefNameFieldIndexer(context.TODO(), mgr.GetFieldIndexer()); err != nil {
+		setupLog.Error(err, "unable to set up field indexer", "Field", metalnetclient.NetworkInterfaceNetworkRefNameField)
 		os.Exit(1)
 	}
 

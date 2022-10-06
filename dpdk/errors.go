@@ -37,6 +37,7 @@ const (
 	ADD_RT              = 250
 	ADD_RT_FAIL4        = 251
 	ADD_RT_FAIL6        = 252
+	ADD_RT_NO_VNI       = 253
 	DEL_RT              = 300
 	ADD_NAT             = 350
 	ADD_NAT_IP_EXISTS   = 351

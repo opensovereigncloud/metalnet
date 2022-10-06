@@ -472,11 +472,13 @@ func (r *NetworkInterfaceReconciler) reconcilePrefixes(ctx context.Context, log 
 
 	dpdkPrefixes := set.New[netip.Prefix]()
 	for _, dpdkPrefix := range list.Items {
+		log.V(1).Info("Listing alias prefixes in loop")
 		dpdkPrefixes.Insert(dpdkPrefix.Spec.Prefix)
 	}
 
 	specPrefixes := set.New[netip.Prefix]()
 	for _, specPrefix := range nic.Spec.Prefixes {
+		log.V(1).Info("Listing alias prefixes in loop 2")
 		specPrefixes.Insert(specPrefix.Prefix)
 	}
 
@@ -486,6 +488,12 @@ func (r *NetworkInterfaceReconciler) reconcilePrefixes(ctx context.Context, log 
 		return allPrefixes[i].String() < allPrefixes[j].String()
 	})
 
+	if dpdkPrefixes.Len() < specPrefixes.Len() {
+		allPrefixes = specPrefixes.Slice()
+		sort.Slice(allPrefixes, func(i, j int) bool {
+			return allPrefixes[i].String() < allPrefixes[j].String()
+		})
+	}
 	var errs []error
 	for _, prefix := range allPrefixes {
 		if err := func() error {

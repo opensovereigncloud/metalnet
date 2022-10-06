@@ -93,6 +93,14 @@ docker-build: test ## Build docker image with partitionlet.
 docker-push: ## Push docker image with the manager.
 	docker push ${IMG}
 
+.PHONY: install
+install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
+	$(KUSTOMIZE) build config/crd | kubectl apply -f -
+
+.PHONY: uninstall
+uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
+	$(KUSTOMIZE) build config/crd | kubectl delete --ignore-not-found=false -f -
+
 ##@ Deployment
 
 .PHONY: deploy

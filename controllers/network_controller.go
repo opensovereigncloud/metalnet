@@ -20,8 +20,6 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
-	"strconv"
-	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/onmetal/controller-utils/clientutils"
@@ -125,7 +123,7 @@ func (r *NetworkReconciler) reconcile(ctx context.Context, log logr.Logger, netw
 
 	log.V(1).Info("Creating dpdk default route if not exists")
 	if err := r.createDefaultRouteIfNotExists(ctx, vni); err != nil {
-		if strings.Contains(err.Error(), strconv.Itoa(dpdk.ADD_RT_NO_VNI)) {
+		if dpdk.IsStatusErrorCode(err, dpdk.ADD_RT_NO_VNI) {
 			log.V(1).Info("VNI doesn't exist in dp-service, requeueing")
 			return ctrl.Result{Requeue: true}, nil
 		}

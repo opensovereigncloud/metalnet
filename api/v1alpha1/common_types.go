@@ -32,6 +32,12 @@ type LocalUIDReference struct {
 	UID types.UID `json:"uid,omitempty"`
 }
 
+// LBPort consists of port and protocol
+type LBPort struct {
+	Protocol string `json:"protocol"`
+	Port     string `json:"port"`
+}
+
 // IP is an IP address.
 // +kubebuilder:validation:Type=string
 type IP struct {

@@ -15,6 +15,32 @@ rules:
 - apiGroups:
   - networking.metalnet.onmetal.de
   resources:
+  - loadbalancers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - networking.metalnet.onmetal.de
+  resources:
+  - loadbalancers/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - networking.metalnet.onmetal.de
+  resources:
+  - loadbalancers/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - networking.metalnet.onmetal.de
+  resources:
   - networkinterfaces
   verbs:
   - create

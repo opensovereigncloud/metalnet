@@ -63,6 +63,12 @@ const (
 	ADD_PFX_ROUTE       = 652
 	DEL_PFX             = 700
 	DEL_PFX_NO_VM       = 701
+	CREATE_LB_UNSUPP_IP = 750
+	CREATE_LB_ERR       = 751
+	DEL_LB_ID_ERR       = 755
+	DEL_LB_BACK_IP_ERR  = 756
+	GET_LB_ID_ERR       = 760
+	GET_LB_BACK_IP_ERR  = 761
 )
 
 type StatusError struct {

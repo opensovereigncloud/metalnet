@@ -16,8 +16,10 @@ package dpdk
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/netip"
+	"strings"
 
 	dpdkproto "github.com/onmetal/net-dpservice-go/proto"
 	"k8s.io/apimachinery/pkg/types"
@@ -38,6 +40,10 @@ type Client interface {
 
 	CreateRoute(ctx context.Context, route *Route) (*Route, error)
 	DeleteRoute(ctx context.Context, route *Route) error
+
+	GetLoadBalancer(ctx context.Context, uid types.UID) (*DpLoadBalancer, error)
+	CreateLoadBalancer(ctx context.Context, lb *DpLoadBalancer) (*DpLoadBalancer, error)
+	DeleteLoadBalancer(ctx context.Context, uid types.UID) error
 }
 
 type Route struct {
@@ -110,6 +116,80 @@ type InterfaceStatus struct {
 	UnderlayRoute netip.Addr
 }
 
+type DpLoadBalancer struct {
+	DpLoadBalancerMetadata
+	Spec   DpLoadBalancerSpec
+	Status DpLoadBalancerStatus
+}
+
+type DpLoadBalancerMetadata struct {
+	UID types.UID
+}
+
+type DpLoadBalancerPort struct {
+	Protocol string
+	Port     uint32
+}
+
+type DpLoadBalancerSpec struct {
+	VNI                     uint32
+	Ports                   []DpLoadBalancerPort
+	LoadBalancerIPv4Address netip.Addr
+}
+
+type DpLoadBalancerStatus struct {
+	UnderlayRoute netip.Addr
+}
+
+func LoadBalancerResponseToDpLoadBalancer(dpLB *dpdkproto.GetLoadBalancerResponse, LBUID types.UID) (*DpLoadBalancer, error) {
+	loadBalancerIPv4Address, err := netip.ParseAddr(string(dpLB.GetLbVipIP().Address))
+	if err != nil {
+		return nil, fmt.Errorf("error parsing loadbalancer ipv4 address: %w", err)
+	}
+
+	var ports []DpLoadBalancerPort
+	for _, dpdklLBPort := range dpLB.GetLbports() {
+		DpPort := DpLoadBalancerPort{
+			Port:     dpdklLBPort.GetPort(),
+			Protocol: dpdklLBPort.GetProtocol().String(),
+		}
+
+		ports = append(ports, DpPort)
+	}
+
+	underlayRoute, err := netip.ParseAddr(string(dpLB.GetUnderlayRoute()))
+	if err != nil {
+		return nil, fmt.Errorf("error parsing underlay route: %w", err)
+	}
+
+	return &DpLoadBalancer{
+		DpLoadBalancerMetadata: DpLoadBalancerMetadata{
+			UID: types.UID(LBUID),
+		},
+		Spec: DpLoadBalancerSpec{
+			VNI:                     dpLB.GetVni(),
+			LoadBalancerIPv4Address: loadBalancerIPv4Address,
+			Ports:                   ports,
+		},
+		Status: DpLoadBalancerStatus{
+			UnderlayRoute: underlayRoute,
+		},
+	}, nil
+}
+
+func convertProtocolToProtocolType(proto string) (dpdkproto.Protocol, error) {
+	protoLower := strings.ToLower(proto)
+
+	switch {
+	case strings.Contains(protoLower, "tcp"):
+		return dpdkproto.Protocol_TCP, nil
+	case strings.Contains(protoLower, "udp"):
+		return dpdkproto.Protocol_UDP, nil
+	default:
+		return dpdkproto.Protocol_Undefined, errors.New("unsupported protocol type")
+	}
+}
+
 func dpdkInterfaceToInterface(dpdkIface *dpdkproto.Interface) (*Interface, error) {
 	primaryIPv4Address, err := netip.ParseAddr(string(dpdkIface.GetPrimaryIPv4Address()))
 	if err != nil {
@@ -161,6 +241,17 @@ func netipAddrToDPDKIPConfig(addr netip.Addr) *dpdkproto.IPConfig {
 	return &dpdkproto.IPConfig{
 		IpVersion:      netipAddrToDPDKIPVersion(addr),
 		PrimaryAddress: []byte(addr.String()),
+	}
+}
+
+func netipAddrToLBIPConfig(addr netip.Addr) *dpdkproto.LBIP {
+	if !addr.IsValid() {
+		return nil
+	}
+
+	return &dpdkproto.LBIP{
+		IpVersion: netipAddrToDPDKIPVersion(addr),
+		Address:   []byte(addr.String()),
 	}
 }
 
@@ -408,6 +499,66 @@ func (c *client) DeleteRoute(ctx context.Context, route *Route) error {
 			NexthopAddress: []byte(route.Spec.NextHop.Address.String()),
 		},
 	})
+	if err != nil {
+		return err
+	}
+	if errorCode := res.GetError(); errorCode != 0 {
+		return &StatusError{errorCode: errorCode, message: res.GetMessage()}
+	}
+	return nil
+}
+
+func (c *client) GetLoadBalancer(ctx context.Context, uid types.UID) (*DpLoadBalancer, error) {
+	res, err := c.DPDKonmetalClient.GetLoadBalancer(ctx, &dpdkproto.GetLoadBalancerRequest{LoadBalancerID: []byte(uid)})
+	if err != nil {
+		return nil, err
+	}
+	if errorCode := res.GetStatus().GetError(); errorCode != 0 {
+		return nil, &StatusError{errorCode: errorCode, message: res.GetStatus().GetMessage()}
+	}
+	return LoadBalancerResponseToDpLoadBalancer(res, uid)
+}
+
+func (c *client) CreateLoadBalancer(ctx context.Context, dpLB *DpLoadBalancer) (*DpLoadBalancer, error) {
+	var ports []*dpdkproto.LBPort
+	for _, LBPort := range dpLB.Spec.Ports {
+		dpdkProtocol, _ := convertProtocolToProtocolType(LBPort.Protocol)
+		Port := &dpdkproto.LBPort{
+			Port:     LBPort.Port,
+			Protocol: dpdkProtocol,
+		}
+		ports = append(ports, Port)
+	}
+	res, err := c.DPDKonmetalClient.CreateLoadBalancer(ctx, &dpdkproto.CreateLoadBalancerRequest{
+		LoadBalancerID: []byte(dpLB.UID),
+		Vni:            dpLB.Spec.VNI,
+		LbVipIP:        netipAddrToLBIPConfig(dpLB.Spec.LoadBalancerIPv4Address),
+		Lbports:        ports,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if errorCode := res.GetStatus().GetError(); errorCode != 0 {
+		return nil, &StatusError{errorCode: errorCode, message: res.GetStatus().GetMessage()}
+	}
+
+	underlayRoute, err := netip.ParseAddr(string(res.GetUnderlayRoute()))
+	if err != nil {
+		return nil, fmt.Errorf("error parsing underlay route: %w", err)
+	}
+
+	return &DpLoadBalancer{
+		DpLoadBalancerMetadata: dpLB.DpLoadBalancerMetadata,
+		Spec:                   dpLB.Spec,
+		Status: DpLoadBalancerStatus{
+			UnderlayRoute: underlayRoute,
+		},
+	}, nil
+}
+
+func (c *client) DeleteLoadBalancer(ctx context.Context, uid types.UID) error {
+	res, err := c.DPDKonmetalClient.DeleteLoadBalancer(ctx, &dpdkproto.DeleteLoadBalancerRequest{
+		LoadBalancerID: []byte(uid)})
 	if err != nil {
 		return err
 	}

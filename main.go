@@ -228,8 +228,12 @@ func main() {
 	}
 
 	if err = (&controllers.LoadBalancerReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		DPDK:      dpdk.NewClient(dpdkProtoClient),
+		Metalbond: metalbond.NewClient(mbInstance),
+		NodeName:  nodeName,
+		PublicVNI: publicVNI,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LoadBalancer")
 		os.Exit(1)

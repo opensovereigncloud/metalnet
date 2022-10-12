@@ -616,9 +616,14 @@ func (r *NetworkInterfaceReconciler) applyInterface(ctx context.Context, log log
 }
 
 func (r *NetworkInterfaceReconciler) convertToDPDKDevice(addr ghw.PCIAddress) (string, error) {
-	pciFunction, err := strconv.ParseUint(addr.Function, 10, 64)
+	pciFunction, err := strconv.ParseUint(addr.Function, 8, 64)
 	if err != nil {
 		return "", fmt.Errorf("error parsing address function %s: %w", addr.Function, err)
+	}
+
+	pciDevice, err := strconv.ParseUint(addr.Device, 8, 64)
+	if err != nil {
+		return "", fmt.Errorf("error parsing address device %s: %w", addr.Device, err)
 	}
 
 	pciDev, err := r.SysFS.PCIDevice(addr)
@@ -631,12 +636,18 @@ func (r *NetworkInterfaceReconciler) convertToDPDKDevice(addr ghw.PCIAddress) (s
 		return "", fmt.Errorf("error getting sysfs physfn: %w", err)
 	}
 
+	physFnAddr, err := physFn.Address()
+	if err != nil {
+		return "", fmt.Errorf("error getting physfn details: %w", err)
+	}
+
 	sriov, err := physFn.SRIOV()
 	if err != nil {
 		return "", fmt.Errorf("error getting sysfs sriov: %w", err)
 	}
 
-	return fmt.Sprintf("%s:%s:%s.0_representor_vf%d", addr.Domain, addr.Bus, addr.Device, pciFunction-sriov.Offset), nil
+	pciFunction = pciDevice*8 + pciFunction
+	return fmt.Sprintf("%s:%s:%s.0_representor_vf%d", physFnAddr.Domain, physFnAddr.Bus, physFnAddr.Device, pciFunction-sriov.Offset), nil
 }
 
 func (r *NetworkInterfaceReconciler) patchStatus(

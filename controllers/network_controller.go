@@ -27,10 +27,15 @@ import (
 	"github.com/onmetal/metalnet/dpdk"
 	"github.com/onmetal/metalnet/metalbond"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const (
@@ -195,5 +200,24 @@ func (r *NetworkReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&metalnetv1alpha1.Network{}).
 		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
+		Watches(
+			&source.Kind{Type: &metalnetv1alpha1.NetworkInterface{}},
+			handler.EnqueueRequestsFromMapFunc(r.findObjectsForNetworkInterface),
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		).
 		Complete(r)
+}
+
+func (r *NetworkReconciler) findObjectsForNetworkInterface(obj client.Object) []reconcile.Request {
+	networkInterface, ok := obj.(*metalnetv1alpha1.NetworkInterface)
+	if !ok {
+		return []reconcile.Request{}
+	}
+
+	return []reconcile.Request{{
+		NamespacedName: types.NamespacedName{
+			Name:      networkInterface.Spec.NetworkRef.Name,
+			Namespace: networkInterface.GetNamespace(),
+		},
+	}}
 }

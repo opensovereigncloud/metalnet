@@ -162,7 +162,7 @@ func main() {
 	dpdkProtoClient := dpdkproto.NewDPDKonmetalClient(conn)
 	dpdkClient := dpdk.NewClient(dpdkProtoClient)
 
-	var mbClient mb.Client
+	var mbClient dpdkmetalbond.LBServerAccess
 	config := mb.Config{
 		KeepaliveInterval: 3,
 	}
@@ -234,6 +234,7 @@ func main() {
 		Metalbond: metalbond.NewClient(mbInstance),
 		NodeName:  nodeName,
 		PublicVNI: publicVNI,
+		LBServer:  mbClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LoadBalancer")
 		os.Exit(1)

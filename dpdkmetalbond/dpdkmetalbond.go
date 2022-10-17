@@ -19,13 +19,23 @@ import (
 	"fmt"
 
 	mb "github.com/onmetal/metalbond"
+	mbproto "github.com/onmetal/metalbond/pb"
 	"github.com/onmetal/metalnet/dpdk"
 	dpdkproto "github.com/onmetal/net-dpservice-go/proto"
+	"k8s.io/apimachinery/pkg/types"
 )
 
+type LBServerAccess interface {
+	AddRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error
+	RemoveRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error
+	AddLoadBalancerServer(vni uint32, uid types.UID) error
+	RemoveLoadBalancerServer(vni uint32, uid types.UID) error
+}
+
 type Client struct {
-	dpdk   dpdk.Client
-	config ClientOptions
+	dpdk        dpdk.Client
+	config      ClientOptions
+	lbServerMap map[uint32]types.UID
 }
 
 type ClientOptions struct {
@@ -34,9 +44,20 @@ type ClientOptions struct {
 
 func NewClient(dpdk dpdk.Client, opts ClientOptions) (*Client, error) {
 	return &Client{
-		dpdk:   dpdk,
-		config: opts,
+		dpdk:        dpdk,
+		config:      opts,
+		lbServerMap: make(map[uint32]types.UID),
 	}, nil
+}
+
+func (c *Client) AddLoadBalancerServer(vni uint32, uid types.UID) error {
+	c.lbServerMap[vni] = uid
+	return nil
+}
+
+func (c *Client) RemoveLoadBalancerServer(vni uint32, uid types.UID) error {
+	delete(c.lbServerMap, vni)
+	return nil
 }
 
 func (c *Client) AddRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error {
@@ -45,6 +66,23 @@ func (c *Client) AddRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error
 	if c.config.IPv4Only && dest.IPVersion != mb.IPV4 {
 		// log.Infof("Received non-IPv4 route will not be installed in kernel route table (IPv4-only mode)")
 		return fmt.Errorf("received non-IPv4 route will not be installed in kernel route table (IPv4-only mode)")
+	}
+	if hop.Type == mbproto.NextHopType_LOADBALANCER_TARGET {
+		_, ok := c.lbServerMap[uint32(vni)]
+		if !ok {
+			return fmt.Errorf("no registered LoadBalancer on this client for vni %d", vni)
+		}
+		if _, err := c.dpdk.CreateLBTargetIP(ctx, &dpdk.LBTargetIP{
+			LBTargetIPMetadata: dpdk.LBTargetIPMetadata{
+				UID: c.lbServerMap[uint32(vni)],
+			},
+			Spec: dpdk.LBTargetIPSpec{
+				Address: hop.TargetAddress,
+			},
+		}); dpdk.IgnoreStatusErrorCode(err, dpdk.ADD_RT_FAIL4) != nil {
+			return fmt.Errorf("error creating lb route: %w", err)
+		}
+		return nil
 	}
 
 	prefix := &dpdkproto.Prefix{
@@ -77,6 +115,23 @@ func (c *Client) RemoveRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) er
 	if c.config.IPv4Only && dest.IPVersion != mb.IPV4 {
 		// log.Infof("Received non-IPv4 route will not be installed in kernel route table (IPv4-only mode)")
 		return fmt.Errorf("received non-IPv4 route will not be installed in kernel route table (IPv4-only mode)")
+	}
+	if hop.Type == mbproto.NextHopType_LOADBALANCER_TARGET {
+		_, ok := c.lbServerMap[uint32(vni)]
+		if !ok {
+			return fmt.Errorf("no registered LoadBalancer on this client for vni %d", vni)
+		}
+		if err := c.dpdk.DeleteLBTargetIP(ctx, &dpdk.LBTargetIP{
+			LBTargetIPMetadata: dpdk.LBTargetIPMetadata{
+				UID: c.lbServerMap[uint32(vni)],
+			},
+			Spec: dpdk.LBTargetIPSpec{
+				Address: hop.TargetAddress,
+			},
+		}); dpdk.IgnoreStatusErrorCode(err, dpdk.ADD_RT_FAIL4) != nil {
+			return fmt.Errorf("error creating lb route: %w", err)
+		}
+		return nil
 	}
 
 	if err := c.dpdk.DeleteRoute(ctx, &dpdk.Route{

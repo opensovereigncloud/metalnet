@@ -6,8 +6,8 @@ require (
 	github.com/go-logr/logr v1.2.3
 	github.com/jaypipes/ghw v0.9.0
 	github.com/onmetal/controller-utils v0.6.3
-	github.com/onmetal/metalbond v0.2.1-0.20220912120056-234b1de7a790
-	github.com/onmetal/net-dpservice-go v0.1.5
+	github.com/onmetal/metalbond v0.2.1-0.20221018144045-475b3161c585
+	github.com/onmetal/net-dpservice-go v0.1.6
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/ginkgo/v2 v2.1.4
 	github.com/onsi/gomega v1.20.0
@@ -102,3 +102,5 @@ require (
 )
 
 replace github.com/vishvananda/netlink => github.com/byteocean/netlink v1.1.1-0.20220608143109-d6cf8228de69
+replace github.com/onmetal/net-dpservice-go => ./../net-dpservice-go/
+replace github.com/onmetal/metalbond => ./../metalbond/

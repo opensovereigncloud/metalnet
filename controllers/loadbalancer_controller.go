@@ -34,6 +34,7 @@ import (
 	"github.com/onmetal/controller-utils/clientutils"
 	metalnetv1alpha1 "github.com/onmetal/metalnet/api/v1alpha1"
 	"github.com/onmetal/metalnet/dpdk"
+	"github.com/onmetal/metalnet/dpdkmetalbond"
 	"github.com/onmetal/metalnet/metalbond"
 )
 
@@ -48,6 +49,7 @@ type LoadBalancerReconciler struct {
 	Scheme *runtime.Scheme
 
 	DPDK      dpdk.Client
+	LBServer  dpdkmetalbond.LBServerAccess
 	Metalbond metalbond.Client
 	NodeName  string
 	PublicVNI int
@@ -90,33 +92,53 @@ func (r *LoadBalancerReconciler) delete(ctx context.Context, log logr.Logger, lb
 		log.V(1).Info("No finalizer present, nothing to do")
 		return ctrl.Result{}, nil
 	}
-
 	log.V(1).Info("Finalizer present, cleaning up")
 
 	log.V(1).Info("Getting dpdk loadbalancer")
 	dpdkLoadBalancer, err := r.DPDK.GetLoadBalancer(ctx, lb.UID)
+
+	vni := dpdkLoadBalancer.Spec.VNI
+	underlayRoute := dpdkLoadBalancer.Status.UnderlayRoute
+	log.V(1).Info("Got dpdk LoadBalancer", "VNI", vni, "UnderlayRoute", underlayRoute)
+
 	if err != nil {
 		if !dpdk.IsStatusErrorCode(err, dpdk.GET_LB_ID_ERR) {
 			return ctrl.Result{}, fmt.Errorf("error getting dpdk loadbalancer: %w", err)
 		}
+
+		if err := r.LBServer.RemoveLoadBalancerServer(vni, lb.UID); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error deleting dpdk loadbalancer from internal cache: %w", err)
+		}
+
+		log.V(1).Info("Unsubscribing from metalbond if not subscribed")
+		if err := r.unsubscribeIfSubscribed(ctx, vni); err != nil {
+			return ctrl.Result{}, err
+		}
+		log.V(1).Info("Unsubscribed from metalbond if subscribed")
 
 		log.V(1).Info("No dpdk loadbalancer, removing finalizer")
 		if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, lb, loadBalancerFinalizer); err != nil {
 			return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
 		}
 		log.V(1).Info("Removed finalizer")
+
 		return ctrl.Result{}, nil
 	}
-
-	vni := dpdkLoadBalancer.Spec.VNI
-	underlayRoute := dpdkLoadBalancer.Status.UnderlayRoute
-	log.V(1).Info("Got dpdk LoadBalancer", "VNI", vni, "UnderlayRoute", underlayRoute)
 
 	log.V(1).Info("Deleting LoadBalancer")
 	if err := r.deleteLoadBalancer(ctx, log, lb, vni, underlayRoute); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error deleting underlay route: %w", err)
 	}
 	log.V(1).Info("Deleted Loadbalancer")
+	if err := r.LBServer.RemoveLoadBalancerServer(vni, lb.UID); err != nil {
+		return ctrl.Result{}, fmt.Errorf("error deleting dpdk loadbalancer from internal cache: %w", err)
+	}
+
+	log.V(1).Info("Unsubscribing from metalbond if not subscribed")
+	if err := r.unsubscribeIfSubscribed(ctx, vni); err != nil {
+		return ctrl.Result{}, err
+	}
+	log.V(1).Info("Unsubscribed from metalbond if subscribed")
 
 	log.V(1).Info("Removing finalizer")
 	if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, lb, loadBalancerFinalizer); err != nil {
@@ -238,6 +260,19 @@ func (r *LoadBalancerReconciler) reconcile(ctx context.Context, log logr.Logger,
 	}
 	log.V(1).Info("Applied loadbalancer", "UnderlayRoute", underlayRoute)
 
+	log.V(1).Info("Subscribing to metalbond if not subscribed")
+	if err := r.subscribeIfNotSubscribed(ctx, vni); err != nil {
+		return ctrl.Result{}, err
+	}
+	log.V(1).Info("Subscribed to metalbond if not subscribed")
+
+	log.V(1).Info("Patching status")
+	if err := r.patchStatus(ctx, lb, func() {
+		lb.Status.State = metalnetv1alpha1.LoadBalancerStateReady
+	}); err != nil {
+		return ctrl.Result{}, fmt.Errorf("error patching status: %w", err)
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -272,6 +307,9 @@ func (r *LoadBalancerReconciler) applyLoadBalancer(ctx context.Context, log logr
 		if err != nil {
 			return netip.Addr{}, fmt.Errorf("error creating dpdk loadbalancer: %w", err)
 		}
+		if err := r.LBServer.AddLoadBalancerServer(vni, lb.UID); err != nil {
+			return netip.Addr{}, fmt.Errorf("error adding dpdk loadbalancer to internal cache: %w", err)
+		}
 		log.V(1).Info("Adding loadbalancer route if not exists")
 		if err := r.addLoadBalancerRouteIfNotExists(ctx, lb.Spec.IP.Addr, lbalancer.Status.UnderlayRoute); err != nil {
 			return netip.Addr{}, err
@@ -281,13 +319,29 @@ func (r *LoadBalancerReconciler) applyLoadBalancer(ctx context.Context, log logr
 	}
 
 	log.V(1).Info("DPDK loadbalancer exists")
-
+	if err := r.LBServer.AddLoadBalancerServer(vni, lb.UID); err != nil {
+		return netip.Addr{}, fmt.Errorf("error adding dpdk loadbalancer to internal cache: %w", err)
+	}
 	log.V(1).Info("Adding loadbalancer route if not exists")
 	if err := r.addLoadBalancerRouteIfNotExists(ctx, lb.Spec.IP.Addr, lbalancer.Status.UnderlayRoute); err != nil {
 		return netip.Addr{}, err
 	}
 	log.V(1).Info("Added loadbalancer route if not existed")
 	return lbalancer.Status.UnderlayRoute, nil
+}
+
+func (r *LoadBalancerReconciler) subscribeIfNotSubscribed(ctx context.Context, vni uint32) error {
+	if err := r.Metalbond.Subscribe(ctx, metalbond.VNI(vni)); metalbond.IgnoreAlreadySubscribedToVNIError(err) != nil {
+		return fmt.Errorf("error subscribing to vni: %w", err)
+	}
+	return nil
+}
+
+func (r *LoadBalancerReconciler) unsubscribeIfSubscribed(ctx context.Context, vni uint32) error {
+	if err := r.Metalbond.Unsubscribe(ctx, metalbond.VNI(vni)); metalbond.IgnoreNotSubscribedToVNIError(err) != nil {
+		return fmt.Errorf("error subscribing to vni: %w", err)
+	}
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

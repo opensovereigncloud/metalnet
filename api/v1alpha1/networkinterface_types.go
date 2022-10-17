@@ -35,6 +35,8 @@ type NetworkInterfaceSpec struct {
 	VirtualIP *IP `json:"virtualIP,omitempty"`
 	// Prefixes are the provided Prefix
 	Prefixes []IPPrefix `json:"prefixes,omitempty"`
+	// Loadbalancer Targets are the provided LBPrefix
+	LoadBalancerTargets []LBPrefix `json:"loadBalancerTargets,omitempty"`
 	// NodeName is the name of the node on which the interface should be created.
 	NodeName *string `json:"nodeName,omitempty"`
 }
@@ -48,6 +50,9 @@ type NetworkInterfaceStatus struct {
 
 	// Prefixes are the Prefixes reserved for this NetworkInterface
 	Prefixes []IPPrefix `json:"prefixes,omitempty"`
+
+	// LoadBalancerTargets are the Targets reserved for this NetworkInterface
+	LoadBalancerTargets []LBPrefix `json:"loadBalancerTargets,omitempty"`
 
 	// State is the NetworkInterfaceState of the NetworkInterface.
 	State NetworkInterfaceState `json:"state,omitempty"`

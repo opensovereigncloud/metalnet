@@ -19,6 +19,7 @@ import (
 	"net/netip"
 
 	"github.com/onmetal/metalbond"
+	"github.com/onmetal/metalbond/pb"
 )
 
 type Client interface {
@@ -56,6 +57,7 @@ type Destination struct {
 type NextHop struct {
 	TargetAddress netip.Addr
 	TargetVNI     VNI
+	TargetHopType pb.NextHopType
 }
 
 func (c *client) AddRoute(_ context.Context, vni VNI, destination Destination, nextHop NextHop) error {
@@ -65,6 +67,7 @@ func (c *client) AddRoute(_ context.Context, vni VNI, destination Destination, n
 	}, metalbond.NextHop{
 		TargetAddress: nextHop.TargetAddress,
 		TargetVNI:     uint32(nextHop.TargetVNI),
+		Type:          nextHop.TargetHopType,
 	})
 }
 
@@ -75,6 +78,7 @@ func (c *client) RemoveRoute(_ context.Context, vni VNI, destination Destination
 	}, metalbond.NextHop{
 		TargetAddress: nextHop.TargetAddress,
 		TargetVNI:     uint32(nextHop.TargetVNI),
+		Type:          nextHop.TargetHopType,
 	})
 }
 

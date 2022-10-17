@@ -34,9 +34,17 @@ type Client interface {
 	CreateVirtualIP(ctx context.Context, virtualIP *VirtualIP) (*VirtualIP, error)
 	DeleteVirtualIP(ctx context.Context, interfaceUID types.UID) error
 
+	ListLBTargetIPs(ctx context.Context, uid types.UID) (*LBTargetIPList, error)
+	CreateLBTargetIP(ctx context.Context, lbtargetIP *LBTargetIP) (*LBTargetIP, error)
+	DeleteLBTargetIP(ctx context.Context, lbtargetIP *LBTargetIP) error
+
 	ListPrefixes(ctx context.Context, interfaceUID types.UID) (*PrefixList, error)
 	CreatePrefix(ctx context.Context, prefix *Prefix) (*Prefix, error)
 	DeletePrefix(ctx context.Context, interfaceUID types.UID, prefix netip.Prefix) error
+
+	ListLBPrefixes(ctx context.Context, interfaceUID types.UID) (*PrefixList, error)
+	CreateLBPrefix(ctx context.Context, prefix *Prefix) (*Prefix, error)
+	DeleteLBPrefix(ctx context.Context, interfaceUID types.UID, prefix netip.Prefix) error
 
 	CreateRoute(ctx context.Context, route *Route) (*Route, error)
 	DeleteRoute(ctx context.Context, route *Route) error
@@ -79,7 +87,8 @@ type PrefixMetadata struct {
 }
 
 type PrefixSpec struct {
-	Prefix netip.Prefix
+	Prefix        netip.Prefix
+	UnderlayRoute netip.Addr
 }
 
 type VirtualIP struct {
@@ -93,6 +102,23 @@ type VirtualIPMetadata struct {
 
 type VirtualIPSpec struct {
 	Address netip.Addr
+}
+
+type LBTargetIP struct {
+	LBTargetIPMetadata
+	Spec LBTargetIPSpec
+}
+
+type LBTargetIPMetadata struct {
+	UID types.UID
+}
+
+type LBTargetIPSpec struct {
+	Address netip.Addr
+}
+
+type LBTargetIPList struct {
+	Items []LBTargetIP
 }
 
 type Interface struct {
@@ -376,6 +402,80 @@ func (c *client) DeleteVirtualIP(ctx context.Context, interfaceUID types.UID) er
 	return nil
 }
 
+func (c *client) CreateLBTargetIP(ctx context.Context, lbtargetIP *LBTargetIP) (*LBTargetIP, error) {
+	res, err := c.DPDKonmetalClient.AddLoadBalancerTarget(ctx, &dpdkproto.AddLoadBalancerTargetRequest{
+		LoadBalancerID: []byte(lbtargetIP.UID),
+		TargetIP: &dpdkproto.LBIP{
+			IpVersion: netipAddrToDPDKIPVersion(lbtargetIP.Spec.Address),
+			Address:   []byte(lbtargetIP.Spec.Address.String()),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if errorCode := res.GetError(); errorCode != 0 {
+		return nil, &StatusError{errorCode: errorCode, message: res.GetMessage()}
+	}
+
+	return lbtargetIP, nil
+}
+
+func (c *client) ListLBTargetIPs(ctx context.Context, uid types.UID) (*LBTargetIPList, error) {
+	res, err := c.DPDKonmetalClient.GetLoadBalancerTargets(ctx, &dpdkproto.GetLoadBalancerTargetsRequest{
+		LoadBalancerID: []byte(uid),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var targets []LBTargetIP
+	for _, LBTarget := range res.GetTargetIPs() {
+		target, err := dpdkLBIPToTargetIP(uid, LBTarget)
+		if err != nil {
+			return nil, err
+		}
+
+		targets = append(targets, *target)
+	}
+
+	return &LBTargetIPList{
+		Items: targets,
+	}, nil
+}
+
+func (c *client) DeleteLBTargetIP(ctx context.Context, lbtargetIP *LBTargetIP) error {
+	res, err := c.DPDKonmetalClient.DeleteLoadBalancerTarget(ctx, &dpdkproto.DeleteLoadBalancerTargetRequest{
+		LoadBalancerID: []byte(lbtargetIP.UID),
+		TargetIP: &dpdkproto.LBIP{
+			IpVersion: netipAddrToDPDKIPVersion(lbtargetIP.Spec.Address),
+			Address:   []byte(lbtargetIP.Spec.Address.String()),
+		},
+	})
+	if err != nil {
+		return err
+	}
+	if errorCode := res.GetError(); errorCode != 0 {
+		return &StatusError{errorCode: errorCode, message: res.GetMessage()}
+	}
+	return nil
+}
+
+func dpdkLBIPToTargetIP(uid types.UID, lbip *dpdkproto.LBIP) (*LBTargetIP, error) {
+	addr, err := netip.ParseAddr(string(lbip.GetAddress()))
+	if err != nil {
+		return nil, fmt.Errorf("error parsing lb ip address: %w", err)
+	}
+
+	return &LBTargetIP{
+		LBTargetIPMetadata: LBTargetIPMetadata{
+			UID: uid,
+		},
+		Spec: LBTargetIPSpec{
+			Address: addr,
+		},
+	}, nil
+}
+
 func dpdkPrefixToPrefix(interfaceUID types.UID, dpdkPrefix *dpdkproto.Prefix) (*Prefix, error) {
 	addr, err := netip.ParseAddr(string(dpdkPrefix.GetAddress()))
 	if err != nil {
@@ -397,6 +497,33 @@ func dpdkPrefixToPrefix(interfaceUID types.UID, dpdkPrefix *dpdkproto.Prefix) (*
 	}, nil
 }
 
+func dpdkLBPrefixToPrefix(interfaceUID types.UID, dpdkPrefix *dpdkproto.LBPrefix) (*Prefix, error) {
+	addr, err := netip.ParseAddr(string(dpdkPrefix.GetAddress()))
+	if err != nil {
+		return nil, fmt.Errorf("error parsing dpdk lb prefix address: %w", err)
+	}
+
+	prefix, err := addr.Prefix(int(dpdkPrefix.PrefixLength))
+	if err != nil {
+		return nil, fmt.Errorf("invalid dpdk lb prefix length %d for address %s", dpdkPrefix.PrefixLength, addr)
+	}
+
+	uladdr, err := netip.ParseAddr(string(dpdkPrefix.UnderlayRoute))
+	if err != nil {
+		return nil, fmt.Errorf("error parsing dpdk lb prefix ul address: %w", err)
+	}
+
+	return &Prefix{
+		PrefixMetadata: PrefixMetadata{
+			InterfaceUID: interfaceUID,
+		},
+		Spec: PrefixSpec{
+			Prefix:        prefix,
+			UnderlayRoute: uladdr,
+		},
+	}, nil
+}
+
 func (c *client) ListPrefixes(ctx context.Context, interfaceUID types.UID) (*PrefixList, error) {
 	res, err := c.DPDKonmetalClient.ListInterfacePrefixes(ctx, &dpdkproto.InterfaceIDMsg{
 		InterfaceID: []byte(interfaceUID),
@@ -411,7 +538,6 @@ func (c *client) ListPrefixes(ctx context.Context, interfaceUID types.UID) (*Pre
 		if err != nil {
 			return nil, err
 		}
-
 		prefixes = append(prefixes, *prefix)
 	}
 
@@ -437,11 +563,83 @@ func (c *client) CreatePrefix(ctx context.Context, prefix *Prefix) (*Prefix, err
 	if errorCode := res.GetStatus().GetError(); errorCode != 0 {
 		return nil, &StatusError{errorCode: errorCode, message: res.GetStatus().GetMessage()}
 	}
+	underlayRoute, err := netip.ParseAddr(string(res.GetUnderlayRoute()))
+	if err != nil {
+		return nil, fmt.Errorf("error parsing underlay route: %w", err)
+	}
+	prefix.Spec.UnderlayRoute = underlayRoute
 	return prefix, nil
 }
 
 func (c *client) DeletePrefix(ctx context.Context, interfaceUID types.UID, prefix netip.Prefix) error {
 	res, err := c.DPDKonmetalClient.DeleteInterfacePrefix(ctx, &dpdkproto.InterfacePrefixMsg{
+		InterfaceID: &dpdkproto.InterfaceIDMsg{
+			InterfaceID: []byte(interfaceUID),
+		},
+		Prefix: &dpdkproto.Prefix{
+			IpVersion:    netipAddrToDPDKIPVersion(prefix.Addr()),
+			Address:      []byte(prefix.Addr().String()),
+			PrefixLength: uint32(prefix.Bits()),
+		},
+	})
+	if err != nil {
+		return err
+	}
+	if errorCode := res.GetError(); errorCode != 0 {
+		return &StatusError{errorCode: errorCode, message: res.GetMessage()}
+	}
+	return nil
+}
+
+func (c *client) ListLBPrefixes(ctx context.Context, interfaceUID types.UID) (*PrefixList, error) {
+	res, err := c.DPDKonmetalClient.ListInterfaceLoadBalancerPrefixes(ctx, &dpdkproto.ListInterfaceLoadBalancerPrefixesRequest{
+		InterfaceID: []byte(interfaceUID),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var prefixes []Prefix
+	for _, dpdkPrefix := range res.GetPrefixes() {
+		prefix, err := dpdkLBPrefixToPrefix(interfaceUID, dpdkPrefix)
+		if err != nil {
+			return nil, err
+		}
+		prefixes = append(prefixes, *prefix)
+	}
+
+	return &PrefixList{
+		Items: prefixes,
+	}, nil
+}
+
+func (c *client) CreateLBPrefix(ctx context.Context, prefix *Prefix) (*Prefix, error) {
+	res, err := c.DPDKonmetalClient.CreateInterfaceLoadBalancerPrefix(ctx, &dpdkproto.CreateInterfaceLoadBalancerPrefixRequest{
+		InterfaceID: &dpdkproto.InterfaceIDMsg{
+			InterfaceID: []byte(prefix.InterfaceUID),
+		},
+		Prefix: &dpdkproto.Prefix{
+			IpVersion:    netipAddrToDPDKIPVersion(prefix.Spec.Prefix.Addr()),
+			Address:      []byte(prefix.Spec.Prefix.Addr().String()),
+			PrefixLength: uint32(prefix.Spec.Prefix.Bits()),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if errorCode := res.GetStatus().GetError(); errorCode != 0 {
+		return nil, &StatusError{errorCode: errorCode, message: res.GetStatus().GetMessage()}
+	}
+	underlayRoute, err := netip.ParseAddr(string(res.GetUnderlayRoute()))
+	if err != nil {
+		return nil, fmt.Errorf("error parsing underlay route: %w", err)
+	}
+	prefix.Spec.UnderlayRoute = underlayRoute
+	return prefix, nil
+}
+
+func (c *client) DeleteLBPrefix(ctx context.Context, interfaceUID types.UID, prefix netip.Prefix) error {
+	res, err := c.DPDKonmetalClient.DeleteInterfaceLoadBalancerPrefix(ctx, &dpdkproto.DeleteInterfaceLoadBalancerPrefixRequest{
 		InterfaceID: &dpdkproto.InterfaceIDMsg{
 			InterfaceID: []byte(interfaceUID),
 		},

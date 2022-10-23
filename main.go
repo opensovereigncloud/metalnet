@@ -202,6 +202,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := metalnetclient.SetupLoadBalancerNetworkRefNameFieldIndexer(context.TODO(), mgr.GetFieldIndexer()); err != nil {
+		setupLog.Error(err, "unable to set up field indexer", "Field", metalnetclient.LoadBalancerNetworkRefNameField)
+		os.Exit(1)
+	}
+
 	if err = (&controllers.NetworkReconciler{
 		Client:        mgr.GetClient(),
 		Scheme:        mgr.GetScheme(),

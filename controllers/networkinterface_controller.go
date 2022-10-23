@@ -119,6 +119,7 @@ type NetworkInterfaceReconciler struct {
 //+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networkinterfaces/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networkinterfaces/finalizers,verbs=update
 //+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networks,verbs=get;list;watch
+//+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=loadbalancers,verbs=get;list;watch
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -664,7 +665,7 @@ func (r *NetworkInterfaceReconciler) reconcileLBTargets(ctx context.Context, log
 				log.V(1).Info("Ensured dpdk lb target does not exist")
 				return nil
 			case specPrefixes.Has(prefix) && !dpdkPrefixes.Has(prefix):
-				log.V(1).Info("Create prefix")
+				log.V(1).Info("Create lb target")
 
 				log.V(1).Info("Creating dpdk lb target")
 				resPrefix, err := r.DPDK.CreateLBPrefix(ctx, &dpdk.Prefix{
@@ -688,11 +689,14 @@ func (r *NetworkInterfaceReconciler) reconcileLBTargets(ctx context.Context, log
 				if err != nil {
 					return err
 				}
-				log.V(1).Info("Ensuring metalbond prefix route exists")
+				log.V(1).Info("Ensuring metalbond lb target route exists")
+				if err := r.removeLBTargetRouteIfExists(ctx, vni, prefix, underlayRoute); err != nil {
+					return err
+				}
 				if err := r.addLBTargetRouteIfNotExists(ctx, vni, prefix, underlayRoute); err != nil {
 					return err
 				}
-				log.V(1).Info("Ensured metalbond prefix route exists")
+				log.V(1).Info("Ensured metalbond lb target route exists")
 				return nil
 			}
 		}(); err != nil {
@@ -1012,6 +1016,10 @@ func (r *NetworkInterfaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&source.Kind{Type: &metalnetv1alpha1.Network{}},
 			r.enqueueNetworkInterfacesReferencingNetwork(ctx, log),
 		).
+		Watches(
+			&source.Kind{Type: &metalnetv1alpha1.LoadBalancer{}},
+			r.enqueueNetworkInterfacesReferencingLoadBalancer(ctx, log),
+		).
 		Complete(r)
 }
 
@@ -1024,6 +1032,26 @@ func (r *NetworkInterfaceReconciler) enqueueNetworkInterfacesReferencingNetwork(
 			client.MatchingFields{metalnetclient.NetworkInterfaceNetworkRefNameField: network.Name},
 		); err != nil {
 			log.Error(err, "Error listing network interfaces referencing network", "NetworkKey", client.ObjectKeyFromObject(network))
+			return nil
+		}
+
+		reqs := make([]ctrl.Request, len(nicList.Items))
+		for i, nic := range nicList.Items {
+			reqs[i] = ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&nic)}
+		}
+		return reqs
+	})
+}
+
+func (r *NetworkInterfaceReconciler) enqueueNetworkInterfacesReferencingLoadBalancer(ctx context.Context, log logr.Logger) handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(func(obj client.Object) []ctrl.Request {
+		loadBalancer := obj.(*metalnetv1alpha1.LoadBalancer)
+		nicList := &metalnetv1alpha1.NetworkInterfaceList{}
+		if err := r.List(ctx, nicList,
+			client.InNamespace(loadBalancer.Namespace),
+			client.MatchingFields{metalnetclient.LoadBalancerNetworkRefNameField: loadBalancer.Spec.NetworkRef.Name},
+		); err != nil {
+			log.Error(err, "Error listing network interfaces referencing loadbalancer", "NetworkKey", client.ObjectKeyFromObject(loadBalancer))
 			return nil
 		}
 

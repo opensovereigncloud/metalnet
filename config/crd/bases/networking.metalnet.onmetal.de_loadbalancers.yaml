@@ -15,7 +15,16 @@ spec:
     singular: loadbalancer
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - description: Status of the loadbalancer.
+      jsonPath: .status.state
+      name: Status
+      type: string
+    - description: Node the loadbalancer is running on.
+      jsonPath: .spec.nodeName
+      name: NodeName
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: LoadBalancer is the Schema for the loadbalancers API

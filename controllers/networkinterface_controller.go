@@ -841,6 +841,12 @@ func (r *NetworkInterfaceReconciler) delete(ctx context.Context, log logr.Logger
 			return ctrl.Result{}, fmt.Errorf("error getting dpdk interface: %w", err)
 		}
 
+		log.V(1).Info("Releasing device if existed")
+		if err := r.releaseNetFnIfClaimExists(nic.UID); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error removing claim: %w", err)
+		}
+		log.V(1).Info("Released device if existed")
+
 		log.V(1).Info("No dpdk interface, removing finalizer")
 		if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, nic, networkInterfaceFinalizer); err != nil {
 			return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)

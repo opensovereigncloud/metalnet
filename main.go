@@ -27,20 +27,22 @@ import (
 	"path/filepath"
 	"time"
 
-	metalnetclient "github.com/onmetal/metalnet/client"
 	flag "github.com/spf13/pflag"
+
+	metalnetclient "github.com/onmetal/metalnet/client"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"github.com/onmetal/metalnet/dpdk"
 	"github.com/onmetal/metalnet/dpdkmetalbond"
 	"github.com/onmetal/metalnet/metalbond"
 	"github.com/onmetal/metalnet/netfns"
 	"github.com/onmetal/metalnet/sysfs"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	mb "github.com/onmetal/metalbond"
 	dpdkproto "github.com/onmetal/net-dpservice-go/proto"
@@ -160,7 +162,7 @@ func main() {
 	dpdkProtoClient := dpdkproto.NewDPDKonmetalClient(conn)
 	dpdkClient := dpdk.NewClient(dpdkProtoClient)
 
-	var mbClient mb.Client
+	var mbClient dpdkmetalbond.LBServerAccess
 	config := mb.Config{
 		KeepaliveInterval: 3,
 	}
@@ -200,6 +202,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := metalnetclient.SetupLoadBalancerNetworkRefNameFieldIndexer(context.TODO(), mgr.GetFieldIndexer()); err != nil {
+		setupLog.Error(err, "unable to set up field indexer", "Field", metalnetclient.LoadBalancerNetworkRefNameField)
+		os.Exit(1)
+	}
+
 	if err = (&controllers.NetworkReconciler{
 		Client:        mgr.GetClient(),
 		Scheme:        mgr.GetScheme(),
@@ -225,6 +232,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&controllers.LoadBalancerReconciler{
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		DPDK:      dpdk.NewClient(dpdkProtoClient),
+		Metalbond: metalbond.NewClient(mbInstance),
+		NodeName:  nodeName,
+		PublicVNI: publicVNI,
+		LBServer:  mbClient,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "LoadBalancer")
+		os.Exit(1)
+	}
 	//+kubebuilder:scaffold:builder
 
 	var dpChecker healthz.Checker = func(_ *http.Request) error {

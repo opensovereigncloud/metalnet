@@ -1,0 +1,15 @@
+apiVersion: networking.metalnet.onmetal.de/v1alpha1
+kind: LoadBalancer
+metadata:
+  name: loadbalancer-sample
+spec:
+  ipFamily: IPv4
+  ip: 194.11.242.110
+  ports:
+  - protocol: TCP
+    port : 80
+  - protocol: UDP
+    port : 80
+  nodeName: fra4-lab-dell-2
+  networkRef:
+    name: network-sample

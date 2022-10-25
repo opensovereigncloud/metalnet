@@ -29,6 +29,7 @@ import (
 	"github.com/jaypipes/ghw"
 	"github.com/onmetal/controller-utils/clientutils"
 	"github.com/onmetal/controller-utils/set"
+	"github.com/onmetal/metalbond/pb"
 	metalnetv1alpha1 "github.com/onmetal/metalnet/api/v1alpha1"
 	metalnetclient "github.com/onmetal/metalnet/client"
 	"github.com/onmetal/metalnet/dpdk"
@@ -118,6 +119,7 @@ type NetworkInterfaceReconciler struct {
 //+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networkinterfaces/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networkinterfaces/finalizers,verbs=update
 //+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networks,verbs=get;list;watch
+//+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=loadbalancers,verbs=get;list;watch
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -171,6 +173,7 @@ func (r *NetworkInterfaceReconciler) removeVirtualIPRouteIfExists(ctx context.Co
 	}, metalbond.NextHop{
 		TargetAddress: underlayRoute,
 		TargetVNI:     0,
+		TargetHopType: pb.NextHopType_STANDARD,
 	}); metalbond.IgnoreNextHopNotFoundError(err) != nil {
 		return fmt.Errorf("error removing metalbond route: %w", err)
 	}
@@ -183,6 +186,7 @@ func (r *NetworkInterfaceReconciler) addVirtualIPRouteIfNotExists(ctx context.Co
 	}, metalbond.NextHop{
 		TargetAddress: underlayRoute,
 		TargetVNI:     0,
+		TargetHopType: pb.NextHopType_STANDARD,
 	}); metalbond.IgnoreNextHopAlreadyExistsError(err) != nil {
 		return fmt.Errorf("error adding metalbond route: %w", err)
 	}
@@ -237,6 +241,7 @@ func (r *NetworkInterfaceReconciler) addPrefixRouteIfNotExists(ctx context.Conte
 	}, metalbond.NextHop{
 		TargetVNI:     0,
 		TargetAddress: underlayRoute,
+		TargetHopType: pb.NextHopType_STANDARD,
 	}); metalbond.IgnoreNextHopAlreadyExistsError(err) != nil {
 		return fmt.Errorf("error adding prefix route: %w", err)
 	}
@@ -249,8 +254,42 @@ func (r *NetworkInterfaceReconciler) removePrefixRouteIfExists(ctx context.Conte
 	}, metalbond.NextHop{
 		TargetVNI:     0,
 		TargetAddress: underlayRoute,
+		TargetHopType: pb.NextHopType_STANDARD,
 	}); metalbond.IgnoreNextHopNotFoundError(err) != nil {
 		return fmt.Errorf("error removing prefix route: %w", err)
+	}
+	return nil
+}
+
+func (r *NetworkInterfaceReconciler) addLBTargetRouteIfNotExists(ctx context.Context, vni uint32, prefix netip.Prefix, underlayRoute netip.Addr) error {
+	if err := r.Metalbond.AddRoute(ctx, metalbond.VNI(vni), metalbond.Destination{
+		Prefix: prefix,
+	}, metalbond.NextHop{
+		TargetVNI:     0,
+		TargetAddress: underlayRoute,
+		TargetHopType: pb.NextHopType_LOADBALANCER_TARGET,
+	}); metalbond.IgnoreNextHopAlreadyExistsError(err) != nil {
+		return fmt.Errorf("error adding lb target route: %w", err)
+	}
+	return nil
+}
+
+func (r *NetworkInterfaceReconciler) removeLBTargetRouteIfExists(ctx context.Context, vni uint32, prefix netip.Prefix, underlayRoute netip.Addr) error {
+	if err := r.Metalbond.RemoveRoute(ctx, metalbond.VNI(vni), metalbond.Destination{
+		Prefix: prefix,
+	}, metalbond.NextHop{
+		TargetVNI:     0,
+		TargetAddress: underlayRoute,
+		TargetHopType: pb.NextHopType_LOADBALANCER_TARGET,
+	}); metalbond.IgnoreNextHopNotFoundError(err) != nil {
+		return fmt.Errorf("error removing prefix route: %w", err)
+	}
+	return nil
+}
+
+func (r *NetworkInterfaceReconciler) deleteDPDKLBTargetIfExists(ctx context.Context, nicUID types.UID, prefix netip.Prefix) error {
+	if err := r.DPDK.DeleteLBPrefix(ctx, nicUID, prefix); dpdk.IgnoreStatusErrorCode(err, dpdk.DEL_PFX_NO_VM) != nil {
+		return fmt.Errorf("error deleting lb target: %w", err)
 	}
 	return nil
 }
@@ -428,6 +467,16 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 		log.V(1).Info("Reconciled virtual ip")
 	}
 
+	log.V(1).Info("Reconciling lb targets")
+	lbTargetErr := r.reconcileLBTargets(ctx, log, vni, nic)
+	if lbTargetErr != nil {
+		errs = append(errs, fmt.Errorf("error reconciling lb target: %w", lbTargetErr))
+		log.Error(lbTargetErr, "Error reconciling lb targets")
+		r.Eventf(nic, corev1.EventTypeWarning, "ErrorReconcilingPrefixes", "Error reconciling prefixes: %v", err)
+	} else {
+		log.V(1).Info("Reconciled prefixes")
+	}
+
 	log.V(1).Info("Reconciling prefixes")
 	prefixesErr := r.reconcilePrefixes(ctx, log, vni, nic, underlayRoute)
 	if prefixesErr != nil {
@@ -452,6 +501,9 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 		}
 		if prefixesErr != nil {
 			nic.Status.Prefixes = nic.Spec.Prefixes
+		}
+		if lbTargetErr != nil {
+			nic.Status.LoadBalancerTargets = nic.Spec.LoadBalancerTargets
 		}
 	}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error patching status: %w", err)
@@ -547,6 +599,113 @@ func (r *NetworkInterfaceReconciler) reconcilePrefixes(ctx context.Context, log 
 
 	if len(errs) > 0 {
 		return fmt.Errorf("error(s) reconciling prefix(es): %v", errs)
+	}
+	return nil
+}
+
+func getUnderlayRouteFromPrefixesList(list []dpdk.Prefix, searchPrefix netip.Prefix) (netip.Addr, error) {
+	for _, dpdkPrefix := range list {
+		if dpdkPrefix.Spec.Prefix.Addr() == searchPrefix.Addr() {
+			return dpdkPrefix.Spec.UnderlayRoute, nil
+		}
+	}
+	return netip.Addr{}, fmt.Errorf("no underlayroute for lb prefix %v", searchPrefix.Addr())
+}
+
+func (r *NetworkInterfaceReconciler) reconcileLBTargets(ctx context.Context, log logr.Logger, vni uint32, nic *metalnetv1alpha1.NetworkInterface) error {
+	log.V(1).Info("Listing lb targets")
+	list, err := r.DPDK.ListLBPrefixes(ctx, nic.UID)
+	if err != nil {
+		return fmt.Errorf("error listing lb targets: %w", err)
+	}
+
+	dpdkPrefixes := set.New[netip.Prefix]()
+	for _, dpdkPrefix := range list.Items {
+		dpdkPrefixes.Insert(dpdkPrefix.Spec.Prefix)
+	}
+
+	specPrefixes := set.New[netip.Prefix]()
+	for _, specPrefix := range nic.Spec.LoadBalancerTargets {
+		specPrefixes.Insert(specPrefix.Prefix)
+	}
+
+	// Sort prefixes to have deterministic error event output
+	allPrefixes := dpdkPrefixes.Slice()
+	sort.Slice(allPrefixes, func(i, j int) bool {
+		return allPrefixes[i].String() < allPrefixes[j].String()
+	})
+
+	if dpdkPrefixes.Len() < specPrefixes.Len() {
+		allPrefixes = specPrefixes.Slice()
+		sort.Slice(allPrefixes, func(i, j int) bool {
+			return allPrefixes[i].String() < allPrefixes[j].String()
+		})
+	}
+	var errs []error
+	for _, prefix := range allPrefixes {
+		if err := func() error {
+			log := log.WithValues("LB Target", prefix)
+			switch {
+			case dpdkPrefixes.Has(prefix) && !specPrefixes.Has(prefix):
+				log.V(1).Info("Delete lb target")
+				underlayRoute, err := getUnderlayRouteFromPrefixesList(list.Items, prefix)
+				if err != nil {
+					return err
+				}
+				log.V(1).Info("Ensuring metalbond prefix route does not exist")
+				if err := r.removeLBTargetRouteIfExists(ctx, vni, prefix, underlayRoute); err != nil {
+					return err
+				}
+				log.V(1).Info("Ensured metalbond prefix route does not exist")
+
+				log.V(1).Info("Ensuring dpdk lb target does not exist")
+				if err := r.deleteDPDKLBTargetIfExists(ctx, nic.UID, prefix); err != nil {
+					return err
+				}
+				log.V(1).Info("Ensured dpdk lb target does not exist")
+				return nil
+			case specPrefixes.Has(prefix) && !dpdkPrefixes.Has(prefix):
+				log.V(1).Info("Create lb target")
+
+				log.V(1).Info("Creating dpdk lb target")
+				resPrefix, err := r.DPDK.CreateLBPrefix(ctx, &dpdk.Prefix{
+					PrefixMetadata: dpdk.PrefixMetadata{InterfaceUID: nic.UID},
+					Spec:           dpdk.PrefixSpec{Prefix: prefix},
+				})
+				if err != nil {
+					return err
+				}
+				log.V(1).Info("Ensured dpdk lb target exists")
+
+				log.V(1).Info("Ensuring metalbond lb target route exists")
+				if err := r.addLBTargetRouteIfNotExists(ctx, vni, prefix, resPrefix.Spec.UnderlayRoute); err != nil {
+					return err
+				}
+				log.V(1).Info("Ensured metalbond lb target route exists")
+				return nil
+			default:
+				log.V(1).Info("Update lb target")
+				underlayRoute, err := getUnderlayRouteFromPrefixesList(list.Items, prefix)
+				if err != nil {
+					return err
+				}
+				log.V(1).Info("Ensuring metalbond lb target route exists")
+				if err := r.removeLBTargetRouteIfExists(ctx, vni, prefix, underlayRoute); err != nil {
+					return err
+				}
+				if err := r.addLBTargetRouteIfNotExists(ctx, vni, prefix, underlayRoute); err != nil {
+					return err
+				}
+				log.V(1).Info("Ensured metalbond lb target route exists")
+				return nil
+			}
+		}(); err != nil {
+			errs = append(errs, fmt.Errorf("[lb target %s] %w", prefix, err))
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("error(s) reconciling lb target: %v", errs)
 	}
 	return nil
 }
@@ -682,6 +841,12 @@ func (r *NetworkInterfaceReconciler) delete(ctx context.Context, log logr.Logger
 			return ctrl.Result{}, fmt.Errorf("error getting dpdk interface: %w", err)
 		}
 
+		log.V(1).Info("Releasing device if existed")
+		if err := r.releaseNetFnIfClaimExists(nic.UID); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error removing claim: %w", err)
+		}
+		log.V(1).Info("Released device if existed")
+
 		log.V(1).Info("No dpdk interface, removing finalizer")
 		if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, nic, networkInterfaceFinalizer); err != nil {
 			return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
@@ -699,6 +864,12 @@ func (r *NetworkInterfaceReconciler) delete(ctx context.Context, log logr.Logger
 		return ctrl.Result{}, fmt.Errorf("error deleting prefixes: %w", err)
 	}
 	log.V(1).Info("Deleted prefixes")
+
+	log.V(1).Info("Deleting lb targets")
+	if err := r.deleteLBTargets(ctx, log, nic, vni, underlayRoute); err != nil {
+		return ctrl.Result{}, fmt.Errorf("error deleting lb targets: %w", err)
+	}
+	log.V(1).Info("Deleted lb targets")
 
 	log.V(1).Info("Deleting virtual ip")
 	if err := r.deleteVirtualIP(ctx, log, nic, underlayRoute); err != nil {
@@ -718,6 +889,52 @@ func (r *NetworkInterfaceReconciler) delete(ctx context.Context, log logr.Logger
 	}
 	log.V(1).Info("Removed finalizer")
 	return ctrl.Result{}, nil
+}
+
+func (r *NetworkInterfaceReconciler) deleteLBTargets(
+	ctx context.Context,
+	log logr.Logger,
+	nic *metalnetv1alpha1.NetworkInterface,
+	vni uint32,
+	underlayRoute netip.Addr,
+) error {
+	log.V(1).Info("Listing lb targets")
+	prefixes, err := r.DPDK.ListLBPrefixes(ctx, nic.UID)
+	if err != nil {
+		if !dpdk.IsStatusErrorCode(err, dpdk.GET_VM_NOT_FND) {
+			return fmt.Errorf("error listing lb targets: %w", err)
+		}
+
+		log.V(1).Info("Interface already gone")
+		return nil
+	}
+
+	var errs []error
+	for _, prefixItem := range prefixes.Items {
+		prefix := prefixItem.Spec.Prefix
+		log := log.WithValues("LB Target", prefix)
+		if err := func() error {
+			log.V(1).Info("Removing lb targets route if exists")
+			if err := r.removeLBTargetRouteIfExists(ctx, vni, prefix, prefixItem.Spec.UnderlayRoute); err != nil {
+				return err
+			}
+			log.V(1).Info("Removed lb target route if existed")
+
+			log.V(1).Info("Removing dpdk lb target if exists")
+			if err := r.deleteDPDKLBTargetIfExists(ctx, nic.UID, prefix); err != nil {
+				return err
+			}
+			log.V(1).Info("Removed dpdk lb target if existed")
+			return nil
+		}(); err != nil {
+			errs = append(errs, fmt.Errorf("[lb target %s] %w", prefix, err))
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("error(s) deleting lb target(s): %w", err)
+	}
+	return nil
 }
 
 func (r *NetworkInterfaceReconciler) deletePrefixes(
@@ -805,6 +1022,10 @@ func (r *NetworkInterfaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&source.Kind{Type: &metalnetv1alpha1.Network{}},
 			r.enqueueNetworkInterfacesReferencingNetwork(ctx, log),
 		).
+		Watches(
+			&source.Kind{Type: &metalnetv1alpha1.LoadBalancer{}},
+			r.enqueueNetworkInterfacesReferencingLoadBalancer(ctx, log),
+		).
 		Complete(r)
 }
 
@@ -817,6 +1038,26 @@ func (r *NetworkInterfaceReconciler) enqueueNetworkInterfacesReferencingNetwork(
 			client.MatchingFields{metalnetclient.NetworkInterfaceNetworkRefNameField: network.Name},
 		); err != nil {
 			log.Error(err, "Error listing network interfaces referencing network", "NetworkKey", client.ObjectKeyFromObject(network))
+			return nil
+		}
+
+		reqs := make([]ctrl.Request, len(nicList.Items))
+		for i, nic := range nicList.Items {
+			reqs[i] = ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&nic)}
+		}
+		return reqs
+	})
+}
+
+func (r *NetworkInterfaceReconciler) enqueueNetworkInterfacesReferencingLoadBalancer(ctx context.Context, log logr.Logger) handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(func(obj client.Object) []ctrl.Request {
+		loadBalancer := obj.(*metalnetv1alpha1.LoadBalancer)
+		nicList := &metalnetv1alpha1.NetworkInterfaceList{}
+		if err := r.List(ctx, nicList,
+			client.InNamespace(loadBalancer.Namespace),
+			client.MatchingFields{metalnetclient.LoadBalancerNetworkRefNameField: loadBalancer.Spec.NetworkRef.Name},
+		); err != nil {
+			log.Error(err, "Error listing network interfaces referencing loadbalancer", "NetworkKey", client.ObjectKeyFromObject(loadBalancer))
 			return nil
 		}
 

@@ -63,7 +63,7 @@ spec:
                   type: string
                 type: array
               loadBalancerTargets:
-                description: Loadbalancer Targets are the provided LBPrefix
+                description: Loadbalancer Targets are the provided Prefix
                 items:
                   type: string
                 type: array

@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
-	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -286,9 +285,8 @@ func (r *LoadBalancerReconciler) applyLoadBalancer(ctx context.Context, log logr
 
 		var ports []dpdk.DpLoadBalancerPort
 		for _, LBPort := range lb.Spec.Ports {
-			intPort, _ := strconv.ParseUint(LBPort.Port, 10, 64)
 			port := dpdk.DpLoadBalancerPort{
-				Port:     uint32(intPort),
+				Port:     uint32(LBPort.Port),
 				Protocol: LBPort.Protocol,
 			}
 			ports = append(ports, port)

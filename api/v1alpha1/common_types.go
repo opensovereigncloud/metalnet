@@ -35,7 +35,7 @@ type LocalUIDReference struct {
 // LBPort consists of port and protocol
 type LBPort struct {
 	Protocol string `json:"protocol"`
-	Port     string `json:"port"`
+	Port     int    `json:"port"`
 }
 
 // IP is an IP address.

@@ -71,7 +71,7 @@ spec:
                   description: LBPort consists of port and protocol
                   properties:
                     port:
-                      type: string
+                      type: integer
                     protocol:
                       type: string
                   required:

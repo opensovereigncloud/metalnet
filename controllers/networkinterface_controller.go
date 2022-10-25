@@ -626,7 +626,7 @@ func (r *NetworkInterfaceReconciler) reconcileLBTargets(ctx context.Context, log
 
 	specPrefixes := set.New[netip.Prefix]()
 	for _, specPrefix := range nic.Spec.LoadBalancerTargets {
-		specPrefixes.Insert(netip.MustParsePrefix(specPrefix.Prefix))
+		specPrefixes.Insert(specPrefix.Prefix)
 	}
 
 	// Sort prefixes to have deterministic error event output

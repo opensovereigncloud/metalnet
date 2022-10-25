@@ -164,13 +164,6 @@ type IPPrefix struct {
 	netip.Prefix `json:"-"`
 }
 
-// TODO define this as netip.Prefix but this
-// generates an error in Deepcopy ?
-// LBPrefix represents a network prefix.
-type LBPrefix struct {
-	Prefix string `json:"prefix,omitempty"`
-}
-
 func (i IPPrefix) GomegaString() string {
 	return i.String()
 }

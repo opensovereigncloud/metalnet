@@ -65,12 +65,7 @@ spec:
               loadBalancerTargets:
                 description: Loadbalancer Targets are the provided LBPrefix
                 items:
-                  description: TODO define this as netip.Prefix but this generates
-                    an error in Deepcopy ? LBPrefix represents a network prefix.
-                  properties:
-                    prefix:
-                      type: string
-                  type: object
+                  type: string
                 type: array
               networkRef:
                 description: NetworkRef is the Network this NetworkInterface is connected
@@ -104,12 +99,7 @@ spec:
                 description: LoadBalancerTargets are the Targets reserved for this
                   NetworkInterface
                 items:
-                  description: TODO define this as netip.Prefix but this generates
-                    an error in Deepcopy ? LBPrefix represents a network prefix.
-                  properties:
-                    prefix:
-                      type: string
-                  type: object
+                  type: string
                 type: array
               pciAddress:
                 description: PCIAddress is a PCI address.

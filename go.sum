@@ -419,6 +419,8 @@ github.com/onmetal/controller-utils v0.6.3 h1:VRZt9ubnbnF/v7ADP+3uOKqaR8LRLFdKtn
 github.com/onmetal/controller-utils v0.6.3/go.mod h1:U5AzcYhIjRIcMMFkYaoLGQRt5CDwF/FQcD91a9nGsYE=
 github.com/onmetal/metalbond v0.3.0 h1:0DYDXvZSby000t/YszeX1d/sEuEtopiwC9lJzcGJZOE=
 github.com/onmetal/metalbond v0.3.0/go.mod h1:p2IZjdEX/YqdIp3McpWyVM8syVyDhk4DCe8M98My6rU=
+github.com/onmetal/net-dpservice-go v0.1.8 h1:ofZLUgzCUuMlTUPhnjXWp0RTQJYmE/h7vKadAYb3zAY=
+github.com/onmetal/net-dpservice-go v0.1.8/go.mod h1:xclo8jzH6XJsWuz1WB/ivgSYLii5PqufJQ3jr77SD5k=
 github.com/onsi/ginkgo v0.0.0-20170829012221-11459a886d9c/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+WWjE=
 github.com/onsi/ginkgo v1.6.0/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+WWjE=
 github.com/onsi/ginkgo v1.12.1/go.mod h1:zj2OWP4+oCPe1qIXoGWkgMRwljMUYCdkwsT2108oapk=

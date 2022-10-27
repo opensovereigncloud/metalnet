@@ -308,19 +308,19 @@ func (r *NetworkInterfaceReconciler) deleteDPDKInterfaceIfExists(ctx context.Con
 	return nil
 }
 
-func (r *NetworkInterfaceReconciler) reconcileNATIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, underlayRoute netip.Addr) error {
+func (r *NetworkInterfaceReconciler) reconcileNATIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, underlayRoute netip.Addr, vni uint32) error {
 	if nic.Spec.NATInfo.NatIP != nil {
 		natIP := nic.Spec.NATInfo.NatIP.Addr
 		log = log.WithValues("NatIP", natIP)
 		log.V(1).Info("Apply nat ip")
-		return r.applyNATIP(ctx, log, nic, natIP, underlayRoute)
+		return r.applyNATIP(ctx, log, nic, natIP, underlayRoute, vni)
 	}
 
 	log.V(1).Info("Delete nat ip")
-	return r.deleteNATIP(ctx, log, nic, underlayRoute)
+	return r.deleteNATIP(ctx, log, nic, underlayRoute, vni)
 }
 
-func (r *NetworkInterfaceReconciler) applyNATIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, natIP, underlayRoute netip.Addr) error {
+func (r *NetworkInterfaceReconciler) applyNATIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, natIP, underlayRoute netip.Addr, vni uint32) error {
 	log.V(1).Info("Getting dpdk nat ip")
 	dpdkNAT, err := r.DPDK.GetNATLocal(ctx, nic.UID)
 	if err != nil {
@@ -329,13 +329,13 @@ func (r *NetworkInterfaceReconciler) applyNATIP(ctx context.Context, log logr.Lo
 		}
 
 		log.V(1).Info("DPDK nat ip does not exist, creating it")
-		return r.createNATIP(ctx, log, nic, natIP, underlayRoute)
+		return r.createNATIP(ctx, log, nic, natIP, underlayRoute, vni)
 	}
 
 	existingNATIP := dpdkNAT.Spec.Address
 	if existingNATIP == natIP && dpdkNAT.Spec.MinPort == uint32(nic.Spec.NATInfo.Port) && dpdkNAT.Spec.MaxPort == uint32(nic.Spec.NATInfo.EndPort) {
 		log.V(1).Info("DPDK nat ip is up-to-date, adding metalbond route if not exists")
-		if err := r.addNATIPRouteIfNotExists(ctx, dpdkNAT, underlayRoute); err != nil {
+		if err := r.addNATIPRouteIfNotExists(ctx, dpdkNAT, underlayRoute, vni); err != nil {
 			return err
 		}
 		log.V(1).Info("Ensured metalbond route exists")
@@ -345,20 +345,20 @@ func (r *NetworkInterfaceReconciler) applyNATIP(ctx context.Context, log logr.Lo
 	log.V(1).Info("NAT ip and/or NAT ports are not up-to-date", "ExistingNATIP", existingNATIP, "MinPort", dpdkNAT.Spec.MinPort, "MaxPort", dpdkNAT.Spec.MaxPort)
 
 	log.V(1).Info("Delete existing nat ip")
-	if err := r.deleteExistingNATIP(ctx, log, nic, dpdkNAT, underlayRoute); err != nil {
+	if err := r.deleteExistingNATIP(ctx, log, nic, dpdkNAT, underlayRoute, vni); err != nil {
 		return err
 	}
 	log.V(1).Info("Deleted existing nat ip")
 
 	log.V(1).Info("Creating nat ip")
-	if err := r.createNATIP(ctx, log, nic, natIP, underlayRoute); err != nil {
+	if err := r.createNATIP(ctx, log, nic, natIP, underlayRoute, vni); err != nil {
 		return err
 	}
 	log.V(1).Info("Created nat ip")
 	return nil
 }
 
-func (r *NetworkInterfaceReconciler) createNATIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, natIP, underlayRoute netip.Addr) error {
+func (r *NetworkInterfaceReconciler) createNATIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, natIP, underlayRoute netip.Addr, vni uint32) error {
 	natLocal, err := r.DPDK.CreateNATLocal(ctx, &dpdk.NATLocal{
 		NATLocalMetadata: dpdk.NATLocalMetadata{InterfaceUID: nic.UID},
 		Spec: dpdk.NATLocalSpec{Address: natIP,
@@ -369,14 +369,14 @@ func (r *NetworkInterfaceReconciler) createNATIP(ctx context.Context, log logr.L
 		return fmt.Errorf("error creating dpdk nat ip: %w", err)
 	}
 	log.V(1).Info("Adding nat ip route if not exists")
-	if err := r.addNATIPRouteIfNotExists(ctx, natLocal, underlayRoute); err != nil {
+	if err := r.addNATIPRouteIfNotExists(ctx, natLocal, underlayRoute, vni); err != nil {
 		return err
 	}
 	log.V(1).Info("Added nat ip route if not existed")
 	return nil
 }
 
-func (r *NetworkInterfaceReconciler) deleteNATIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, underlayRoute netip.Addr) error {
+func (r *NetworkInterfaceReconciler) deleteNATIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, underlayRoute netip.Addr, vni uint32) error {
 	log.V(1).Info("Getting dpdk nat ip if exists")
 	dpdkVIP, err := r.DPDK.GetNATLocal(ctx, nic.UID)
 	if err != nil {
@@ -390,12 +390,12 @@ func (r *NetworkInterfaceReconciler) deleteNATIP(ctx context.Context, log logr.L
 
 	natIP := dpdkVIP.Spec.Address
 	log.V(1).Info("NAT ip exists", "ExistingNATIP", natIP)
-	return r.deleteExistingNATIP(ctx, log, nic, dpdkVIP, underlayRoute)
+	return r.deleteExistingNATIP(ctx, log, nic, dpdkVIP, underlayRoute, vni)
 }
 
-func (r *NetworkInterfaceReconciler) deleteExistingNATIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, natLocal *dpdk.NATLocal, underlayRoute netip.Addr) error {
+func (r *NetworkInterfaceReconciler) deleteExistingNATIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, natLocal *dpdk.NATLocal, underlayRoute netip.Addr, vni uint32) error {
 	log.V(1).Info("Removing nat ip route if exists")
-	if err := r.removeNATIPRouteIfExists(ctx, natLocal, underlayRoute); err != nil {
+	if err := r.removeNATIPRouteIfExists(ctx, natLocal, underlayRoute, vni); err != nil {
 		return err
 	}
 	log.V(1).Info("Removed nat ip route fi existed")
@@ -415,8 +415,17 @@ func (r *NetworkInterfaceReconciler) deleteDPDKNATIPIfExists(ctx context.Context
 	return nil
 }
 
-func (r *NetworkInterfaceReconciler) removeNATIPRouteIfExists(ctx context.Context, natLocal *dpdk.NATLocal, underlayRoute netip.Addr) error {
+func (r *NetworkInterfaceReconciler) removeNATIPRouteIfExists(ctx context.Context, natLocal *dpdk.NATLocal, underlayRoute netip.Addr, vni uint32) error {
 	if err := r.Metalbond.RemoveRoute(ctx, metalbond.VNI(r.PublicVNI), metalbond.Destination{
+		Prefix: NetIPAddrPrefix(natLocal.Spec.Address),
+	}, metalbond.NextHop{
+		TargetAddress: underlayRoute,
+		TargetVNI:     0,
+		TargetHopType: pb.NextHopType_STANDARD,
+	}); metalbond.IgnoreNextHopNotFoundError(err) != nil {
+		return fmt.Errorf("error removing metalbond route: %w", err)
+	}
+	if err := r.Metalbond.RemoveRoute(ctx, metalbond.VNI(vni), metalbond.Destination{
 		Prefix: NetIPAddrPrefix(natLocal.Spec.Address),
 	}, metalbond.NextHop{
 		TargetAddress:    underlayRoute,
@@ -430,8 +439,17 @@ func (r *NetworkInterfaceReconciler) removeNATIPRouteIfExists(ctx context.Contex
 	return nil
 }
 
-func (r *NetworkInterfaceReconciler) addNATIPRouteIfNotExists(ctx context.Context, natLocal *dpdk.NATLocal, underlayRoute netip.Addr) error {
+func (r *NetworkInterfaceReconciler) addNATIPRouteIfNotExists(ctx context.Context, natLocal *dpdk.NATLocal, underlayRoute netip.Addr, vni uint32) error {
 	if err := r.Metalbond.AddRoute(ctx, metalbond.VNI(r.PublicVNI), metalbond.Destination{
+		Prefix: NetIPAddrPrefix(natLocal.Spec.Address),
+	}, metalbond.NextHop{
+		TargetAddress: underlayRoute,
+		TargetVNI:     0,
+		TargetHopType: pb.NextHopType_STANDARD,
+	}); metalbond.IgnoreNextHopAlreadyExistsError(err) != nil {
+		return fmt.Errorf("error adding metalbond route: %w", err)
+	}
+	if err := r.Metalbond.AddRoute(ctx, metalbond.VNI(vni), metalbond.Destination{
 		Prefix: NetIPAddrPrefix(natLocal.Spec.Address),
 	}, metalbond.NextHop{
 		TargetAddress:    underlayRoute,
@@ -605,7 +623,7 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 	}
 
 	log.V(1).Info("Reconciling nat ip")
-	natIPErr := r.reconcileNATIP(ctx, log, nic, underlayRoute)
+	natIPErr := r.reconcileNATIP(ctx, log, nic, underlayRoute, vni)
 	if natIPErr != nil {
 		errs = append(errs, fmt.Errorf("error reconciling nat ip: %w", natIPErr))
 		log.Error(natIPErr, "Error reconciling nat ip")
@@ -1022,7 +1040,7 @@ func (r *NetworkInterfaceReconciler) delete(ctx context.Context, log logr.Logger
 	log.V(1).Info("Deleted lb targets")
 
 	log.V(1).Info("Deleting nat ip")
-	if err := r.deleteNATIP(ctx, log, nic, underlayRoute); err != nil {
+	if err := r.deleteNATIP(ctx, log, nic, underlayRoute, vni); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error deleting nat ip: %w", err)
 	}
 	log.V(1).Info("Deleted nat ip")

@@ -56,6 +56,30 @@ type Client interface {
 	GetNATLocal(ctx context.Context, uid types.UID) (*NATLocal, error)
 	CreateNATLocal(ctx context.Context, nl *NATLocal) (*NATLocal, error)
 	DeleteNATLocal(ctx context.Context, uid types.UID) error
+
+	CreateNATRoute(ctx context.Context, route *NATRoute) (*NATRoute, error)
+	DeleteNATRoute(ctx context.Context, route *NATRoute) error
+}
+
+type NATRoute struct {
+	NATRouteMetadata
+	Spec NATRouteSpec
+}
+
+type NATRouteMetadata struct {
+	VNI uint32
+}
+
+type NATRouteSpec struct {
+	Prefix  netip.Prefix
+	NextHop NATRouteNextHop
+}
+
+type NATRouteNextHop struct {
+	VNI     uint32
+	Address netip.Addr
+	MinPort uint16
+	MaxPort uint16
 }
 
 type Route struct {
@@ -780,6 +804,44 @@ func (c *client) DeleteRoute(ctx context.Context, route *Route) error {
 			NexthopVNI:     route.Spec.NextHop.VNI,
 			NexthopAddress: []byte(route.Spec.NextHop.Address.String()),
 		},
+	})
+	if err != nil {
+		return err
+	}
+	if errorCode := res.GetError(); errorCode != 0 {
+		return &StatusError{errorCode: errorCode, message: res.GetMessage()}
+	}
+	return nil
+}
+
+func (c *client) CreateNATRoute(ctx context.Context, route *NATRoute) (*NATRoute, error) {
+	res, err := c.DPDKonmetalClient.AddNeighborNAT(ctx, &dpdkproto.AddNeighborNATRequest{
+		Vni: route.VNI,
+		NatVIPIP: &dpdkproto.NATIP{
+			IpVersion: netipAddrToDPDKIPVersion(route.Spec.Prefix.Addr()),
+			Address:   []byte(route.Spec.Prefix.String()),
+		},
+		MinPort: uint32(route.Spec.NextHop.MinPort),
+		MaxPort: uint32(route.Spec.NextHop.MaxPort),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if errorCode := res.GetError(); errorCode != 0 {
+		return nil, &StatusError{errorCode: errorCode, message: res.GetMessage()}
+	}
+	return route, nil
+}
+
+func (c *client) DeleteNATRoute(ctx context.Context, route *NATRoute) error {
+	res, err := c.DPDKonmetalClient.DeleteNeighborNAT(ctx, &dpdkproto.DeleteNeighborNATRequest{
+		Vni: route.VNI,
+		NatVIPIP: &dpdkproto.NATIP{
+			IpVersion: netipAddrToDPDKIPVersion(route.Spec.Prefix.Addr()),
+			Address:   []byte(route.Spec.Prefix.String()),
+		},
+		MinPort: uint32(route.Spec.NextHop.MinPort),
+		MaxPort: uint32(route.Spec.NextHop.MaxPort),
 	})
 	if err != nil {
 		return err

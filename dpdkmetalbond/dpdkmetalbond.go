@@ -85,6 +85,26 @@ func (c *Client) AddRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error
 		return nil
 	}
 
+	if hop.Type == mbproto.NextHopType_NAT {
+		if _, err := c.dpdk.CreateNATRoute(ctx, &dpdk.NATRoute{
+			NATRouteMetadata: dpdk.NATRouteMetadata{
+				VNI: uint32(vni),
+			},
+			Spec: dpdk.NATRouteSpec{
+				Prefix: dest.Prefix,
+				NextHop: dpdk.NATRouteNextHop{
+					VNI:     uint32(vni),
+					Address: hop.TargetAddress,
+					MinPort: hop.NATPortRangeFrom,
+					MaxPort: hop.NATPortRangeTo,
+				},
+			},
+		}); dpdk.IgnoreStatusErrorCode(err, dpdk.ADD_NEIGHNAT_EXIST) != nil {
+			return fmt.Errorf("error nat route: %w", err)
+		}
+		return nil
+	}
+
 	prefix := &dpdkproto.Prefix{
 		PrefixLength: uint32(dest.Prefix.Bits()),
 	}
@@ -129,7 +149,27 @@ func (c *Client) RemoveRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) er
 				Address: hop.TargetAddress,
 			},
 		}); dpdk.IgnoreStatusErrorCode(err, dpdk.ADD_RT_FAIL4) != nil {
-			return fmt.Errorf("error creating lb route: %w", err)
+			return fmt.Errorf("error deleting lb route: %w", err)
+		}
+		return nil
+	}
+
+	if hop.Type == mbproto.NextHopType_NAT {
+		if err := c.dpdk.DeleteNATRoute(ctx, &dpdk.NATRoute{
+			NATRouteMetadata: dpdk.NATRouteMetadata{
+				VNI: uint32(vni),
+			},
+			Spec: dpdk.NATRouteSpec{
+				Prefix: dest.Prefix,
+				NextHop: dpdk.NATRouteNextHop{
+					VNI:     uint32(vni),
+					Address: hop.TargetAddress,
+					MinPort: hop.NATPortRangeFrom,
+					MaxPort: hop.NATPortRangeTo,
+				},
+			},
+		}); dpdk.IgnoreStatusErrorCode(err, dpdk.DEL_NEIGHNAT_NOFOUND) != nil {
+			return fmt.Errorf("error deleting nat route: %w", err)
 		}
 		return nil
 	}

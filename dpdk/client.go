@@ -52,6 +52,34 @@ type Client interface {
 	GetLoadBalancer(ctx context.Context, uid types.UID) (*DpLoadBalancer, error)
 	CreateLoadBalancer(ctx context.Context, lb *DpLoadBalancer) (*DpLoadBalancer, error)
 	DeleteLoadBalancer(ctx context.Context, uid types.UID) error
+
+	GetNATLocal(ctx context.Context, uid types.UID) (*NATLocal, error)
+	CreateNATLocal(ctx context.Context, nl *NATLocal) (*NATLocal, error)
+	DeleteNATLocal(ctx context.Context, uid types.UID) error
+
+	CreateNATRoute(ctx context.Context, route *NATRoute) (*NATRoute, error)
+	DeleteNATRoute(ctx context.Context, route *NATRoute) error
+}
+
+type NATRoute struct {
+	NATRouteMetadata
+	Spec NATRouteSpec
+}
+
+type NATRouteMetadata struct {
+	VNI uint32
+}
+
+type NATRouteSpec struct {
+	Prefix  netip.Prefix
+	NextHop NATRouteNextHop
+}
+
+type NATRouteNextHop struct {
+	VNI     uint32
+	Address netip.Addr
+	MinPort uint16
+	MaxPort uint16
 }
 
 type Route struct {
@@ -102,6 +130,21 @@ type VirtualIPMetadata struct {
 
 type VirtualIPSpec struct {
 	Address netip.Addr
+}
+
+type NATLocal struct {
+	NATLocalMetadata
+	Spec NATLocalSpec
+}
+
+type NATLocalMetadata struct {
+	InterfaceUID types.UID
+}
+
+type NATLocalSpec struct {
+	Address netip.Addr
+	MinPort uint32
+	MaxPort uint32
 }
 
 type LBTargetIP struct {
@@ -357,6 +400,24 @@ func dpdkVirtualIPToVirtualIP(interfaceUID types.UID, dpdkVIP *dpdkproto.Interfa
 	}, nil
 }
 
+func dpdkNATLocalToNATLocal(interfaceUID types.UID, dpdkNAT *dpdkproto.GetNATResponse) (*NATLocal, error) {
+	addr, err := netip.ParseAddr(string(dpdkNAT.NatVIPIP.GetAddress()))
+	if err != nil {
+		return nil, fmt.Errorf("error parsing virtual ip address: %w", err)
+	}
+
+	return &NATLocal{
+		NATLocalMetadata: NATLocalMetadata{
+			InterfaceUID: interfaceUID,
+		},
+		Spec: NATLocalSpec{
+			Address: addr,
+			MinPort: dpdkNAT.MinPort,
+			MaxPort: dpdkNAT.MaxPort,
+		},
+	}, nil
+}
+
 func (c *client) GetVirtualIP(ctx context.Context, interfaceUID types.UID) (*VirtualIP, error) {
 	res, err := c.DPDKonmetalClient.GetInterfaceVIP(ctx, &dpdkproto.InterfaceIDMsg{
 		InterfaceID: []byte(interfaceUID),
@@ -391,6 +452,53 @@ func (c *client) CreateVirtualIP(ctx context.Context, virtualIP *VirtualIP) (*Vi
 
 func (c *client) DeleteVirtualIP(ctx context.Context, interfaceUID types.UID) error {
 	res, err := c.DPDKonmetalClient.DeleteInterfaceVIP(ctx, &dpdkproto.InterfaceIDMsg{
+		InterfaceID: []byte(interfaceUID),
+	})
+	if err != nil {
+		return err
+	}
+	if errorCode := res.GetError(); errorCode != 0 {
+		return &StatusError{errorCode: errorCode, message: res.GetMessage()}
+	}
+	return nil
+}
+
+func (c *client) GetNATLocal(ctx context.Context, interfaceUID types.UID) (*NATLocal, error) {
+	res, err := c.DPDKonmetalClient.GetNAT(ctx, &dpdkproto.GetNATRequest{
+		InterfaceID: []byte(interfaceUID),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if errorCode := res.GetStatus().GetError(); errorCode != 0 {
+		return nil, &StatusError{errorCode: errorCode, message: res.GetStatus().GetMessage()}
+	}
+
+	return dpdkNATLocalToNATLocal(interfaceUID, res)
+}
+
+func (c *client) CreateNATLocal(ctx context.Context, nl *NATLocal) (*NATLocal, error) {
+	res, err := c.DPDKonmetalClient.AddNAT(ctx, &dpdkproto.AddNATRequest{
+		InterfaceID: []byte(nl.InterfaceUID),
+		NatVIPIP: &dpdkproto.NATIP{
+			IpVersion: netipAddrToDPDKIPVersion(nl.Spec.Address),
+			Address:   []byte(nl.Spec.Address.String()),
+		},
+		MinPort: nl.Spec.MinPort,
+		MaxPort: nl.Spec.MaxPort,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if errorCode := res.GetStatus().GetError(); errorCode != 0 {
+		return nil, &StatusError{errorCode: errorCode, message: res.GetStatus().GetMessage()}
+	}
+
+	return nl, nil
+}
+
+func (c *client) DeleteNATLocal(ctx context.Context, interfaceUID types.UID) error {
+	res, err := c.DPDKonmetalClient.DeleteNAT(ctx, &dpdkproto.DeleteNATRequest{
 		InterfaceID: []byte(interfaceUID),
 	})
 	if err != nil {
@@ -696,6 +804,44 @@ func (c *client) DeleteRoute(ctx context.Context, route *Route) error {
 			NexthopVNI:     route.Spec.NextHop.VNI,
 			NexthopAddress: []byte(route.Spec.NextHop.Address.String()),
 		},
+	})
+	if err != nil {
+		return err
+	}
+	if errorCode := res.GetError(); errorCode != 0 {
+		return &StatusError{errorCode: errorCode, message: res.GetMessage()}
+	}
+	return nil
+}
+
+func (c *client) CreateNATRoute(ctx context.Context, route *NATRoute) (*NATRoute, error) {
+	res, err := c.DPDKonmetalClient.AddNeighborNAT(ctx, &dpdkproto.AddNeighborNATRequest{
+		Vni: route.VNI,
+		NatVIPIP: &dpdkproto.NATIP{
+			IpVersion: netipAddrToDPDKIPVersion(route.Spec.Prefix.Addr()),
+			Address:   []byte(route.Spec.Prefix.String()),
+		},
+		MinPort: uint32(route.Spec.NextHop.MinPort),
+		MaxPort: uint32(route.Spec.NextHop.MaxPort),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if errorCode := res.GetError(); errorCode != 0 {
+		return nil, &StatusError{errorCode: errorCode, message: res.GetMessage()}
+	}
+	return route, nil
+}
+
+func (c *client) DeleteNATRoute(ctx context.Context, route *NATRoute) error {
+	res, err := c.DPDKonmetalClient.DeleteNeighborNAT(ctx, &dpdkproto.DeleteNeighborNATRequest{
+		Vni: route.VNI,
+		NatVIPIP: &dpdkproto.NATIP{
+			IpVersion: netipAddrToDPDKIPVersion(route.Spec.Prefix.Addr()),
+			Address:   []byte(route.Spec.Prefix.String()),
+		},
+		MinPort: uint32(route.Spec.NextHop.MinPort),
+		MaxPort: uint32(route.Spec.NextHop.MaxPort),
 	})
 	if err != nil {
 		return err

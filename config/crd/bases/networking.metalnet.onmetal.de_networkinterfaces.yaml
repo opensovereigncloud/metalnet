@@ -67,6 +67,21 @@ spec:
                 items:
                   type: string
                 type: array
+              nat:
+                description: NATInfo is detailed information about the NAT on this
+                  interface
+                properties:
+                  endPort:
+                    type: integer
+                  ip:
+                    type: string
+                  port:
+                    type: integer
+                required:
+                - endPort
+                - ip
+                - port
+                type: object
               networkRef:
                 description: NetworkRef is the Network this NetworkInterface is connected
                   to
@@ -101,6 +116,9 @@ spec:
                 items:
                   type: string
                 type: array
+              natIP:
+                description: NatIP is any nat ip assigned to the NetworkInterface.
+                type: string
               pciAddress:
                 description: PCIAddress is a PCI address.
                 properties:

@@ -309,8 +309,8 @@ func (r *NetworkInterfaceReconciler) deleteDPDKInterfaceIfExists(ctx context.Con
 }
 
 func (r *NetworkInterfaceReconciler) reconcileNATIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, underlayRoute netip.Addr, vni uint32) error {
-	if nic.Spec.NATInfo.NatIP != nil {
-		natIP := nic.Spec.NATInfo.NatIP.Addr
+	if nic.Spec.NAT.IP != nil {
+		natIP := nic.Spec.NAT.IP.Addr
 		log = log.WithValues("NatIP", natIP)
 		log.V(1).Info("Apply nat ip")
 		return r.applyNATIP(ctx, log, nic, natIP, underlayRoute, vni)
@@ -333,7 +333,7 @@ func (r *NetworkInterfaceReconciler) applyNATIP(ctx context.Context, log logr.Lo
 	}
 
 	existingNATIP := dpdkNAT.Spec.Address
-	if existingNATIP == natIP && dpdkNAT.Spec.MinPort == uint32(nic.Spec.NATInfo.Port) && dpdkNAT.Spec.MaxPort == uint32(nic.Spec.NATInfo.EndPort) {
+	if existingNATIP == natIP && dpdkNAT.Spec.MinPort == uint32(nic.Spec.NAT.Port) && dpdkNAT.Spec.MaxPort == uint32(nic.Spec.NAT.EndPort) {
 		log.V(1).Info("DPDK nat ip is up-to-date, adding metalbond route if not exists")
 		if err := r.addNATIPRouteIfNotExists(ctx, dpdkNAT, underlayRoute, vni); err != nil {
 			return err
@@ -362,8 +362,8 @@ func (r *NetworkInterfaceReconciler) createNATIP(ctx context.Context, log logr.L
 	natLocal, err := r.DPDK.CreateNATLocal(ctx, &dpdk.NATLocal{
 		NATLocalMetadata: dpdk.NATLocalMetadata{InterfaceUID: nic.UID},
 		Spec: dpdk.NATLocalSpec{Address: natIP,
-			MinPort: uint32(nic.Spec.NATInfo.Port),
-			MaxPort: uint32(nic.Spec.NATInfo.EndPort)},
+			MinPort: uint32(nic.Spec.NAT.Port),
+			MaxPort: uint32(nic.Spec.NAT.EndPort)},
 	})
 	if err != nil {
 		return fmt.Errorf("error creating dpdk nat ip: %w", err)
@@ -665,7 +665,7 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 			nic.Status.VirtualIP = nic.Spec.VirtualIP
 		}
 		if natIPErr != nil {
-			nic.Status.NatIP = nic.Spec.NATInfo.NatIP
+			nic.Status.NatIP = nic.Spec.NAT.IP
 		}
 		if prefixesErr != nil {
 			nic.Status.Prefixes = nic.Spec.Prefixes

@@ -67,19 +67,19 @@ spec:
                 items:
                   type: string
                 type: array
-              natInfo:
+              nat:
                 description: NATInfo is detailed information about the NAT on this
                   interface
                 properties:
                   endPort:
                     type: integer
-                  natIP:
+                  ip:
                     type: string
                   port:
                     type: integer
                 required:
                 - endPort
-                - natIP
+                - ip
                 - port
                 type: object
               networkRef:

@@ -40,7 +40,7 @@ type LBPort struct {
 
 // LBPort consists of port and protocol
 type NATDetails struct {
-	NatIP   *IP `json:"natIP"`
+	IP      *IP `json:"ip"`
 	Port    int `json:"port"`
 	EndPort int `json:"endPort"`
 }

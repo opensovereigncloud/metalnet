@@ -55,9 +55,11 @@ type Destination struct {
 }
 
 type NextHop struct {
-	TargetAddress netip.Addr
-	TargetVNI     VNI
-	TargetHopType pb.NextHopType
+	TargetAddress    netip.Addr
+	TargetVNI        VNI
+	TargetHopType    pb.NextHopType
+	TargetNATMinPort uint16
+	TargetNATMaxPort uint16
 }
 
 func (c *client) AddRoute(_ context.Context, vni VNI, destination Destination, nextHop NextHop) error {
@@ -65,9 +67,11 @@ func (c *client) AddRoute(_ context.Context, vni VNI, destination Destination, n
 		IPVersion: netIPAddrIPVersion(destination.Prefix.Addr()),
 		Prefix:    destination.Prefix,
 	}, metalbond.NextHop{
-		TargetAddress: nextHop.TargetAddress,
-		TargetVNI:     uint32(nextHop.TargetVNI),
-		Type:          nextHop.TargetHopType,
+		TargetAddress:    nextHop.TargetAddress,
+		TargetVNI:        uint32(nextHop.TargetVNI),
+		Type:             nextHop.TargetHopType,
+		NATPortRangeFrom: nextHop.TargetNATMinPort,
+		NATPortRangeTo:   nextHop.TargetNATMaxPort,
 	})
 }
 
@@ -76,9 +80,11 @@ func (c *client) RemoveRoute(_ context.Context, vni VNI, destination Destination
 		IPVersion: netIPAddrIPVersion(destination.Prefix.Addr()),
 		Prefix:    destination.Prefix,
 	}, metalbond.NextHop{
-		TargetAddress: nextHop.TargetAddress,
-		TargetVNI:     uint32(nextHop.TargetVNI),
-		Type:          nextHop.TargetHopType,
+		TargetAddress:    nextHop.TargetAddress,
+		TargetVNI:        uint32(nextHop.TargetVNI),
+		Type:             nextHop.TargetHopType,
+		NATPortRangeFrom: nextHop.TargetNATMinPort,
+		NATPortRangeTo:   nextHop.TargetNATMaxPort,
 	})
 }
 

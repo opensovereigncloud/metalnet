@@ -102,3 +102,5 @@ require (
 )
 
 replace github.com/vishvananda/netlink => github.com/byteocean/netlink v1.1.1-0.20220608143109-d6cf8228de69
+
+replace github.com/onmetal/net-dpservice-go => ../net-dpservice-go/

@@ -38,6 +38,13 @@ type LBPort struct {
 	Port     int    `json:"port"`
 }
 
+// LBPort consists of port and protocol
+type NATDetails struct {
+	NatIP   *IP `json:"natIP"`
+	Port    int `json:"port"`
+	EndPort int `json:"endPort"`
+}
+
 // IP is an IP address.
 // +kubebuilder:validation:Type=string
 type IP struct {

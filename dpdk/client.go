@@ -774,7 +774,7 @@ func (c *client) CreateRoute(ctx context.Context, route *Route) (*Route, error) 
 			Weight:    100,
 			Prefix: &dpdkproto.Prefix{
 				IpVersion:    netipAddrToDPDKIPVersion(route.Spec.Prefix.Addr()),
-				Address:      []byte(route.Spec.Prefix.String()),
+				Address:      []byte(route.Spec.Prefix.Addr().String()),
 				PrefixLength: uint32(route.Spec.Prefix.Bits()),
 			},
 			NexthopVNI:     route.Spec.NextHop.VNI,
@@ -798,7 +798,7 @@ func (c *client) DeleteRoute(ctx context.Context, route *Route) error {
 			Weight:    100,
 			Prefix: &dpdkproto.Prefix{
 				IpVersion:    netipAddrToDPDKIPVersion(route.Spec.Prefix.Addr()),
-				Address:      []byte(route.Spec.Prefix.String()),
+				Address:      []byte(route.Spec.Prefix.Addr().String()),
 				PrefixLength: uint32(route.Spec.Prefix.Bits()),
 			},
 			NexthopVNI:     route.Spec.NextHop.VNI,
@@ -819,7 +819,7 @@ func (c *client) CreateNATRoute(ctx context.Context, route *NATRoute) (*NATRoute
 		Vni: route.VNI,
 		NatVIPIP: &dpdkproto.NATIP{
 			IpVersion: netipAddrToDPDKIPVersion(route.Spec.Prefix.Addr()),
-			Address:   []byte(route.Spec.Prefix.String()),
+			Address:   []byte(route.Spec.Prefix.Addr().String()),
 		},
 		MinPort: uint32(route.Spec.NextHop.MinPort),
 		MaxPort: uint32(route.Spec.NextHop.MaxPort),
@@ -838,7 +838,7 @@ func (c *client) DeleteNATRoute(ctx context.Context, route *NATRoute) error {
 		Vni: route.VNI,
 		NatVIPIP: &dpdkproto.NATIP{
 			IpVersion: netipAddrToDPDKIPVersion(route.Spec.Prefix.Addr()),
-			Address:   []byte(route.Spec.Prefix.String()),
+			Address:   []byte(route.Spec.Prefix.Addr().String()),
 		},
 		MinPort: uint32(route.Spec.NextHop.MinPort),
 		MaxPort: uint32(route.Spec.NextHop.MaxPort),

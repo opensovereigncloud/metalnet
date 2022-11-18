@@ -309,7 +309,7 @@ func (r *NetworkInterfaceReconciler) deleteDPDKInterfaceIfExists(ctx context.Con
 }
 
 func (r *NetworkInterfaceReconciler) reconcileNATIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, underlayRoute netip.Addr, vni uint32) error {
-	if nic.Spec.NAT.IP != nil {
+	if nic.Spec.NAT != nil && nic.Spec.NAT.IP != nil {
 		natIP := nic.Spec.NAT.IP.Addr
 		log = log.WithValues("NatIP", natIP)
 		log.V(1).Info("Apply nat ip")

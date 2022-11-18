@@ -9,11 +9,11 @@ spec:
     - 10.0.0.2
   #virtualIP: 194.11.242.11
   nodeName: fra4-lab-dell-2
-  nat:
-    ip: 192.168.12.3
-    port: 1024
-    endPort: 1064
-  loadBalancerTargets:
-    - 12.12.12.11/32
+  # nat:
+  #   ip: 194.11.242.10
+  #   port: 1024
+  #   endPort: 1087
+  # loadBalancerTargets:
+  #   - 194.11.242.110/32
   networkRef:
     name: network-sample

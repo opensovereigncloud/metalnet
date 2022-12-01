@@ -821,8 +821,9 @@ func (c *client) CreateNATRoute(ctx context.Context, route *NATRoute) (*NATRoute
 			IpVersion: netipAddrToDPDKIPVersion(route.Spec.Prefix.Addr()),
 			Address:   []byte(route.Spec.Prefix.Addr().String()),
 		},
-		MinPort: uint32(route.Spec.NextHop.MinPort),
-		MaxPort: uint32(route.Spec.NextHop.MaxPort),
+		UnderlayRoute: []byte(route.Spec.NextHop.Address.String()),
+		MinPort:       uint32(route.Spec.NextHop.MinPort),
+		MaxPort:       uint32(route.Spec.NextHop.MaxPort),
 	})
 	if err != nil {
 		return nil, err

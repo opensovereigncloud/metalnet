@@ -948,7 +948,7 @@ func (r *NetworkInterfaceReconciler) convertToDPDKDevice(addr ghw.PCIAddress) (s
 		return "", fmt.Errorf("error parsing address function %s: %w", addr.Function, err)
 	}
 
-	pciDevice, err := strconv.ParseUint(addr.Device, 8, 64)
+	pciDevice, err := strconv.ParseUint(addr.Device, 16, 64)
 	if err != nil {
 		return "", fmt.Errorf("error parsing address device %s: %w", addr.Device, err)
 	}

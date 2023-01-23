@@ -93,7 +93,5 @@ func (c *client) Subscribe(_ context.Context, vni VNI) error {
 }
 
 func (c *client) Unsubscribe(_ context.Context, vni VNI) error {
-	// TODO: Check error as soon as it is implemented.
-	_ = c.metalbond.Unsubscribe(vni)
-	return nil
+	return c.metalbond.Unsubscribe(vni)
 }

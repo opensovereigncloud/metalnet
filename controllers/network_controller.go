@@ -131,6 +131,12 @@ func (r *NetworkReconciler) reconcile(ctx context.Context, log logr.Logger, netw
 	if err := r.createDefaultRouteIfNotExists(ctx, vni); err != nil {
 		if dpdk.IsStatusErrorCode(err, dpdk.ADD_RT_NO_VNI) {
 			log.V(1).Info("VNI doesn't exist in dp-service, requeueing")
+
+			log.V(1).Info("Unsubscribing from metalbond if subscribed")
+			if err := r.unsubscribeIfSubscribed(ctx, vni); err != nil {
+				log.V(1).Error(err, "Unsubscribing from metalbond failed")
+			}
+
 			return ctrl.Result{Requeue: true}, nil
 		}
 		return ctrl.Result{}, err
@@ -191,7 +197,7 @@ func (r *NetworkReconciler) subscribeIfNotSubscribed(ctx context.Context, vni ui
 
 func (r *NetworkReconciler) unsubscribeIfSubscribed(ctx context.Context, vni uint32) error {
 	if err := r.Metalbond.Unsubscribe(ctx, metalbond.VNI(vni)); metalbond.IgnoreNotSubscribedToVNIError(err) != nil {
-		return fmt.Errorf("error subscribing to vni: %w", err)
+		return fmt.Errorf("error unsubscribing from vni: %w", err)
 	}
 	return nil
 }

@@ -121,7 +121,8 @@ type PrefixSpec struct {
 
 type VirtualIP struct {
 	VirtualIPMetadata
-	Spec VirtualIPSpec
+	Spec   VirtualIPSpec
+	Status VirtualIPStatus
 }
 
 type VirtualIPMetadata struct {
@@ -130,6 +131,10 @@ type VirtualIPMetadata struct {
 
 type VirtualIPSpec struct {
 	Address netip.Addr
+}
+
+type VirtualIPStatus struct {
+	UnderlayRoute netip.Addr
 }
 
 type NATLocal struct {
@@ -390,12 +395,20 @@ func dpdkVirtualIPToVirtualIP(interfaceUID types.UID, dpdkVIP *dpdkproto.Interfa
 		return nil, fmt.Errorf("error parsing virtual ip address: %w", err)
 	}
 
+	underlayAddr, err := netip.ParseAddr(string(dpdkVIP.GetUnderlayRoute()))
+	if err != nil {
+		return nil, fmt.Errorf("error parsing underlay address of virtual ip address: %w", err)
+	}
+
 	return &VirtualIP{
 		VirtualIPMetadata: VirtualIPMetadata{
 			InterfaceUID: interfaceUID,
 		},
 		Spec: VirtualIPSpec{
 			Address: addr,
+		},
+		Status: VirtualIPStatus{
+			UnderlayRoute: underlayAddr,
 		},
 	}, nil
 }
@@ -446,6 +459,11 @@ func (c *client) CreateVirtualIP(ctx context.Context, virtualIP *VirtualIP) (*Vi
 	if errorCode := res.GetStatus().GetError(); errorCode != 0 {
 		return nil, &StatusError{errorCode: errorCode, message: res.GetStatus().GetMessage()}
 	}
+	ulRoute, err := netip.ParseAddr(string(res.GetUnderlayRoute()))
+	if err != nil {
+		return nil, fmt.Errorf("error parsing underlayRoute: %w", err)
+	}
+	virtualIP.Status.UnderlayRoute = ulRoute
 
 	return virtualIP, nil
 }

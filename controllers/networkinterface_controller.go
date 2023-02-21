@@ -463,19 +463,19 @@ func (r *NetworkInterfaceReconciler) addNATIPRouteIfNotExists(ctx context.Contex
 	return nil
 }
 
-func (r *NetworkInterfaceReconciler) reconcileVirtualIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, underlayRoute netip.Addr) error {
+func (r *NetworkInterfaceReconciler) reconcileVirtualIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface) error {
 	if nic.Spec.VirtualIP != nil {
 		virtualIP := nic.Spec.VirtualIP.Addr
 		log = log.WithValues("VirtualIP", virtualIP)
 		log.V(1).Info("Apply virtual ip")
-		return r.applyVirtualIP(ctx, log, nic, virtualIP, underlayRoute)
+		return r.applyVirtualIP(ctx, log, nic, virtualIP)
 	}
 
 	log.V(1).Info("Delete virtual ip")
-	return r.deleteVirtualIP(ctx, log, nic, underlayRoute)
+	return r.deleteVirtualIP(ctx, log, nic)
 }
 
-func (r *NetworkInterfaceReconciler) applyVirtualIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, virtualIP, underlayRoute netip.Addr) error {
+func (r *NetworkInterfaceReconciler) applyVirtualIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, virtualIP netip.Addr) error {
 	log.V(1).Info("Getting dpdk virtual ip")
 	dpdkVIP, err := r.DPDK.GetVirtualIP(ctx, nic.UID)
 	if err != nil {
@@ -484,9 +484,9 @@ func (r *NetworkInterfaceReconciler) applyVirtualIP(ctx context.Context, log log
 		}
 
 		log.V(1).Info("DPDK virtual ip does not exist, creating it")
-		return r.createVirtualIP(ctx, log, nic, virtualIP, underlayRoute)
+		return r.createVirtualIP(ctx, log, nic, virtualIP)
 	}
-
+	underlayRoute := dpdkVIP.Status.UnderlayRoute
 	existingVirtualIP := dpdkVIP.Spec.Address
 	if existingVirtualIP == virtualIP {
 		log.V(1).Info("DPDK virtual ip is up-to-date, adding metalbond route if not exists")
@@ -506,29 +506,30 @@ func (r *NetworkInterfaceReconciler) applyVirtualIP(ctx context.Context, log log
 	log.V(1).Info("Deleted existing virtual ip")
 
 	log.V(1).Info("Creating virtual ip")
-	if err := r.createVirtualIP(ctx, log, nic, virtualIP, underlayRoute); err != nil {
+	if err := r.createVirtualIP(ctx, log, nic, virtualIP); err != nil {
 		return err
 	}
 	log.V(1).Info("Created virtual ip")
 	return nil
 }
 
-func (r *NetworkInterfaceReconciler) createVirtualIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, virtualIP, underlayRoute netip.Addr) error {
-	if _, err := r.DPDK.CreateVirtualIP(ctx, &dpdk.VirtualIP{
+func (r *NetworkInterfaceReconciler) createVirtualIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, virtualIP netip.Addr) error {
+	dpdkVIP, err := r.DPDK.CreateVirtualIP(ctx, &dpdk.VirtualIP{
 		VirtualIPMetadata: dpdk.VirtualIPMetadata{InterfaceUID: nic.UID},
 		Spec:              dpdk.VirtualIPSpec{Address: virtualIP},
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("error creating dpdk virtual ip: %w", err)
 	}
 	log.V(1).Info("Adding virtual ip route if not exists")
-	if err := r.addVirtualIPRouteIfNotExists(ctx, virtualIP, underlayRoute); err != nil {
+	if err := r.addVirtualIPRouteIfNotExists(ctx, virtualIP, dpdkVIP.Status.UnderlayRoute); err != nil {
 		return err
 	}
 	log.V(1).Info("Added virtual ip route if not existed")
 	return nil
 }
 
-func (r *NetworkInterfaceReconciler) deleteVirtualIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, underlayRoute netip.Addr) error {
+func (r *NetworkInterfaceReconciler) deleteVirtualIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface) error {
 	log.V(1).Info("Getting dpdk virtual ip if exists")
 	dpdkVIP, err := r.DPDK.GetVirtualIP(ctx, nic.UID)
 	if err != nil {
@@ -541,7 +542,8 @@ func (r *NetworkInterfaceReconciler) deleteVirtualIP(ctx context.Context, log lo
 	}
 
 	virtualIP := dpdkVIP.Spec.Address
-	log.V(1).Info("Virtual ip exists", "ExistingVirtualIP", virtualIP)
+	underlayRoute := dpdkVIP.Status.UnderlayRoute
+	log.V(1).Info("Virtual ip exists", "ExistingVirtualIP", virtualIP, "UnderlayRoute", underlayRoute)
 	return r.deleteExistingVirtualIP(ctx, log, nic, virtualIP, underlayRoute)
 }
 
@@ -613,7 +615,7 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 	var errs []error
 
 	log.V(1).Info("Reconciling virtual ip")
-	virtualIPErr := r.reconcileVirtualIP(ctx, log, nic, underlayRoute)
+	virtualIPErr := r.reconcileVirtualIP(ctx, log, nic)
 	if virtualIPErr != nil {
 		errs = append(errs, fmt.Errorf("error reconciling virtual ip: %w", virtualIPErr))
 		log.Error(virtualIPErr, "Error reconciling virtual ip")
@@ -1046,7 +1048,7 @@ func (r *NetworkInterfaceReconciler) delete(ctx context.Context, log logr.Logger
 	log.V(1).Info("Deleted nat ip")
 
 	log.V(1).Info("Deleting virtual ip")
-	if err := r.deleteVirtualIP(ctx, log, nic, underlayRoute); err != nil {
+	if err := r.deleteVirtualIP(ctx, log, nic); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error deleting virtual ip: %w", err)
 	}
 	log.V(1).Info("Deleted virtual ip")

@@ -647,7 +647,7 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 	}
 
 	log.V(1).Info("Reconciling prefixes")
-	prefixesErr := r.reconcilePrefixes(ctx, log, vni, nic, underlayRoute)
+	prefixesErr := r.reconcilePrefixes(ctx, log, vni, nic)
 	if prefixesErr != nil {
 		errs = append(errs, fmt.Errorf("error reconciling prefixes: %w", prefixesErr))
 		log.Error(prefixesErr, "Error reconciling prefixes")
@@ -687,7 +687,7 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 	return ctrl.Result{}, nil
 }
 
-func (r *NetworkInterfaceReconciler) reconcilePrefixes(ctx context.Context, log logr.Logger, vni uint32, nic *metalnetv1alpha1.NetworkInterface, underlayRoute netip.Addr) error {
+func (r *NetworkInterfaceReconciler) reconcilePrefixes(ctx context.Context, log logr.Logger, vni uint32, nic *metalnetv1alpha1.NetworkInterface) error {
 	log.V(1).Info("Listing alias prefixes")
 	list, err := r.DPDK.ListPrefixes(ctx, nic.UID)
 	if err != nil {
@@ -723,7 +723,10 @@ func (r *NetworkInterfaceReconciler) reconcilePrefixes(ctx context.Context, log 
 			switch {
 			case dpdkPrefixes.Has(prefix) && !specPrefixes.Has(prefix):
 				log.V(1).Info("Delete prefix")
-
+				underlayRoute, err := getUnderlayRouteFromPrefixesList(list.Items, prefix)
+				if err != nil {
+					return err
+				}
 				log.V(1).Info("Ensuring metalbond prefix route does not exist")
 				if err := r.removePrefixRouteIfExists(ctx, vni, prefix, underlayRoute); err != nil {
 					return err
@@ -740,23 +743,27 @@ func (r *NetworkInterfaceReconciler) reconcilePrefixes(ctx context.Context, log 
 				log.V(1).Info("Create prefix")
 
 				log.V(1).Info("Creating dpdk prefix")
-				if _, err := r.DPDK.CreatePrefix(ctx, &dpdk.Prefix{
+				resPrefix, err := r.DPDK.CreatePrefix(ctx, &dpdk.Prefix{
 					PrefixMetadata: dpdk.PrefixMetadata{InterfaceUID: nic.UID},
 					Spec:           dpdk.PrefixSpec{Prefix: prefix},
-				}); err != nil {
+				})
+				if err != nil {
 					return err
 				}
 				log.V(1).Info("Ensured dpdk prefix exists")
 
 				log.V(1).Info("Ensuring metalbond prefix route exists")
-				if err := r.addPrefixRouteIfNotExists(ctx, vni, prefix, underlayRoute); err != nil {
+				if err := r.addPrefixRouteIfNotExists(ctx, vni, prefix, resPrefix.Spec.UnderlayRoute); err != nil {
 					return err
 				}
 				log.V(1).Info("Ensured metalbond prefix route exists")
 				return nil
 			default:
 				log.V(1).Info("Update prefix")
-
+				underlayRoute, err := getUnderlayRouteFromPrefixesList(list.Items, prefix)
+				if err != nil {
+					return err
+				}
 				log.V(1).Info("Ensuring metalbond prefix route exists")
 				if err := r.addPrefixRouteIfNotExists(ctx, vni, prefix, underlayRoute); err != nil {
 					return err

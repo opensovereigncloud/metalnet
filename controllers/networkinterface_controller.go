@@ -1039,13 +1039,13 @@ func (r *NetworkInterfaceReconciler) delete(ctx context.Context, log logr.Logger
 	log.V(1).Info("Got dpdk interface", "VNI", vni, "UnderlayRoute", underlayRoute)
 
 	log.V(1).Info("Deleting prefixes")
-	if err := r.deletePrefixes(ctx, log, nic, vni, underlayRoute); err != nil {
+	if err := r.deletePrefixes(ctx, log, nic, vni); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error deleting prefixes: %w", err)
 	}
 	log.V(1).Info("Deleted prefixes")
 
 	log.V(1).Info("Deleting lb targets")
-	if err := r.deleteLBTargets(ctx, log, nic, vni, underlayRoute); err != nil {
+	if err := r.deleteLBTargets(ctx, log, nic, vni); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error deleting lb targets: %w", err)
 	}
 	log.V(1).Info("Deleted lb targets")
@@ -1081,7 +1081,6 @@ func (r *NetworkInterfaceReconciler) deleteLBTargets(
 	log logr.Logger,
 	nic *metalnetv1alpha1.NetworkInterface,
 	vni uint32,
-	underlayRoute netip.Addr,
 ) error {
 	log.V(1).Info("Listing lb targets")
 	prefixes, err := r.DPDK.ListLBPrefixes(ctx, nic.UID)
@@ -1127,7 +1126,6 @@ func (r *NetworkInterfaceReconciler) deletePrefixes(
 	log logr.Logger,
 	nic *metalnetv1alpha1.NetworkInterface,
 	vni uint32,
-	underlayRoute netip.Addr,
 ) error {
 	log.V(1).Info("Listing prefixes")
 	prefixes, err := r.DPDK.ListPrefixes(ctx, nic.UID)
@@ -1142,23 +1140,23 @@ func (r *NetworkInterfaceReconciler) deletePrefixes(
 
 	var errs []error
 	for _, prefix := range prefixes.Items {
-		prefix := prefix.Spec.Prefix
-		log := log.WithValues("Prefix", prefix)
+		pfx := prefix.Spec.Prefix
+		log := log.WithValues("Prefix", pfx)
 		if err := func() error {
 			log.V(1).Info("Removing prefix route if exists")
-			if err := r.removePrefixRouteIfExists(ctx, vni, prefix, underlayRoute); err != nil {
+			if err := r.removePrefixRouteIfExists(ctx, vni, pfx, prefix.Spec.UnderlayRoute); err != nil {
 				return err
 			}
 			log.V(1).Info("Removed prefix route if existed")
 
 			log.V(1).Info("Removing dpdk prefix if exists")
-			if err := r.deleteDPDKPrefixIfExists(ctx, nic.UID, prefix); err != nil {
+			if err := r.deleteDPDKPrefixIfExists(ctx, nic.UID, pfx); err != nil {
 				return err
 			}
 			log.V(1).Info("Removed dpdk prefix if existed")
 			return nil
 		}(); err != nil {
-			errs = append(errs, fmt.Errorf("[prefix %s] %w", prefix, err))
+			errs = append(errs, fmt.Errorf("[prefix %s] %w", pfx, err))
 		}
 	}
 

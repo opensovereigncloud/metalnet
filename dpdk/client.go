@@ -631,12 +631,18 @@ func dpdkPrefixToPrefix(interfaceUID types.UID, dpdkPrefix *dpdkproto.Prefix) (*
 		return nil, fmt.Errorf("invalid dpdk prefix length %d for address %s", dpdkPrefix.PrefixLength, addr)
 	}
 
+	uladdr, err := netip.ParseAddr(string(dpdkPrefix.UnderlayRoute))
+	if err != nil {
+		return nil, fmt.Errorf("error parsing dpdk lb prefix ul address: %w", err)
+	}
+
 	return &Prefix{
 		PrefixMetadata: PrefixMetadata{
 			InterfaceUID: interfaceUID,
 		},
 		Spec: PrefixSpec{
-			Prefix: prefix,
+			Prefix:        prefix,
+			UnderlayRoute: uladdr,
 		},
 	}, nil
 }

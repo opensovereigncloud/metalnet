@@ -26,6 +26,31 @@ spec:
       jsonPath: .spec.nodeName
       name: NodeName
       type: string
+    - description: Network Reference of the network interface.
+      jsonPath: .spec.networkRef.name
+      name: Network
+      priority: 10
+      type: string
+    - description: loadBalancerTargets for the network interface.
+      jsonPath: .spec.loadBalancerTargets
+      name: Targets
+      priority: 10
+      type: string
+    - description: IP Addresses of the network interface.
+      jsonPath: .spec.ips
+      name: IPS
+      priority: 10
+      type: string
+    - description: Virtual IP Address of the network interface.
+      jsonPath: .spec.virtualIP
+      name: VirtualIP
+      priority: 10
+      type: string
+    - description: Age of the network interface.
+      jsonPath: .metadata.creationTimestamp
+      name: Age
+      priority: 10
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:

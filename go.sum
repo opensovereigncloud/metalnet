@@ -392,6 +392,8 @@ github.com/onmetal/metalbond v0.3.0 h1:ABmQyK9whCxkRYDXwXDuP+bezw0VMEuindHc4DHtx
 github.com/onmetal/metalbond v0.3.0/go.mod h1:q2YETeAlmL2PutUd0pMuw0gb7iJ1bPNRIQwd8QuBNIs=
 github.com/onmetal/net-dpservice-go v0.1.9-0.20230220141603-1cbcce36b65d h1:reysbjXUTAqb4idPd41stFlWjU+QEKV1NGwk+2UYf4U=
 github.com/onmetal/net-dpservice-go v0.1.9-0.20230220141603-1cbcce36b65d/go.mod h1:dbItLY1P+nYl7/c04JdJTEaMCG6GLXgAZsMP/OuZBmg=
+github.com/onmetal/net-dpservice-go v0.1.9 h1:PXJDl5SFe/BnOeDCAnTJJlRTRuj33YgsEkifrHb+0DA=
+github.com/onmetal/net-dpservice-go v0.1.9/go.mod h1:dbItLY1P+nYl7/c04JdJTEaMCG6GLXgAZsMP/OuZBmg=
 github.com/onsi/ginkgo v0.0.0-20170829012221-11459a886d9c/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+WWjE=
 github.com/onsi/ginkgo v1.6.0/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+WWjE=
 github.com/onsi/ginkgo v1.12.1/go.mod h1:zj2OWP4+oCPe1qIXoGWkgMRwljMUYCdkwsT2108oapk=

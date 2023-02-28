@@ -121,7 +121,8 @@ type PrefixSpec struct {
 
 type VirtualIP struct {
 	VirtualIPMetadata
-	Spec VirtualIPSpec
+	Spec   VirtualIPSpec
+	Status VirtualIPStatus
 }
 
 type VirtualIPMetadata struct {
@@ -132,9 +133,14 @@ type VirtualIPSpec struct {
 	Address netip.Addr
 }
 
+type VirtualIPStatus struct {
+	UnderlayRoute netip.Addr
+}
+
 type NATLocal struct {
 	NATLocalMetadata
-	Spec NATLocalSpec
+	Spec   NATLocalSpec
+	Status NATLocalStatus
 }
 
 type NATLocalMetadata struct {
@@ -145,6 +151,10 @@ type NATLocalSpec struct {
 	Address netip.Addr
 	MinPort uint32
 	MaxPort uint32
+}
+
+type NATLocalStatus struct {
+	UnderlayRoute netip.Addr
 }
 
 type LBTargetIP struct {
@@ -390,6 +400,11 @@ func dpdkVirtualIPToVirtualIP(interfaceUID types.UID, dpdkVIP *dpdkproto.Interfa
 		return nil, fmt.Errorf("error parsing virtual ip address: %w", err)
 	}
 
+	underlayAddr, err := netip.ParseAddr(string(dpdkVIP.GetUnderlayRoute()))
+	if err != nil {
+		return nil, fmt.Errorf("error parsing underlay address of virtual ip address: %w", err)
+	}
+
 	return &VirtualIP{
 		VirtualIPMetadata: VirtualIPMetadata{
 			InterfaceUID: interfaceUID,
@@ -397,13 +412,21 @@ func dpdkVirtualIPToVirtualIP(interfaceUID types.UID, dpdkVIP *dpdkproto.Interfa
 		Spec: VirtualIPSpec{
 			Address: addr,
 		},
+		Status: VirtualIPStatus{
+			UnderlayRoute: underlayAddr,
+		},
 	}, nil
 }
 
 func dpdkNATLocalToNATLocal(interfaceUID types.UID, dpdkNAT *dpdkproto.GetNATResponse) (*NATLocal, error) {
 	addr, err := netip.ParseAddr(string(dpdkNAT.NatVIPIP.GetAddress()))
 	if err != nil {
-		return nil, fmt.Errorf("error parsing virtual ip address: %w", err)
+		return nil, fmt.Errorf("error parsing NAT local ip address: %w", err)
+	}
+
+	underlayAddr, err := netip.ParseAddr(string(dpdkNAT.GetUnderlayRoute()))
+	if err != nil {
+		return nil, fmt.Errorf("error parsing NAT local underlay address: %w", err)
 	}
 
 	return &NATLocal{
@@ -414,6 +437,9 @@ func dpdkNATLocalToNATLocal(interfaceUID types.UID, dpdkNAT *dpdkproto.GetNATRes
 			Address: addr,
 			MinPort: dpdkNAT.MinPort,
 			MaxPort: dpdkNAT.MaxPort,
+		},
+		Status: NATLocalStatus{
+			UnderlayRoute: underlayAddr,
 		},
 	}, nil
 }
@@ -446,6 +472,11 @@ func (c *client) CreateVirtualIP(ctx context.Context, virtualIP *VirtualIP) (*Vi
 	if errorCode := res.GetStatus().GetError(); errorCode != 0 {
 		return nil, &StatusError{errorCode: errorCode, message: res.GetStatus().GetMessage()}
 	}
+	ulRoute, err := netip.ParseAddr(string(res.GetUnderlayRoute()))
+	if err != nil {
+		return nil, fmt.Errorf("error parsing underlayRoute: %w", err)
+	}
+	virtualIP.Status.UnderlayRoute = ulRoute
 
 	return virtualIP, nil
 }
@@ -493,6 +524,11 @@ func (c *client) CreateNATLocal(ctx context.Context, nl *NATLocal) (*NATLocal, e
 	if errorCode := res.GetStatus().GetError(); errorCode != 0 {
 		return nil, &StatusError{errorCode: errorCode, message: res.GetStatus().GetMessage()}
 	}
+	ulRoute, err := netip.ParseAddr(string(res.GetUnderlayRoute()))
+	if err != nil {
+		return nil, fmt.Errorf("error parsing underlayRoute: %w", err)
+	}
+	nl.Status.UnderlayRoute = ulRoute
 
 	return nl, nil
 }
@@ -595,12 +631,18 @@ func dpdkPrefixToPrefix(interfaceUID types.UID, dpdkPrefix *dpdkproto.Prefix) (*
 		return nil, fmt.Errorf("invalid dpdk prefix length %d for address %s", dpdkPrefix.PrefixLength, addr)
 	}
 
+	uladdr, err := netip.ParseAddr(string(dpdkPrefix.UnderlayRoute))
+	if err != nil {
+		return nil, fmt.Errorf("error parsing dpdk lb prefix ul address: %w", err)
+	}
+
 	return &Prefix{
 		PrefixMetadata: PrefixMetadata{
 			InterfaceUID: interfaceUID,
 		},
 		Spec: PrefixSpec{
-			Prefix: prefix,
+			Prefix:        prefix,
+			UnderlayRoute: uladdr,
 		},
 	}, nil
 }

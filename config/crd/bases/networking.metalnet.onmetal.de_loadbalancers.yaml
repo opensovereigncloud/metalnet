@@ -32,7 +32,6 @@ spec:
     - description: Age of the loadbalancer.
       jsonPath: .metadata.creationTimestamp
       name: Age
-      priority: 10
       type: date
     name: v1alpha1
     schema:

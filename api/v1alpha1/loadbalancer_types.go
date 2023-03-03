@@ -57,6 +57,8 @@ const (
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Status",type=string,description="Status of the loadbalancer.",JSONPath=`.status.state`,priority=0
 // +kubebuilder:printcolumn:name="NodeName",type=string,description="Node the loadbalancer is running on.",JSONPath=`.spec.nodeName`,priority=0
+// +kubebuilder:printcolumn:name="IP",type=string,description="IP of the loadbalancer.",JSONPath=`.spec.ip`,priority=10
+// +kubebuilder:printcolumn:name="Age",type=date,description="Age of the loadbalancer.",JSONPath=`.metadata.creationTimestamp`,priority=0
 // LoadBalancer is the Schema for the loadbalancers API
 type LoadBalancer struct {
 	metav1.TypeMeta   `json:",inline"`

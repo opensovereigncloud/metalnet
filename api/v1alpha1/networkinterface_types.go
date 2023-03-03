@@ -88,6 +88,11 @@ const (
 // +kubebuilder:resource:shortName=ni
 // +kubebuilder:printcolumn:name="Status",type=string,description="Status of the network interface.",JSONPath=`.status.state`,priority=0
 // +kubebuilder:printcolumn:name="NodeName",type=string,description="Node the network interface is running on.",JSONPath=`.spec.nodeName`,priority=0
+// +kubebuilder:printcolumn:name="Network",type=string,description="Network Reference of the network interface.",JSONPath=`.spec.networkRef.name`,priority=10
+// +kubebuilder:printcolumn:name="Targets",type=string,description="loadBalancerTargets for the network interface.",JSONPath=`.spec.loadBalancerTargets`,priority=10
+// +kubebuilder:printcolumn:name="IPS",type=string,description="IP Addresses of the network interface.",JSONPath=`.spec.ips`,priority=10
+// +kubebuilder:printcolumn:name="VirtualIP",type=string,description="Virtual IP Address of the network interface.",JSONPath=`.spec.virtualIP`,priority=10
+// +kubebuilder:printcolumn:name="Age",type=date,description="Age of the network interface.",JSONPath=`.metadata.creationTimestamp`,priority=0
 
 // NetworkInterface is the Schema for the networkinterfaces API
 type NetworkInterface struct {

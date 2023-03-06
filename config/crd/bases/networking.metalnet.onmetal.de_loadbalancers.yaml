@@ -24,6 +24,15 @@ spec:
       jsonPath: .spec.nodeName
       name: NodeName
       type: string
+    - description: IP of the loadbalancer.
+      jsonPath: .spec.ip
+      name: IP
+      priority: 10
+      type: string
+    - description: Age of the loadbalancer.
+      jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:

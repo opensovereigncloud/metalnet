@@ -80,6 +80,7 @@ spec:
                   description: LBPort consists of port and protocol
                   properties:
                     port:
+                      format: int32
                       type: integer
                     protocol:
                       type: string

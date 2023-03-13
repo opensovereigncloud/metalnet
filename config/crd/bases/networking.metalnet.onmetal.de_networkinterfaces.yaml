@@ -96,10 +96,12 @@ spec:
                   interface
                 properties:
                   endPort:
+                    format: int32
                     type: integer
                   ip:
                     type: string
                   port:
+                    format: int32
                     type: integer
                 required:
                 - endPort

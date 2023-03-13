@@ -35,14 +35,14 @@ type LocalUIDReference struct {
 // LBPort consists of port and protocol
 type LBPort struct {
 	Protocol string `json:"protocol"`
-	Port     int    `json:"port"`
+	Port     int32  `json:"port"`
 }
 
 // LBPort consists of port and protocol
 type NATDetails struct {
-	IP      *IP `json:"ip"`
-	Port    int `json:"port"`
-	EndPort int `json:"endPort"`
+	IP      *IP   `json:"ip"`
+	Port    int32 `json:"port"`
+	EndPort int32 `json:"endPort"`
 }
 
 // IP is an IP address.

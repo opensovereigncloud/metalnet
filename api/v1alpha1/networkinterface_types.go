@@ -29,8 +29,8 @@ type NetworkInterfaceSpec struct {
 	IPFamilies []corev1.IPFamily `json:"ipFamilies"`
 	// IPs are the provided IPs or EphemeralIPs which should be assigned to this NetworkInterface
 	// Only one IP supported at the moment.
-	// +optional
-	IPs []IP `json:"ips,omitempty"`
+	// +kubebuilder:validation:Required
+	IPs []IP `json:"ips"`
 	// Virtual IP
 	VirtualIP *IP `json:"virtualIP,omitempty"`
 	// Prefixes are the provided Prefix

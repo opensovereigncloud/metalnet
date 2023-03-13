@@ -95,6 +95,18 @@ func (r *LoadBalancerReconciler) delete(ctx context.Context, log logr.Logger, lb
 
 	log.V(1).Info("Getting dpdk loadbalancer")
 	dpdkLoadBalancer, err := r.DPDK.GetLoadBalancer(ctx, lb.UID)
+	if err != nil {
+		if !dpdk.IsStatusErrorCode(err, dpdk.GET_LB_ID_ERR) {
+			return ctrl.Result{}, fmt.Errorf("error getting dpdk loadbalancer: %w", err)
+		}
+		log.V(1).Info("No dpdk loadbalancer, removing finalizer")
+		if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, lb, loadBalancerFinalizer); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
+		}
+		log.V(1).Info("Removed finalizer")
+
+		return ctrl.Result{}, nil
+	}
 
 	vni := dpdkLoadBalancer.Spec.VNI
 	underlayRoute := dpdkLoadBalancer.Status.UnderlayRoute

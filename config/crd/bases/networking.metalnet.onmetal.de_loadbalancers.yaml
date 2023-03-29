@@ -29,6 +29,11 @@ spec:
       name: IP
       priority: 10
       type: string
+    - description: Type of the loadbalancer.
+      jsonPath: .spec.type
+      name: Type
+      priority: 10
+      type: string
     - description: Age of the loadbalancer.
       jsonPath: .metadata.creationTimestamp
       name: Age
@@ -89,9 +94,14 @@ spec:
                   - protocol
                   type: object
                 type: array
+              type:
+                description: Type defines whether the loadbalancer is using an internal
+                  or public ip
+                type: string
             required:
             - ipFamily
             - networkRef
+            - type
             type: object
           status:
             description: LoadBalancerStatus defines the observed state of LoadBalancer

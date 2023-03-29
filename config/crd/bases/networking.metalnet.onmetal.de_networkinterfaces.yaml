@@ -131,6 +131,7 @@ spec:
                 type: string
             required:
             - ipFamilies
+            - ips
             - networkRef
             type: object
           status:

@@ -21,9 +21,9 @@ import (
 	"path/filepath"
 
 	"github.com/jaypipes/ghw"
-	"github.com/onmetal/controller-utils/set"
 	"github.com/onmetal/metalnet/sysfs"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 const (
@@ -131,7 +131,7 @@ var (
 
 type Manager struct {
 	store     ClaimStore
-	available set.Set[ghw.PCIAddress]
+	available sets.Set[ghw.PCIAddress]
 }
 
 func NewManager(store ClaimStore, initAvailable []ghw.PCIAddress) (*Manager, error) {
@@ -140,7 +140,7 @@ func NewManager(store ClaimStore, initAvailable []ghw.PCIAddress) (*Manager, err
 		return nil, fmt.Errorf("error listing claims: %w", err)
 	}
 
-	available := set.New(initAvailable...)
+	available := sets.New(initAvailable...)
 	for _, claim := range claims {
 		if !available.Has(claim.Address) {
 			return nil, fmt.Errorf("claim %s cannot claim non-existent address %s", claim.UID, &claim.Address)

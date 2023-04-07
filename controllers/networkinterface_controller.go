@@ -28,7 +28,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/jaypipes/ghw"
 	"github.com/onmetal/controller-utils/clientutils"
-	"github.com/onmetal/controller-utils/set"
 	"github.com/onmetal/metalbond/pb"
 	metalnetv1alpha1 "github.com/onmetal/metalnet/api/v1alpha1"
 	metalnetclient "github.com/onmetal/metalnet/client"
@@ -41,6 +40,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -694,24 +694,24 @@ func (r *NetworkInterfaceReconciler) reconcilePrefixes(ctx context.Context, log 
 		return fmt.Errorf("error listing alias prefixes: %w", err)
 	}
 
-	dpdkPrefixes := set.New[netip.Prefix]()
+	dpdkPrefixes := sets.New[netip.Prefix]()
 	for _, dpdkPrefix := range list.Items {
 		dpdkPrefixes.Insert(dpdkPrefix.Spec.Prefix)
 	}
 
-	specPrefixes := set.New[netip.Prefix]()
+	specPrefixes := sets.New[netip.Prefix]()
 	for _, specPrefix := range nic.Spec.Prefixes {
 		specPrefixes.Insert(specPrefix.Prefix)
 	}
 
 	// Sort prefixes to have deterministic error event output
-	allPrefixes := dpdkPrefixes.Slice()
+	allPrefixes := dpdkPrefixes.UnsortedList()
 	sort.Slice(allPrefixes, func(i, j int) bool {
 		return allPrefixes[i].String() < allPrefixes[j].String()
 	})
 
 	if dpdkPrefixes.Len() < specPrefixes.Len() {
-		allPrefixes = specPrefixes.Slice()
+		allPrefixes = specPrefixes.UnsortedList()
 		sort.Slice(allPrefixes, func(i, j int) bool {
 			return allPrefixes[i].String() < allPrefixes[j].String()
 		})
@@ -798,24 +798,24 @@ func (r *NetworkInterfaceReconciler) reconcileLBTargets(ctx context.Context, log
 		return fmt.Errorf("error listing lb targets: %w", err)
 	}
 
-	dpdkPrefixes := set.New[netip.Prefix]()
+	dpdkPrefixes := sets.New[netip.Prefix]()
 	for _, dpdkPrefix := range list.Items {
 		dpdkPrefixes.Insert(dpdkPrefix.Spec.Prefix)
 	}
 
-	specPrefixes := set.New[netip.Prefix]()
+	specPrefixes := sets.New[netip.Prefix]()
 	for _, specPrefix := range nic.Spec.LoadBalancerTargets {
 		specPrefixes.Insert(specPrefix.Prefix)
 	}
 
 	// Sort prefixes to have deterministic error event output
-	allPrefixes := dpdkPrefixes.Slice()
+	allPrefixes := dpdkPrefixes.UnsortedList()
 	sort.Slice(allPrefixes, func(i, j int) bool {
 		return allPrefixes[i].String() < allPrefixes[j].String()
 	})
 
 	if dpdkPrefixes.Len() < specPrefixes.Len() {
-		allPrefixes = specPrefixes.Slice()
+		allPrefixes = specPrefixes.UnsortedList()
 		sort.Slice(allPrefixes, func(i, j int) bool {
 			return allPrefixes[i].String() < allPrefixes[j].String()
 		})

@@ -25,6 +25,8 @@ import (
 type LoadBalancerSpec struct {
 	// NetworkRef is the Network this LoadBalancer is connected to
 	NetworkRef corev1.LocalObjectReference `json:"networkRef"`
+	// Type defines whether the loadbalancer is using an internal or public ip
+	LBtype LoadBalancerType `json:"type"`
 	// IPFamily defines which IPFamily this LoadBalancer is supporting
 	IPFamily corev1.IPFamily `json:"ipFamily"`
 	// IP is the provided IP which should be loadbalanced by this LoadBalancer
@@ -40,6 +42,16 @@ type LoadBalancerStatus struct {
 	// State is the LoadBalancerState of the LoadBalancer.
 	State LoadBalancerState `json:"state,omitempty"`
 }
+
+// LoadBalancerType is the type of a LoadBalancer.
+type LoadBalancerType string
+
+const (
+	// LoadBalancerTypeInternal is used for any LoadBalancer that uses private IPs.
+	LoadBalancerTypeInternal LoadBalancerType = "Internal"
+	// LoadBalancerTypePublic is used for any LoadBalancer that uses public IPs.
+	LoadBalancerTypePublic LoadBalancerType = "Public"
+)
 
 // LoadBalancerState is the binding state of a LoadBalancer.
 type LoadBalancerState string
@@ -58,6 +70,7 @@ const (
 // +kubebuilder:printcolumn:name="Status",type=string,description="Status of the loadbalancer.",JSONPath=`.status.state`,priority=0
 // +kubebuilder:printcolumn:name="NodeName",type=string,description="Node the loadbalancer is running on.",JSONPath=`.spec.nodeName`,priority=0
 // +kubebuilder:printcolumn:name="IP",type=string,description="IP of the loadbalancer.",JSONPath=`.spec.ip`,priority=10
+// +kubebuilder:printcolumn:name="Type",type=string,description="Type of the loadbalancer.",JSONPath=`.spec.type`,priority=10
 // +kubebuilder:printcolumn:name="Age",type=date,description="Age of the loadbalancer.",JSONPath=`.metadata.creationTimestamp`,priority=0
 // LoadBalancer is the Schema for the loadbalancers API
 type LoadBalancer struct {

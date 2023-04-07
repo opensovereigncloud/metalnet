@@ -167,7 +167,7 @@ func (r *LoadBalancerReconciler) deleteLoadBalancer(
 	underlayRoute netip.Addr,
 ) error {
 	log.V(1).Info("Removing loadbalancer route if exists")
-	if err := r.removeLoadBalancerRouteIfExists(ctx, lb.Spec.IP.Addr, underlayRoute); err != nil {
+	if err := r.removeLoadBalancerRouteIfExists(ctx, lb, underlayRoute, vni); err != nil {
 		return fmt.Errorf("[Loadbalancer IP %s] %w", lb.Spec.IP.Addr, err)
 	}
 	log.V(1).Info("Removed loadbalancer route if existed")
@@ -182,9 +182,16 @@ func (r *LoadBalancerReconciler) deleteLoadBalancer(
 	return nil
 }
 
-func (r *LoadBalancerReconciler) removeLoadBalancerRouteIfExists(ctx context.Context, ip, underlayRoute netip.Addr) error {
-	if err := r.Metalbond.RemoveRoute(ctx, metalbond.VNI(r.PublicVNI), metalbond.Destination{
-		Prefix: NetIPAddrPrefix(ip),
+func (r *LoadBalancerReconciler) removeLoadBalancerRouteIfExists(ctx context.Context, lb *metalnetv1alpha1.LoadBalancer, underlayRoute netip.Addr, vni uint32) error {
+	var localVni uint32
+
+	if lb.Spec.LBtype == metalnetv1alpha1.LoadBalancerTypeInternal {
+		localVni = vni
+	} else {
+		localVni = uint32(r.PublicVNI)
+	}
+	if err := r.Metalbond.RemoveRoute(ctx, metalbond.VNI(localVni), metalbond.Destination{
+		Prefix: NetIPAddrPrefix(lb.Spec.IP.Addr),
 	}, metalbond.NextHop{
 		TargetVNI:     0,
 		TargetAddress: underlayRoute,
@@ -194,9 +201,16 @@ func (r *LoadBalancerReconciler) removeLoadBalancerRouteIfExists(ctx context.Con
 	return nil
 }
 
-func (r *LoadBalancerReconciler) addLoadBalancerRouteIfNotExists(ctx context.Context, ip, underlayRoute netip.Addr) error {
-	if err := r.Metalbond.AddRoute(ctx, metalbond.VNI(r.PublicVNI), metalbond.Destination{
-		Prefix: NetIPAddrPrefix(ip),
+func (r *LoadBalancerReconciler) addLoadBalancerRouteIfNotExists(ctx context.Context, lb *metalnetv1alpha1.LoadBalancer, underlayRoute netip.Addr, vni uint32) error {
+	var localVni uint32
+
+	if lb.Spec.LBtype == metalnetv1alpha1.LoadBalancerTypeInternal {
+		localVni = vni
+	} else {
+		localVni = uint32(r.PublicVNI)
+	}
+	if err := r.Metalbond.AddRoute(ctx, metalbond.VNI(localVni), metalbond.Destination{
+		Prefix: NetIPAddrPrefix(lb.Spec.IP.Addr),
 	}, metalbond.NextHop{
 		TargetVNI:     0,
 		TargetAddress: underlayRoute,
@@ -321,7 +335,7 @@ func (r *LoadBalancerReconciler) applyLoadBalancer(ctx context.Context, log logr
 			return netip.Addr{}, fmt.Errorf("error adding dpdk loadbalancer to internal cache: %w", err)
 		}
 		log.V(1).Info("Adding loadbalancer route if not exists")
-		if err := r.addLoadBalancerRouteIfNotExists(ctx, lb.Spec.IP.Addr, lbalancer.Status.UnderlayRoute); err != nil {
+		if err := r.addLoadBalancerRouteIfNotExists(ctx, lb, lbalancer.Status.UnderlayRoute, vni); err != nil {
 			return netip.Addr{}, err
 		}
 		log.V(1).Info("Added loadbalancer route if not existed")
@@ -333,7 +347,7 @@ func (r *LoadBalancerReconciler) applyLoadBalancer(ctx context.Context, log logr
 		return netip.Addr{}, fmt.Errorf("error adding dpdk loadbalancer to internal cache: %w", err)
 	}
 	log.V(1).Info("Adding loadbalancer route if not exists")
-	if err := r.addLoadBalancerRouteIfNotExists(ctx, lb.Spec.IP.Addr, lbalancer.Status.UnderlayRoute); err != nil {
+	if err := r.addLoadBalancerRouteIfNotExists(ctx, lb, lbalancer.Status.UnderlayRoute, vni); err != nil {
 		return netip.Addr{}, err
 	}
 	log.V(1).Info("Added loadbalancer route if not existed")

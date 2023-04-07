@@ -5,6 +5,7 @@ metadata:
 spec:
   ipFamily: IPv4
   ip: 194.11.242.110
+  type: Public
   ports:
   - protocol: TCP
     port : 80

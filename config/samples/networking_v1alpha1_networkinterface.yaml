@@ -16,4 +16,4 @@ spec:
   # loadBalancerTargets:
   #   - 194.11.242.110/32
   networkRef:
-    name: network-sample
+    name: network-sample2

@@ -1,8 +1,8 @@
 apiVersion: networking.metalnet.onmetal.de/v1alpha1
 kind: Network
 metadata:
-  name: network-sample
+  name: network-sample2
 spec:
-  id: 123
+  id: 200
   # peeredIDs:
-  #   - 200
+  #   - 123

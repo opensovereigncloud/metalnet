@@ -111,8 +111,9 @@ type NetworkInterfaceReconciler struct {
 	NetFnsManager *netfns.Manager
 	SysFS         sysfs.FS
 
-	NodeName  string
-	PublicVNI int
+	NodeName    string
+	PublicVNI   int
+	LBServerMap map[uint32]types.UID
 }
 
 //+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networkinterfaces,verbs=get;list;watch;create;update;patch;delete
@@ -133,12 +134,12 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if nodeName := nic.Spec.NodeName; nodeName == nil || *nodeName != r.NodeName {
+	if nic.Spec.NodeName != nil && *nic.Spec.NodeName == r.NodeName {
+		return r.reconcileExists(ctx, log, nic)
+	} else {
 		log.V(1).Info("Network interface is not assigned to this node", "NodeName", nic.Spec.NodeName)
 		return ctrl.Result{}, nil
 	}
-
-	return r.reconcileExists(ctx, log, nic)
 }
 
 func (r *NetworkInterfaceReconciler) reconcileExists(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface) (ctrl.Result, error) {
@@ -868,10 +869,6 @@ func (r *NetworkInterfaceReconciler) reconcileLBTargets(ctx context.Context, log
 				if err != nil {
 					return err
 				}
-				log.V(1).Info("Ensuring metalbond lb target route exists")
-				if err := r.removeLBTargetRouteIfExists(ctx, vni, prefix, underlayRoute); err != nil {
-					return err
-				}
 				if err := r.addLBTargetRouteIfNotExists(ctx, vni, prefix, underlayRoute); err != nil {
 					return err
 				}
@@ -897,6 +894,7 @@ func (r *NetworkInterfaceReconciler) applyInterface(ctx context.Context, log log
 			return nil, netip.Addr{}, fmt.Errorf("error getting dpdk interface: %w", err)
 		}
 
+		log.V(1).Info("DPDK getting interface", "error", err)
 		log.V(1).Info("DPDK interface does not yet exist, creating it")
 
 		log.V(1).Info("Getting or claiming pci address")

@@ -26,7 +26,7 @@ type LoadBalancerSpec struct {
 	// NetworkRef is the Network this LoadBalancer is connected to
 	NetworkRef corev1.LocalObjectReference `json:"networkRef"`
 	// Type defines whether the loadbalancer is using an internal or public ip
-	LBtype LoadBalancerType `json:"type,omitempty"`
+	Type LoadBalancerType `json:"type,omitempty"`
 	// IPFamily defines which IPFamily this LoadBalancer is supporting
 	IPFamily corev1.IPFamily `json:"ipFamily"`
 	// IP is the provided IP which should be loadbalanced by this LoadBalancer
@@ -72,6 +72,7 @@ const (
 // +kubebuilder:printcolumn:name="IP",type=string,description="IP of the loadbalancer.",JSONPath=`.spec.ip`,priority=10
 // +kubebuilder:printcolumn:name="Type",type=string,description="Type of the loadbalancer.",JSONPath=`.spec.type`,priority=10
 // +kubebuilder:printcolumn:name="Age",type=date,description="Age of the loadbalancer.",JSONPath=`.metadata.creationTimestamp`,priority=0
+
 // LoadBalancer is the Schema for the loadbalancers API
 type LoadBalancer struct {
 	metav1.TypeMeta   `json:",inline"`

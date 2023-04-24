@@ -68,8 +68,6 @@ func (r *LoadBalancerReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	//if nodeName := lb.Spec.NodeName; nodeName == nil || *nodeName != r.NodeName {
-	log.V(1).Info("#####Reconcile", "Spec", lb.Spec, "NodeName", r.NodeName)
 	if lb.Spec.NodeName != nil && *lb.Spec.NodeName == r.NodeName {
 		return r.reconcileExists(ctx, log, lb)
 	} else {
@@ -175,7 +173,7 @@ func (r *LoadBalancerReconciler) deleteLoadBalancer(
 func (r *LoadBalancerReconciler) removeLoadBalancerRouteIfExists(ctx context.Context, lb *metalnetv1alpha1.LoadBalancer, underlayRoute netip.Addr, vni uint32) error {
 	var localVni uint32
 
-	if lb.Spec.LBtype == metalnetv1alpha1.LoadBalancerTypeInternal {
+	if lb.Spec.Type == metalnetv1alpha1.LoadBalancerTypeInternal {
 		localVni = vni
 	} else {
 		localVni = uint32(r.PublicVNI)
@@ -194,7 +192,7 @@ func (r *LoadBalancerReconciler) removeLoadBalancerRouteIfExists(ctx context.Con
 func (r *LoadBalancerReconciler) addLoadBalancerRouteIfNotExists(ctx context.Context, lb *metalnetv1alpha1.LoadBalancer, underlayRoute netip.Addr, vni uint32) error {
 	var localVni uint32
 
-	if lb.Spec.LBtype == metalnetv1alpha1.LoadBalancerTypeInternal {
+	if lb.Spec.Type == metalnetv1alpha1.LoadBalancerTypeInternal {
 		localVni = vni
 	} else {
 		localVni = uint32(r.PublicVNI)

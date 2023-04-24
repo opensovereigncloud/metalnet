@@ -2,6 +2,14 @@
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
 
+GITHUB_PAT_PATH ?=
+ifeq (,$(GITHUB_PAT_PATH))
+GITHUB_PAT_MOUNT ?=
+else
+GITHUB_PAT_MOUNT ?= --secret id=github_pat,src=$(GITHUB_PAT_PATH)
+endif
+BUILDARGS ?=
+
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.24.1
 
@@ -86,8 +94,8 @@ run-base: generate fmt lint ## Run the binary
 	go run ./main.go
 
 .PHONY: docker-build
-docker-build: test ## Build docker image with partitionlet.
-	docker build -t ${IMG} .
+docker-build: ## Build docker image with partitionlet.
+	docker build $(BUILDARGS) -t ${IMG} $(GITHUB_PAT_MOUNT) .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.

@@ -101,7 +101,6 @@ spec:
             required:
             - ipFamily
             - networkRef
-            - type
             type: object
           status:
             description: LoadBalancerStatus defines the observed state of LoadBalancer

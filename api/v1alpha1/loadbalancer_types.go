@@ -26,7 +26,7 @@ type LoadBalancerSpec struct {
 	// NetworkRef is the Network this LoadBalancer is connected to
 	NetworkRef corev1.LocalObjectReference `json:"networkRef"`
 	// Type defines whether the loadbalancer is using an internal or public ip
-	LBtype LoadBalancerType `json:"type"`
+	LBtype LoadBalancerType `json:"type,omitempty"`
 	// IPFamily defines which IPFamily this LoadBalancer is supporting
 	IPFamily corev1.IPFamily `json:"ipFamily"`
 	// IP is the provided IP which should be loadbalanced by this LoadBalancer

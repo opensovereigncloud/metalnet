@@ -231,8 +231,8 @@ github.com/mwitkow/go-conntrack v0.0.0-20161129095857-cc309e4a2223/go.mod h1:qRW
 github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f/go.mod h1:qRWi+5nqEBWmkhHvq77mSJWrCKwh8bxhgT7d/eI7P4U=
 github.com/onmetal/controller-utils v0.7.0 h1:EHLPb/XimNas1VkeZZLP4g31aSz+ipiwvwWhklaQob0=
 github.com/onmetal/controller-utils v0.7.0/go.mod h1:91KV/s0VaB8PC+hqsxo6OBsAhi3ICFgIFLv/36V0ng8=
-github.com/onmetal/metalbond v0.3.1-0.20230206121923-4e691526e14f h1:WyTo+olu1tlrSDOc8LWjgnbj8lyZt3mUvJytIGwt3Lg=
-github.com/onmetal/metalbond v0.3.1-0.20230206121923-4e691526e14f/go.mod h1:mvYp6CeCiNV1gzw49iKvgNtHL403E2INJ0YBgXcE1b0=
+github.com/onmetal/metalbond v0.3.1-0.20230427175701-819da2283cb0 h1:v0u9trSa6dgjamr/F2dwoHJFtHj0AKmgMqH3Mo0dDCE=
+github.com/onmetal/metalbond v0.3.1-0.20230427175701-819da2283cb0/go.mod h1:mvYp6CeCiNV1gzw49iKvgNtHL403E2INJ0YBgXcE1b0=
 github.com/onmetal/net-dpservice-go v0.1.9 h1:PXJDl5SFe/BnOeDCAnTJJlRTRuj33YgsEkifrHb+0DA=
 github.com/onmetal/net-dpservice-go v0.1.9/go.mod h1:dbItLY1P+nYl7/c04JdJTEaMCG6GLXgAZsMP/OuZBmg=
 github.com/onsi/ginkgo/v2 v2.8.0 h1:pAM+oBNPrpXRs+E/8spkeGx9QgekbRVyr74EUvRVOUI=

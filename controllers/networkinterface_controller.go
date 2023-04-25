@@ -113,7 +113,7 @@ type NetworkInterfaceReconciler struct {
 
 	NodeName    string
 	PublicVNI   int
-	LBServerMap map[uint32]types.UID
+	LBServerMap map[uint32]map[string]types.UID
 }
 
 //+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networkinterfaces,verbs=get;list;watch;create;update;patch;delete
@@ -615,6 +615,11 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 	}
 	log.V(1).Info("Applied interface", "PCIAddress", pciAddr, "UnderlayRoute", underlayRoute)
 
+	// subscribe only to vni after first interface is applied otherwise routes from metalbond will not be applied
+	if err := r.Metalbond.Subscribe(ctx, metalbond.VNI(vni)); metalbond.IgnoreAlreadySubscribedToVNIError(err) != nil {
+		return ctrl.Result{}, fmt.Errorf("error subscribing to vni: %w", err)
+	}
+
 	var errs []error
 
 	log.V(1).Info("Reconciling virtual ip")
@@ -861,7 +866,7 @@ func (r *NetworkInterfaceReconciler) reconcileLBTargets(ctx context.Context, log
 				if err := r.addLBTargetRouteIfNotExists(ctx, vni, prefix, resPrefix.Spec.UnderlayRoute); err != nil {
 					return err
 				}
-				log.V(1).Info("Ensured metalbond lb target route exists")
+				log.V(1).Info("Ensured metalbond lb target route exists", "underlayRoute", resPrefix.Spec.UnderlayRoute)
 				return nil
 			default:
 				log.V(1).Info("Update lb target")
@@ -872,7 +877,7 @@ func (r *NetworkInterfaceReconciler) reconcileLBTargets(ctx context.Context, log
 				if err := r.addLBTargetRouteIfNotExists(ctx, vni, prefix, underlayRoute); err != nil {
 					return err
 				}
-				log.V(1).Info("Ensured metalbond lb target route exists")
+				log.V(1).Info("Ensured metalbond lb target route exists", "underlayRoute", underlayRoute)
 				return nil
 			}
 		}(); err != nil {

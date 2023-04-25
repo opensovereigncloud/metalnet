@@ -143,12 +143,6 @@ func (r *NetworkReconciler) reconcile(ctx context.Context, log logr.Logger, netw
 	}
 	log.V(1).Info("Created dpdk default route if not existed")
 
-	log.V(1).Info("Subscribing to metalbond if not subscribed")
-	if err := r.subscribeIfNotSubscribed(ctx, vni); err != nil {
-		return ctrl.Result{}, err
-	}
-	log.V(1).Info("Subscribed to metalbond if not subscribed")
-
 	return ctrl.Result{}, nil
 }
 
@@ -184,13 +178,6 @@ func (r *NetworkReconciler) deleteDefaultRouteIfExists(ctx context.Context, vni 
 		},
 	}); dpdk.IgnoreStatusErrorCode(err, dpdk.DEL_RT) != nil {
 		return fmt.Errorf("error deleting route: %w", err)
-	}
-	return nil
-}
-
-func (r *NetworkReconciler) subscribeIfNotSubscribed(ctx context.Context, vni uint32) error {
-	if err := r.Metalbond.Subscribe(ctx, metalbond.VNI(vni)); metalbond.IgnoreAlreadySubscribedToVNIError(err) != nil {
-		return fmt.Errorf("error subscribing to vni: %w", err)
 	}
 	return nil
 }

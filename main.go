@@ -167,7 +167,7 @@ func main() {
 	}()
 
 	dpdkProtoClient := dpdkproto.NewDPDKonmetalClient(conn)
-	lbServerMap := make(map[uint32]types.UID)
+	lbServerMap := make(map[uint32]map[string]types.UID)
 	dpdkClient := dpdk.NewClient(dpdkProtoClient)
 
 	var mbClient dpdkmetalbond.LBServerAccess

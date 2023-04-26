@@ -28,14 +28,14 @@ import (
 type LBServerAccess interface {
 	AddRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error
 	RemoveRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error
-	AddLoadBalancerServer(vni uint32, uid types.UID) error
-	RemoveLoadBalancerServer(vni uint32, uid types.UID) error
+	AddLoadBalancerServer(vni uint32, ip string, uid types.UID) error
+	RemoveLoadBalancerServer(vni uint32, ip string, uid types.UID) error
 }
 
 type Client struct {
 	dpdk        dpdk.Client
 	config      ClientOptions
-	lbServerMap map[uint32]types.UID
+	lbServerMap map[uint32]map[string]types.UID
 }
 
 type ClientOptions struct {
@@ -46,17 +46,22 @@ func NewClient(dpdk dpdk.Client, opts ClientOptions) (*Client, error) {
 	return &Client{
 		dpdk:        dpdk,
 		config:      opts,
-		lbServerMap: make(map[uint32]types.UID),
+		lbServerMap: make(map[uint32]map[string]types.UID),
 	}, nil
 }
 
-func (c *Client) AddLoadBalancerServer(vni uint32, uid types.UID) error {
-	c.lbServerMap[vni] = uid
+func (c *Client) AddLoadBalancerServer(vni uint32, ip string, uid types.UID) error {
+	if _, exists := c.lbServerMap[vni]; !exists {
+		c.lbServerMap[vni] = make(map[string]types.UID)
+	}
+	c.lbServerMap[vni][ip] = uid
 	return nil
 }
 
-func (c *Client) RemoveLoadBalancerServer(vni uint32, uid types.UID) error {
-	delete(c.lbServerMap, vni)
+func (c *Client) RemoveLoadBalancerServer(vni uint32, ip string, uid types.UID) error {
+	if _, exists := c.lbServerMap[vni]; exists {
+		delete(c.lbServerMap[vni], ip)
+	}
 	return nil
 }
 
@@ -68,13 +73,14 @@ func (c *Client) AddRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error
 		return fmt.Errorf("received non-IPv4 route will not be installed in kernel route table (IPv4-only mode)")
 	}
 	if hop.Type == mbproto.NextHopType_LOADBALANCER_TARGET {
-		_, ok := c.lbServerMap[uint32(vni)]
+		ip := dest.Prefix.Addr().String()
+		_, ok := c.lbServerMap[uint32(vni)][ip]
 		if !ok {
-			return fmt.Errorf("no registered LoadBalancer on this client for vni %d", vni)
+			return fmt.Errorf("no registered LoadBalancer on this client for vni %d and ip %s", vni, ip)
 		}
 		if _, err := c.dpdk.CreateLBTargetIP(ctx, &dpdk.LBTargetIP{
 			LBTargetIPMetadata: dpdk.LBTargetIPMetadata{
-				UID: c.lbServerMap[uint32(vni)],
+				UID: c.lbServerMap[uint32(vni)][ip],
 			},
 			Spec: dpdk.LBTargetIPSpec{
 				Address: hop.TargetAddress,
@@ -137,13 +143,14 @@ func (c *Client) RemoveRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) er
 		return fmt.Errorf("received non-IPv4 route will not be installed in kernel route table (IPv4-only mode)")
 	}
 	if hop.Type == mbproto.NextHopType_LOADBALANCER_TARGET {
-		_, ok := c.lbServerMap[uint32(vni)]
+		ip := dest.Prefix.Addr().String()
+		_, ok := c.lbServerMap[uint32(vni)][ip]
 		if !ok {
-			return fmt.Errorf("no registered LoadBalancer on this client for vni %d", vni)
+			return fmt.Errorf("no registered LoadBalancer on this client for vni %d and ip %s", vni, ip)
 		}
 		if err := c.dpdk.DeleteLBTargetIP(ctx, &dpdk.LBTargetIP{
 			LBTargetIPMetadata: dpdk.LBTargetIPMetadata{
-				UID: c.lbServerMap[uint32(vni)],
+				UID: c.lbServerMap[uint32(vni)][ip],
 			},
 			Spec: dpdk.LBTargetIPSpec{
 				Address: hop.TargetAddress,

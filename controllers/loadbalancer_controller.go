@@ -109,6 +109,7 @@ func (r *LoadBalancerReconciler) delete(ctx context.Context, log logr.Logger, lb
 	}
 
 	vni := dpdkLoadBalancer.Spec.VNI
+	ip := lb.Spec.IP.Addr.String()
 	underlayRoute := dpdkLoadBalancer.Status.UnderlayRoute
 	log.V(1).Info("Got dpdk LoadBalancer", "VNI", vni, "UnderlayRoute", underlayRoute)
 
@@ -117,7 +118,8 @@ func (r *LoadBalancerReconciler) delete(ctx context.Context, log logr.Logger, lb
 			return ctrl.Result{}, fmt.Errorf("error getting dpdk loadbalancer: %w", err)
 		}
 
-		if err := r.LBServer.RemoveLoadBalancerServer(vni, lb.UID); err != nil {
+		log.V(1).Info("Remove LoadBalancer server", "vni", vni, "ip", ip)
+		if err := r.LBServer.RemoveLoadBalancerServer(vni, ip, lb.UID); err != nil {
 			return ctrl.Result{}, fmt.Errorf("error deleting dpdk loadbalancer from internal cache: %w", err)
 		}
 
@@ -141,7 +143,8 @@ func (r *LoadBalancerReconciler) delete(ctx context.Context, log logr.Logger, lb
 		return ctrl.Result{}, fmt.Errorf("error deleting underlay route: %w", err)
 	}
 	log.V(1).Info("Deleted Loadbalancer")
-	if err := r.LBServer.RemoveLoadBalancerServer(vni, lb.UID); err != nil {
+	log.V(1).Info("Remove LoadBalancer server", "vni", vni, "ip", ip)
+	if err := r.LBServer.RemoveLoadBalancerServer(vni, ip, lb.UID); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error deleting dpdk loadbalancer from internal cache: %w", err)
 	}
 
@@ -303,6 +306,7 @@ func (r *LoadBalancerReconciler) reconcile(ctx context.Context, log logr.Logger,
 
 func (r *LoadBalancerReconciler) applyLoadBalancer(ctx context.Context, log logr.Logger, lb *metalnetv1alpha1.LoadBalancer, vni uint32) (netip.Addr, error) {
 	log.V(1).Info("Getting dpdk loadbalancer")
+	ip := lb.Spec.IP.Addr.String()
 	lbalancer, err := r.DPDK.GetLoadBalancer(ctx, lb.UID)
 	if err != nil {
 		if !dpdk.IsStatusErrorCode(err, dpdk.GET_LB_ID_ERR) {
@@ -331,7 +335,8 @@ func (r *LoadBalancerReconciler) applyLoadBalancer(ctx context.Context, log logr
 		if err != nil {
 			return netip.Addr{}, fmt.Errorf("error creating dpdk loadbalancer: %w", err)
 		}
-		if err := r.LBServer.AddLoadBalancerServer(vni, lb.UID); err != nil {
+		log.V(1).Info("Adding loadbalancer server", "vni", vni, "ip", ip)
+		if err := r.LBServer.AddLoadBalancerServer(vni, ip, lb.UID); err != nil {
 			return netip.Addr{}, fmt.Errorf("error adding dpdk loadbalancer to internal cache: %w", err)
 		}
 		log.V(1).Info("Adding loadbalancer route if not exists")
@@ -343,7 +348,8 @@ func (r *LoadBalancerReconciler) applyLoadBalancer(ctx context.Context, log logr
 	}
 
 	log.V(1).Info("DPDK loadbalancer exists")
-	if err := r.LBServer.AddLoadBalancerServer(vni, lb.UID); err != nil {
+	log.V(1).Info("Adding loadbalancer server", "vni", vni, "ip", ip)
+	if err := r.LBServer.AddLoadBalancerServer(vni, ip, lb.UID); err != nil {
 		return netip.Addr{}, fmt.Errorf("error adding dpdk loadbalancer to internal cache: %w", err)
 	}
 	log.V(1).Info("Adding loadbalancer route if not exists")

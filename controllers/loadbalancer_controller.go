@@ -276,11 +276,11 @@ func (r *LoadBalancerReconciler) reconcile(ctx context.Context, log logr.Logger,
 	}
 	log.V(1).Info("Applied loadbalancer", "UnderlayRoute", underlayRoute)
 
-	log.V(1).Info("Subscribing to metalbond if not subscribed")
-	if err := r.subscribeIfNotSubscribed(ctx, vni); err != nil {
-		return ctrl.Result{}, err
-	}
-	log.V(1).Info("Subscribed to metalbond if not subscribed")
+	//log.V(1).Info("Subscribing to metalbond if not subscribed")
+	//if err := r.subscribeIfNotSubscribed(ctx, vni); err != nil {
+	//	return ctrl.Result{}, err
+	//}
+	//log.V(1).Info("Subscribed to metalbond if not subscribed")
 
 	log.V(1).Info("Adding loadbalancer route if not exists")
 	if err := r.addLoadBalancerRouteIfNotExists(ctx, lb, underlayRoute, vni); err != nil {

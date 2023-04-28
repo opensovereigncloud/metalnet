@@ -132,11 +132,6 @@ func (r *NetworkReconciler) reconcile(ctx context.Context, log logr.Logger, netw
 		if dpdk.IsStatusErrorCode(err, dpdk.ADD_RT_NO_VNI) {
 			log.V(1).Info("VNI doesn't exist in dp-service, requeueing")
 
-			log.V(1).Info("Unsubscribing from metalbond if subscribed")
-			if err := r.unsubscribeIfSubscribed(ctx, vni); err != nil {
-				log.V(1).Error(err, "Unsubscribing from metalbond failed")
-			}
-
 			return ctrl.Result{Requeue: true}, nil
 		}
 		return ctrl.Result{}, err

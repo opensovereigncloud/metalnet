@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"net/netip"
 
+	metalnetclient "github.com/onmetal/metalnet/client"
+	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -276,11 +278,10 @@ func (r *LoadBalancerReconciler) reconcile(ctx context.Context, log logr.Logger,
 	}
 	log.V(1).Info("Applied loadbalancer", "UnderlayRoute", underlayRoute)
 
-	//log.V(1).Info("Subscribing to metalbond if not subscribed")
-	//if err := r.subscribeIfNotSubscribed(ctx, vni); err != nil {
-	//	return ctrl.Result{}, err
-	//}
-	//log.V(1).Info("Subscribed to metalbond if not subscribed")
+	log.V(1).Info("Subscribing to metalbond if no interface for vni exists")
+	if err := r.subscribeIfNoInterfaceForVniExists(ctx, lb, vni); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	log.V(1).Info("Adding loadbalancer route if not exists")
 	if err := r.addLoadBalancerRouteIfNotExists(ctx, lb, underlayRoute, vni); err != nil {
@@ -354,10 +355,33 @@ func (r *LoadBalancerReconciler) applyLoadBalancer(ctx context.Context, log logr
 	return lbalancer.Status.UnderlayRoute, nil
 }
 
-func (r *LoadBalancerReconciler) subscribeIfNotSubscribed(ctx context.Context, vni uint32) error {
-	if err := r.Metalbond.Subscribe(ctx, metalbond.VNI(vni)); metalbond.IgnoreAlreadySubscribedToVNIError(err) != nil {
-		return fmt.Errorf("error subscribing to vni: %w", err)
+func (r *LoadBalancerReconciler) subscribeIfNoInterfaceForVniExists(ctx context.Context, lb *metalnetv1alpha1.LoadBalancer, vni uint32) error {
+	// list network interfaces referencing this loadbalancer
+	nicList := &metalnetv1alpha1.NetworkInterfaceList{}
+	if err := r.List(ctx, nicList,
+		client.InNamespace(lb.Namespace),
+		client.MatchingFields{metalnetclient.NetworkInterfaceNetworkRefNameField: lb.Spec.NetworkRef.Name},
+	); err != nil {
+		log.Error(err, "Error listing network interfaces referencing loadbalancer", "NetworkKey", client.ObjectKeyFromObject(lb))
+		return nil
 	}
+
+	// check if any network interfaces referencing this loadbalancer are on the same node
+	interfaceForNodeExists := false
+	for _, item := range nicList.Items {
+		if item.Spec.NodeName != nil && *item.Spec.NodeName == r.NodeName {
+			interfaceForNodeExists = true
+		}
+	}
+
+	// no network interfaces referencing this loadbalancer, subscribe vni to metalbond
+	if !interfaceForNodeExists {
+		if err := r.Metalbond.Subscribe(ctx, metalbond.VNI(vni)); metalbond.IgnoreAlreadySubscribedToVNIError(err) != nil {
+			return fmt.Errorf("error subscribing to vni: %w", err)
+		}
+		log.Info("Subscribed to metalbond for vni", "vni", vni)
+	}
+
 	return nil
 }
 

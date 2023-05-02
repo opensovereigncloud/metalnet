@@ -677,7 +677,6 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 
 	log.V(1).Info("Patching status")
 	if err := r.patchStatus(ctx, nic, func() {
-		log.V(1).Info("Mutating status")
 		nic.Status.State = metalnetv1alpha1.NetworkInterfaceStateReady
 		if nic.Status.PCIAddress != nil {
 			nic.Status.PCIAddress.Bus = pciAddr.Bus
@@ -1017,15 +1016,12 @@ func (r *NetworkInterfaceReconciler) patchStatus(
 	ctx context.Context,
 	nic *metalnetv1alpha1.NetworkInterface,
 	mutate func(),
-	log logr.Logger,
 ) error {
 	base := nic.DeepCopy()
 
 	mutate()
-	log.V(1).Info("After mutate", "nic", nic, "base", base)
 
 	if !reflect.DeepEqual(base.Status, nic.Status) {
-		log.V(1).Info("Patching status")
 		if err := r.Status().Patch(ctx, nic, client.MergeFrom(base)); err != nil {
 			return fmt.Errorf("error patching status: %w", err)
 		}

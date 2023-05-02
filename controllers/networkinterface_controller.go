@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"reflect"
 	"sort"
 	"strconv"
 
@@ -1012,8 +1013,10 @@ func (r *NetworkInterfaceReconciler) patchStatus(
 
 	mutate()
 
-	if err := r.Status().Patch(ctx, nic, client.MergeFrom(base)); err != nil {
-		return fmt.Errorf("error patching status: %w", err)
+	if !reflect.DeepEqual(base.Status, nic.Status) {
+		if err := r.Status().Patch(ctx, nic, client.MergeFrom(base)); err != nil {
+			return fmt.Errorf("error patching status: %w", err)
+		}
 	}
 	return nil
 }

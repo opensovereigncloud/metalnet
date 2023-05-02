@@ -111,9 +111,10 @@ type NetworkInterfaceReconciler struct {
 	NetFnsManager *netfns.Manager
 	SysFS         sysfs.FS
 
-	NodeName    string
-	PublicVNI   int
-	LBServerMap map[uint32]map[string]types.UID
+	NodeName      string
+	PublicVNI     int
+	LBServerMap   map[uint32]map[string]types.UID
+	RouterAddress netip.Addr
 }
 
 //+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networkinterfaces,verbs=get;list;watch;create;update;patch;delete
@@ -614,6 +615,17 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 		return ctrl.Result{}, fmt.Errorf("error applying interface: %w", err)
 	}
 	log.V(1).Info("Applied interface", "PCIAddress", pciAddr, "UnderlayRoute", underlayRoute)
+
+	log.V(1).Info("Creating dpdk default route if not exists")
+	if err := r.createDefaultRouteIfNotExists(ctx, vni); err != nil {
+		if dpdk.IsStatusErrorCode(err, dpdk.ADD_RT_NO_VNI) {
+			log.V(1).Info("VNI doesn't exist in dp-service, requeueing")
+
+			return ctrl.Result{Requeue: true}, nil
+		}
+		return ctrl.Result{}, err
+	}
+	log.V(1).Info("Created dpdk default route if not existed")
 
 	// subscribe only to vni after first interface is applied otherwise routes from metalbond will not be applied
 	if err := r.Metalbond.Subscribe(ctx, metalbond.VNI(vni)); metalbond.IgnoreAlreadySubscribedToVNIError(err) != nil {
@@ -1253,4 +1265,22 @@ func (r *NetworkInterfaceReconciler) enqueueNetworkInterfacesReferencingLoadBala
 		}
 		return reqs
 	})
+}
+
+func (r *NetworkInterfaceReconciler) createDefaultRouteIfNotExists(ctx context.Context, vni uint32) error {
+	if _, err := r.DPDK.CreateRoute(ctx, &dpdk.Route{
+		RouteMetadata: dpdk.RouteMetadata{
+			VNI: vni,
+		},
+		Spec: dpdk.RouteSpec{
+			Prefix: netip.MustParsePrefix("0.0.0.0/0"),
+			NextHop: dpdk.RouteNextHop{
+				VNI:     vni,
+				Address: r.RouterAddress,
+			},
+		},
+	}); dpdk.IgnoreStatusErrorCode(err, dpdk.ADD_RT_FAIL4) != nil {
+		return fmt.Errorf("error creating route: %w", err)
+	}
+	return nil
 }

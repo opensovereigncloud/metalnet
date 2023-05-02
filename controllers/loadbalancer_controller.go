@@ -371,6 +371,7 @@ func (r *LoadBalancerReconciler) subscribeIfNoInterfaceForVniExists(ctx context.
 	for _, item := range nicList.Items {
 		if item.Spec.NodeName != nil && *item.Spec.NodeName == r.NodeName {
 			interfaceForNodeExists = true
+			break
 		}
 	}
 

@@ -126,38 +126,7 @@ func (r *NetworkReconciler) reconcile(ctx context.Context, log logr.Logger, netw
 	}
 	log.V(1).Info("Ensured finalizer")
 
-	vni := uint32(network.Spec.ID)
-
-	log.V(1).Info("Creating dpdk default route if not exists")
-	if err := r.createDefaultRouteIfNotExists(ctx, vni); err != nil {
-		if dpdk.IsStatusErrorCode(err, dpdk.ADD_RT_NO_VNI) {
-			log.V(1).Info("VNI doesn't exist in dp-service, requeueing")
-
-			return ctrl.Result{Requeue: true}, nil
-		}
-		return ctrl.Result{}, err
-	}
-	log.V(1).Info("Created dpdk default route if not existed")
-
 	return ctrl.Result{}, nil
-}
-
-func (r *NetworkReconciler) createDefaultRouteIfNotExists(ctx context.Context, vni uint32) error {
-	if _, err := r.DPDK.CreateRoute(ctx, &dpdk.Route{
-		RouteMetadata: dpdk.RouteMetadata{
-			VNI: vni,
-		},
-		Spec: dpdk.RouteSpec{
-			Prefix: netip.MustParsePrefix("0.0.0.0/0"),
-			NextHop: dpdk.RouteNextHop{
-				VNI:     vni,
-				Address: r.RouterAddress,
-			},
-		},
-	}); dpdk.IgnoreStatusErrorCode(err, dpdk.ADD_RT_FAIL4) != nil {
-		return fmt.Errorf("error creating route: %w", err)
-	}
-	return nil
 }
 
 func (r *NetworkReconciler) deleteDefaultRouteIfExists(ctx context.Context, vni uint32) error {

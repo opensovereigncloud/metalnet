@@ -238,6 +238,7 @@ func main() {
 		NetFnsManager: netFnsManager,
 		SysFS:         sysFS,
 		NodeName:      nodeName,
+		RouterAddress: netip.MustParseAddr(routerAddress.String()),
 		PublicVNI:     publicVNI,
 		LBServerMap:   lbServerMap,
 	}).SetupWithManager(mgr); err != nil {

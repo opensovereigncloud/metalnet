@@ -678,12 +678,20 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 	log.V(1).Info("Patching status")
 	if err := r.patchStatus(ctx, nic, func() {
 		nic.Status.State = metalnetv1alpha1.NetworkInterfaceStateReady
-		nic.Status.PCIAddress = &metalnetv1alpha1.PCIAddress{
-			Bus:      pciAddr.Bus,
-			Domain:   pciAddr.Domain,
-			Slot:     pciAddr.Device,
-			Function: pciAddr.Function,
+		if nic.Status.PCIAddress != nil {
+			nic.Status.PCIAddress.Bus = pciAddr.Bus
+			nic.Status.PCIAddress.Domain = pciAddr.Domain
+			nic.Status.PCIAddress.Slot = pciAddr.Device
+			nic.Status.PCIAddress.Function = pciAddr.Function
+		} else {
+			nic.Status.PCIAddress = &metalnetv1alpha1.PCIAddress{
+				Bus:      pciAddr.Bus,
+				Domain:   pciAddr.Domain,
+				Slot:     pciAddr.Device,
+				Function: pciAddr.Function,
+			}
 		}
+
 		if virtualIPErr != nil {
 			nic.Status.VirtualIP = nic.Spec.VirtualIP
 		}

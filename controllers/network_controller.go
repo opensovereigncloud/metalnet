@@ -166,7 +166,7 @@ func (r *NetworkReconciler) createDefaultRouteIfNotExists(ctx context.Context, v
 }
 
 func (r *NetworkReconciler) deleteDefaultRouteIfExists(ctx context.Context, vni uint32) error {
-	if _, err := r.DPDK.CreateRoute(ctx, &dpdk.Route{
+	if err := r.DPDK.DeleteRoute(ctx, &dpdk.Route{
 		RouteMetadata: dpdk.RouteMetadata{
 			VNI: vni,
 		},

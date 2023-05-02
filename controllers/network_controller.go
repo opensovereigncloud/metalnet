@@ -130,7 +130,7 @@ func (r *NetworkReconciler) reconcile(ctx context.Context, log logr.Logger, netw
 }
 
 func (r *NetworkReconciler) deleteDefaultRouteIfExists(ctx context.Context, vni uint32) error {
-	if _, err := r.DPDK.CreateRoute(ctx, &dpdk.Route{
+	if err := r.DPDK.DeleteRoute(ctx, &dpdk.Route{
 		RouteMetadata: dpdk.RouteMetadata{
 			VNI: vni,
 		},

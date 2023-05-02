@@ -224,6 +224,7 @@ func main() {
 		DPDK:          dpdkClient,
 		Metalbond:     metalbondClient,
 		RouterAddress: netip.MustParseAddr(routerAddress.String()),
+		NodeName:      nodeName,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Network")
 		os.Exit(1)

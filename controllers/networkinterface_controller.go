@@ -629,6 +629,32 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 	log.V(1).Info("Created dpdk default route if not existed")
 
 	// subscribe only to vni after first interface is applied otherwise routes from metalbond will not be applied
+	// need to wait for loadbalancer, if assigned to this node to be created, before subscribing to vni
+	lbList := &metalnetv1alpha1.LoadBalancerList{}
+	if err := r.List(ctx, lbList,
+		client.InNamespace(nic.Namespace),
+		client.MatchingFields{metalnetclient.LoadBalancerNetworkRefNameField: nic.Spec.NetworkRef.Name},
+	); err != nil {
+		log.Error(err, "Error listing loadbalancer for network")
+		return ctrl.Result{}, err
+	}
+
+	if len(lbList.Items) > 0 {
+		for _, lb := range lbList.Items {
+
+			// if loadbalancer is assigned to this node, wait for it to be created before subscribing to vni
+			if lb.Spec.NodeName != nil && r.NodeName == *lb.Spec.NodeName {
+				ip := lb.Spec.IP.Addr.String()
+
+				// if loadbalancer is not yet created, requeue
+				if _, exists := r.LBServerMap[vni][ip]; !exists {
+					log.V(1).Info("LoadBalancer not yet created, requeueing", "lb", lb)
+					return ctrl.Result{Requeue: true}, nil
+				}
+			}
+		}
+	}
+
 	if err := r.Metalbond.Subscribe(ctx, metalbond.VNI(vni)); metalbond.IgnoreAlreadySubscribedToVNIError(err) != nil {
 		return ctrl.Result{}, fmt.Errorf("error subscribing to vni: %w", err)
 	}

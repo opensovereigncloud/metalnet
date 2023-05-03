@@ -59,6 +59,8 @@ type Client interface {
 
 	CreateNATRoute(ctx context.Context, route *NATRoute) (*NATRoute, error)
 	DeleteNATRoute(ctx context.Context, route *NATRoute) error
+
+	GetNATInfoEntries(ctx context.Context, ip netip.Addr, natInfoType dpdkproto.NATInfoType) ([]NATInfo, error)
 }
 
 type NATRoute struct {
@@ -155,6 +157,13 @@ type NATLocalSpec struct {
 
 type NATLocalStatus struct {
 	UnderlayRoute netip.Addr
+}
+
+type NATInfo struct {
+	Address       *netip.Addr
+	UnderlayRoute *netip.Addr
+	MinPort       uint32
+	MaxPort       uint32
 }
 
 type LBTargetIP struct {
@@ -444,6 +453,32 @@ func dpdkNATLocalToNATLocal(interfaceUID types.UID, dpdkNAT *dpdkproto.GetNATRes
 	}, nil
 }
 
+func dpdkNATInfoEntryToNATInfo(dpdkNatInfoEntry *dpdkproto.NATInfoEntry) (*NATInfo, error) {
+	info := &NATInfo{
+		MinPort: dpdkNatInfoEntry.MinPort,
+		MaxPort: dpdkNatInfoEntry.MaxPort,
+	}
+
+	if string(dpdkNatInfoEntry.GetAddress()) != "" {
+		addr, err := netip.ParseAddr(string(dpdkNatInfoEntry.GetAddress()))
+		if err != nil {
+			return nil, fmt.Errorf("error parsing NATInfoEntry ip address: %w", err)
+		}
+
+		info.Address = &addr
+	}
+
+	if string(dpdkNatInfoEntry.GetUnderlayRoute()) != "" {
+		underlayAddr, err := netip.ParseAddr(string(dpdkNatInfoEntry.GetUnderlayRoute()))
+		if err != nil {
+			return nil, fmt.Errorf("error parsing NAT info underlay address: %w", err)
+		}
+		info.UnderlayRoute = &underlayAddr
+	}
+
+	return info, nil
+}
+
 func (c *client) GetVirtualIP(ctx context.Context, interfaceUID types.UID) (*VirtualIP, error) {
 	res, err := c.DPDKonmetalClient.GetInterfaceVIP(ctx, &dpdkproto.InterfaceIDMsg{
 		InterfaceID: []byte(interfaceUID),
@@ -506,6 +541,33 @@ func (c *client) GetNATLocal(ctx context.Context, interfaceUID types.UID) (*NATL
 	}
 
 	return dpdkNATLocalToNATLocal(interfaceUID, res)
+}
+
+func (c *client) GetNATInfoEntries(ctx context.Context, ip netip.Addr, natInfoType dpdkproto.NATInfoType) ([]NATInfo, error) {
+	res, err := c.DPDKonmetalClient.GetNATInfo(ctx, &dpdkproto.GetNATInfoRequest{
+		NatVIPIP: &dpdkproto.NATIP{
+			IpVersion: netipAddrToDPDKIPVersion(ip),
+			Address:   []byte(ip.String()),
+		},
+		NatInfoType: natInfoType,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	natInfos := []NATInfo{}
+	if res.GetNatInfoEntries() != nil {
+		for _, natInfoEntry := range res.GetNatInfoEntries() {
+			natInfo, err := dpdkNATInfoEntryToNATInfo(natInfoEntry)
+			if err != nil {
+				return nil, err
+			}
+
+			natInfos = append(natInfos, *natInfo)
+		}
+	}
+
+	return natInfos, nil
 }
 
 func (c *client) CreateNATLocal(ctx context.Context, nl *NATLocal) (*NATLocal, error) {

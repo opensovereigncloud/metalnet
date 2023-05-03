@@ -36,6 +36,7 @@ import (
 	"github.com/onmetal/metalnet/metalbond"
 	"github.com/onmetal/metalnet/netfns"
 	"github.com/onmetal/metalnet/sysfs"
+	dpdkproto "github.com/onmetal/net-dpservice-go/proto"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -395,6 +396,55 @@ func (r *NetworkInterfaceReconciler) deleteNATIP(ctx context.Context, log logr.L
 	underlayRoute := dpdkVIP.Status.UnderlayRoute
 	natIP := dpdkVIP.Spec.Address
 	log.V(1).Info("NAT ip exists", "ExistingNATIP", natIP)
+
+	// Check if there are any local entries for this NAT IP
+	localEntries, err := r.DPDK.GetNATInfoEntries(ctx, natIP, dpdkproto.NATInfoType_NATInfoLocal)
+	if err != nil {
+		return fmt.Errorf("error getting dpdk local nat info entries: %w", err)
+	}
+
+	log.V(1).Info("NAT local entries", "Count", len(localEntries))
+	// if there is only one or none local entry, then we can delete the NAT IP neighbor entries
+	if len(localEntries) <= 1 {
+		log.V(1).Info("Getting dpdk nat ip neighbor entries")
+		neighEntries, err := r.DPDK.GetNATInfoEntries(ctx, natIP, dpdkproto.NATInfoType_NATInfoNeigh)
+		if err != nil {
+			return fmt.Errorf("error getting dpdk neigh nat info entries: %w", err)
+		}
+
+		log.V(1).Info("NAT neighbor entries", "Count", len(neighEntries))
+		if len(neighEntries) > 0 {
+			log.V(1).Info("Deleting dpdk nat ip neighbor entries")
+			for _, entry := range neighEntries {
+				// Delete the NAT IP neighbor entry if address is not nil
+				if entry.UnderlayRoute != nil {
+					prefix, err := natIP.Prefix(32)
+					if err != nil {
+						return fmt.Errorf("error getting nat ip prefix: %w", err)
+					}
+					log.V(1).Info("Deleting dpdk nat ip neighbor", "Entry", entry)
+					if err := r.DPDK.DeleteNATRoute(ctx, &dpdk.NATRoute{
+						NATRouteMetadata: dpdk.NATRouteMetadata{
+							VNI: vni,
+						},
+						Spec: dpdk.NATRouteSpec{
+							Prefix: prefix,
+							NextHop: dpdk.NATRouteNextHop{
+								VNI:     vni,
+								Address: *entry.UnderlayRoute,
+								MinPort: uint16(entry.MinPort),
+								MaxPort: uint16(entry.MaxPort),
+							},
+						},
+					}); dpdk.IgnoreStatusErrorCode(err, dpdk.DEL_NEIGHNAT_NOFOUND) != nil {
+						return fmt.Errorf("error deleting nat route: %w", err)
+					}
+					log.V(1).Info("Deleted dpdk nat ip neighbor", "Entry", entry)
+				}
+			}
+		}
+	}
+
 	return r.deleteExistingNATIP(ctx, log, nic, dpdkVIP, underlayRoute, vni)
 }
 

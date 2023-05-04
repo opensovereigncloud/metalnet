@@ -128,12 +128,24 @@ func (r *NetworkReconciler) reconcile(ctx context.Context, log logr.Logger, netw
 
 	vni := uint32(network.Spec.ID)
 
+	log.V(1).Info("Checking existence of the VNI")
+	vniAvail, err := r.DPDK.IsVniAvailable(ctx, vni)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if !vniAvail {
+		log.V(1).Info("VNI doesn't exist in dp-service, unsubscribe from it")
+		if err := r.unsubscribeIfSubscribed(ctx, vni); err != nil {
+			return ctrl.Result{}, err
+		}
+		log.V(1).Info("VNI doesn't exist in dp-service, unsubscribed from it")
+		return ctrl.Result{}, nil
+	}
+	log.V(1).Info("Checked existence of the VNI")
+
 	log.V(1).Info("Creating dpdk default route if not exists")
 	if err := r.createDefaultRouteIfNotExists(ctx, vni); err != nil {
-		if dpdk.IsStatusErrorCode(err, dpdk.ADD_RT_NO_VNI) {
-			log.V(1).Info("VNI doesn't exist in dp-service, requeueing")
-			return ctrl.Result{Requeue: true}, nil
-		}
 		return ctrl.Result{}, err
 	}
 	log.V(1).Info("Created dpdk default route if not existed")
@@ -177,7 +189,7 @@ func (r *NetworkReconciler) deleteDefaultRouteIfExists(ctx context.Context, vni 
 				Address: r.RouterAddress,
 			},
 		},
-	}); dpdk.IgnoreStatusErrorCode(err, dpdk.DEL_RT) != nil {
+	}); dpdk.IgnoreStatusErrorCode(err, dpdk.DEL_RT) != nil && dpdk.IgnoreStatusErrorCode(err, dpdk.DEL_VM_NOT_FND) != nil {
 		return fmt.Errorf("error deleting route: %w", err)
 	}
 	return nil
@@ -207,6 +219,11 @@ func (r *NetworkReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForNetworkInterface),
 			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
 		).
+		Watches(
+			&source.Kind{Type: &metalnetv1alpha1.LoadBalancer{}},
+			handler.EnqueueRequestsFromMapFunc(r.findObjectsForLoadBalancer),
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		).
 		Complete(r)
 }
 
@@ -226,4 +243,18 @@ func (r *NetworkReconciler) findObjectsForNetworkInterface(obj client.Object) []
 
 func (r *NetworkReconciler) networkFinalizer() string {
 	return fmt.Sprintf("%s-%s", networkFinalizer, r.NodeName)
+}
+
+func (r *NetworkReconciler) findObjectsForLoadBalancer(obj client.Object) []reconcile.Request {
+	loadBalancer, ok := obj.(*metalnetv1alpha1.LoadBalancer)
+	if !ok {
+		return []reconcile.Request{}
+	}
+
+	return []reconcile.Request{{
+		NamespacedName: types.NamespacedName{
+			Name:      loadBalancer.Spec.NetworkRef.Name,
+			Namespace: loadBalancer.GetNamespace(),
+		},
+	}}
 }

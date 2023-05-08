@@ -380,7 +380,7 @@ func (r *LoadBalancerReconciler) subscribeIfNoInterfaceForVniExists(ctx context.
 		if err := r.Metalbond.Subscribe(ctx, metalbond.VNI(vni)); metalbond.IgnoreAlreadySubscribedToVNIError(err) != nil {
 			return fmt.Errorf("error subscribing to vni: %w", err)
 		}
-		log.Info("Subscribed to metalbond for vni", "vni", vni)
+		log.Infof("Subscribed to metalbond for vni %d", vni)
 	}
 
 	return nil

@@ -1170,7 +1170,37 @@ func (r *NetworkInterfaceReconciler) delete(ctx context.Context, log logr.Logger
 	}
 	log.V(1).Info("Deleted interface")
 
-	log.V(1).Info("Removing finalizer")
+	interfaces := &metalnetv1alpha1.NetworkInterfaceList{}
+	if err := r.List(ctx, interfaces,
+		client.InNamespace(nic.Namespace),
+		client.MatchingFields{metalnetclient.NetworkInterfaceNetworkRefNameField: nic.Spec.NetworkRef.Name},
+	); err != nil {
+		log.Error(err, "Error listing network interfaces for network")
+		return ctrl.Result{}, err
+	}
+
+	noMoreInterfacesAssigned := true
+	for _, netif := range interfaces.Items {
+		if netif.Spec.NodeName != nil && r.NodeName == *netif.Spec.NodeName {
+			// skip current nic
+			if netif.Name != nic.Name {
+				continue
+			}
+			// An interface has already been assigned to the node
+			noMoreInterfacesAssigned = false
+			break
+		}
+	}
+
+	// Unsubscribe from vni if no more interfaces are assigned to the node
+	if noMoreInterfacesAssigned {
+		log.V(1).Info("Unsubscribing from metalbond if not subscribed")
+		if err := r.Metalbond.Unsubscribe(ctx, metalbond.VNI(vni)); metalbond.IgnoreNotSubscribedToVNIError(err) != nil {
+			return ctrl.Result{}, fmt.Errorf("error unsubscribing from vni: %w", err)
+		}
+		log.V(1).Info("Unsubscribed from metalbond if subscribed")
+	}
+
 	if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, nic, networkInterfaceFinalizer); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
 	}

@@ -190,7 +190,7 @@ func main() {
 	metalbondClient := metalbond.NewClient(mbInstance)
 
 	for _, metalbondPeer := range metalbondPeers {
-		if err := mbInstance.AddPeer(metalbondPeer); err != nil {
+		if err := mbInstance.AddPeer(metalbondPeer, ""); err != nil {
 			setupLog.Error(err, "failed to add metalbond peer", "MetalbondPeer", metalbondPeer)
 			os.Exit(1)
 		}

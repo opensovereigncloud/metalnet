@@ -25,18 +25,10 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/jaypipes/ghw"
-	"github.com/onmetal/controller-utils/clientutils"
-	"github.com/onmetal/metalbond/pb"
-	metalnetv1alpha1 "github.com/onmetal/metalnet/api/v1alpha1"
-	metalnetclient "github.com/onmetal/metalnet/client"
-	"github.com/onmetal/metalnet/dpdk"
-	"github.com/onmetal/metalnet/metalbond"
-	"github.com/onmetal/metalnet/netfns"
-	"github.com/onmetal/metalnet/sysfs"
-	dpdkproto "github.com/onmetal/net-dpservice-go/proto"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -49,6 +41,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	"github.com/onmetal/controller-utils/clientutils"
+	"github.com/onmetal/metalbond/pb"
+	metalnetv1alpha1 "github.com/onmetal/metalnet/api/v1alpha1"
+	metalnetclient "github.com/onmetal/metalnet/client"
+	"github.com/onmetal/metalnet/dpdk"
+	"github.com/onmetal/metalnet/metalbond"
+	"github.com/onmetal/metalnet/netfns"
+	"github.com/onmetal/metalnet/sysfs"
+	dpdkproto "github.com/onmetal/net-dpservice-go/proto"
 )
 
 const (
@@ -653,6 +655,19 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 	vni := uint32(network.Spec.ID)
 	log.V(1).Info("Got network", "NetworkKey", networkKey, "VNI", vni)
 
+	log.V(1).Info("Check if VNI exists")
+	if err := r.createDefaultRouteIfNotExists(ctx, vni); err != nil {
+		if dpdk.IsStatusErrorCode(err, dpdk.ADD_RT_NO_VNI) {
+			log.V(1).Info("VNI doesn't exist")
+			log.V(1).Info("Unsubscribing from metalbond if subscribed")
+			if err := r.Metalbond.Unsubscribe(ctx, metalbond.VNI(vni)); metalbond.IgnoreNotSubscribedToVNIError(err) != nil {
+				return ctrl.Result{}, fmt.Errorf("error unsubscribing from vni: %w", err)
+			}
+			time.Sleep(3 * time.Second)
+			log.V(1).Info("Unsubscribed from metalbond if subscribed")
+		}
+	}
+
 	log.V(1).Info("Applying interface")
 	pciAddr, underlayRoute, err := r.applyInterface(ctx, log, nic, vni)
 	if err != nil {
@@ -667,6 +682,19 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 	}
 	log.V(1).Info("Applied interface", "PCIAddress", pciAddr, "UnderlayRoute", underlayRoute)
 
+	log.V(1).Info("Subscribing to metalbond if not subscribed")
+	if err := r.Metalbond.Subscribe(ctx, metalbond.VNI(vni)); metalbond.IgnoreAlreadySubscribedToVNIError(err) != nil {
+		return ctrl.Result{}, fmt.Errorf("error subscribing to vni: %w", err)
+	}
+	log.V(1).Info("Subscribed to metalbond if not subscribed")
+
+	log.V(1).Info("Adding interface routes if not exist")
+	ips := workaroundNoNetworkInterfaceIPV6(getNetworkInterfaceIPs(nic))
+	if err := r.addInterfaceRoutesIfNotExist(ctx, vni, ips, underlayRoute); err != nil {
+		return ctrl.Result{}, err
+	}
+	log.V(1).Info("Added interface routes if not existed")
+
 	log.V(1).Info("Creating dpdk default route if not exists")
 	if err := r.createDefaultRouteIfNotExists(ctx, vni); err != nil {
 		if dpdk.IsStatusErrorCode(err, dpdk.ADD_RT_NO_VNI) {
@@ -677,37 +705,6 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 		return ctrl.Result{}, err
 	}
 	log.V(1).Info("Created dpdk default route if not existed")
-
-	// subscribe only to vni after first interface is applied otherwise routes from metalbond will not be applied
-	// need to wait for loadbalancer, if assigned to this node to be created, before subscribing to vni
-	lbList := &metalnetv1alpha1.LoadBalancerList{}
-	if err := r.List(ctx, lbList,
-		client.InNamespace(nic.Namespace),
-		client.MatchingFields{metalnetclient.LoadBalancerNetworkRefNameField: nic.Spec.NetworkRef.Name},
-	); err != nil {
-		log.Error(err, "Error listing loadbalancer for network")
-		return ctrl.Result{}, err
-	}
-
-	if len(lbList.Items) > 0 {
-		for _, lb := range lbList.Items {
-
-			// if loadbalancer is assigned to this node, wait for it to be created before subscribing to vni
-			if lb.Spec.NodeName != nil && r.NodeName == *lb.Spec.NodeName {
-				ip := lb.Spec.IP.Addr.String()
-
-				// if loadbalancer is not yet created, requeue
-				if _, exists := r.LBServerMap[vni][ip]; !exists {
-					log.V(1).Info("LoadBalancer not yet created, requeueing", "lb", lb)
-					return ctrl.Result{Requeue: true}, nil
-				}
-			}
-		}
-	}
-
-	if err := r.Metalbond.Subscribe(ctx, metalbond.VNI(vni)); metalbond.IgnoreAlreadySubscribedToVNIError(err) != nil {
-		return ctrl.Result{}, fmt.Errorf("error subscribing to vni: %w", err)
-	}
 
 	var errs []error
 
@@ -1026,12 +1023,6 @@ func (r *NetworkInterfaceReconciler) applyInterface(ctx context.Context, log log
 		if err != nil {
 			return nil, netip.Addr{}, fmt.Errorf("error creating dpdk interface: %w", err)
 		}
-		log.V(1).Info("Adding interface routes if not exist")
-		ips := workaroundNoNetworkInterfaceIPV6(getNetworkInterfaceIPs(nic))
-		if err := r.addInterfaceRoutesIfNotExist(ctx, vni, ips, iface.Status.UnderlayRoute); err != nil {
-			return nil, netip.Addr{}, err
-		}
-		log.V(1).Info("Added interface routes if not existed")
 		return addr, iface.Status.UnderlayRoute, nil
 	}
 
@@ -1044,12 +1035,6 @@ func (r *NetworkInterfaceReconciler) applyInterface(ctx context.Context, log log
 	}
 	log.V(1).Info("Got pci device for uid", "PCIDevice", addr)
 
-	log.V(1).Info("Adding interface route if not exists")
-	ips := workaroundNoNetworkInterfaceIPV6(getNetworkInterfaceIPs(nic))
-	if err := r.addInterfaceRoutesIfNotExist(ctx, vni, ips, iface.Status.UnderlayRoute); err != nil {
-		return nil, netip.Addr{}, err
-	}
-	log.V(1).Info("Added interface route if not existed")
 	return addr, iface.Status.UnderlayRoute, nil
 }
 
@@ -1169,37 +1154,6 @@ func (r *NetworkInterfaceReconciler) delete(ctx context.Context, log logr.Logger
 		return ctrl.Result{}, fmt.Errorf("error deleting underlay route: %w", err)
 	}
 	log.V(1).Info("Deleted interface")
-
-	interfaces := &metalnetv1alpha1.NetworkInterfaceList{}
-	if err := r.List(ctx, interfaces,
-		client.InNamespace(nic.Namespace),
-		client.MatchingFields{metalnetclient.NetworkInterfaceNetworkRefNameField: nic.Spec.NetworkRef.Name},
-	); err != nil {
-		log.Error(err, "Error listing network interfaces for network")
-		return ctrl.Result{}, err
-	}
-
-	noMoreInterfacesAssigned := true
-	for _, netif := range interfaces.Items {
-		if netif.Spec.NodeName != nil && r.NodeName == *netif.Spec.NodeName {
-			// skip current nic
-			if netif.Name != nic.Name {
-				continue
-			}
-			// An interface has already been assigned to the node
-			noMoreInterfacesAssigned = false
-			break
-		}
-	}
-
-	// Unsubscribe from vni if no more interfaces are assigned to the node
-	if noMoreInterfacesAssigned {
-		log.V(1).Info("Unsubscribing from metalbond if not subscribed")
-		if err := r.Metalbond.Unsubscribe(ctx, metalbond.VNI(vni)); metalbond.IgnoreNotSubscribedToVNIError(err) != nil {
-			return ctrl.Result{}, fmt.Errorf("error unsubscribing from vni: %w", err)
-		}
-		log.V(1).Info("Unsubscribed from metalbond if subscribed")
-	}
 
 	if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, nic, networkInterfaceFinalizer); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)

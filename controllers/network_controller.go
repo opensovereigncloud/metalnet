@@ -193,7 +193,7 @@ func (r *NetworkReconciler) createDefaultRouteIfNotExists(ctx context.Context, v
 				Address: r.RouterAddress,
 			},
 		},
-	}); dpdk.IgnoreStatusErrorCode(err, dpdk.ADD_ROUTE_EXISTS) != nil {
+	}); dpdk.IgnoreStatusErrorCode(err, dpdk.ROUTE_EXISTS) != nil {
 		return fmt.Errorf("error creating route: %w", err)
 	}
 	return nil
@@ -211,9 +211,8 @@ func (r *NetworkReconciler) deleteDefaultRouteIfExists(ctx context.Context, vni 
 				Address: r.RouterAddress,
 			},
 		},
-	}); dpdk.IgnoreStatusErrorCode(err, dpdk.DEL_ROUTE_NO_VM) != nil &&
-		dpdk.IgnoreStatusErrorCode(err, dpdk.DEL_ROUTE_NOT_FOUND) != nil &&
-		dpdk.IgnoreStatusErrorCode(err, dpdk.DEL_ROUTE_BAD_PORT) != nil {
+	}); dpdk.IgnoreStatusErrorCode(err, dpdk.NO_VNI) != nil &&
+		dpdk.IgnoreStatusErrorCode(err, dpdk.ROUTE_NOT_FOUND) != nil {
 		return fmt.Errorf("error deleting route: %w", err)
 	}
 	return nil

@@ -96,7 +96,7 @@ func (r *LoadBalancerReconciler) delete(ctx context.Context, log logr.Logger, lb
 	log.V(1).Info("Getting dpdk loadbalancer")
 	dpdkLoadBalancer, err := r.DPDK.GetLoadBalancer(ctx, lb.UID)
 	if err != nil {
-		if !dpdk.IsStatusErrorCode(err, dpdk.GET_LB_ID_ERR) {
+		if !dpdk.IsStatusErrorCode(err, dpdk.NOT_FOUND) {
 			return ctrl.Result{}, fmt.Errorf("error getting dpdk loadbalancer: %w", err)
 		}
 		log.V(1).Info("No dpdk loadbalancer, removing finalizer")
@@ -114,7 +114,7 @@ func (r *LoadBalancerReconciler) delete(ctx context.Context, log logr.Logger, lb
 	log.V(1).Info("Got dpdk LoadBalancer", "VNI", vni, "UnderlayRoute", underlayRoute)
 
 	if err != nil {
-		if !dpdk.IsStatusErrorCode(err, dpdk.GET_LB_ID_ERR) {
+		if !dpdk.IsStatusErrorCode(err, dpdk.NOT_FOUND) {
 			return ctrl.Result{}, fmt.Errorf("error getting dpdk loadbalancer: %w", err)
 		}
 
@@ -164,7 +164,7 @@ func (r *LoadBalancerReconciler) deleteLoadBalancer(
 	log.V(1).Info("Removed loadbalancer route if existed")
 
 	log.V(1).Info("Deleting dpdk loadbalancer if exists")
-	if err := r.DPDK.DeleteLoadBalancer(ctx, lb.UID); dpdk.IgnoreStatusErrorCode(err, dpdk.DEL_LB_ID_ERR) != nil {
+	if err := r.DPDK.DeleteLoadBalancer(ctx, lb.UID); dpdk.IgnoreStatusErrorCode(err, dpdk.NOT_FOUND) != nil {
 		return fmt.Errorf("error deleting loadbalancer: %w", err)
 	}
 
@@ -291,7 +291,7 @@ func (r *LoadBalancerReconciler) applyLoadBalancer(ctx context.Context, log logr
 	ip := lb.Spec.IP.Addr.String()
 	lbalancer, err := r.DPDK.GetLoadBalancer(ctx, lb.UID)
 	if err != nil {
-		if !dpdk.IsStatusErrorCode(err, dpdk.GET_LB_ID_ERR) {
+		if !dpdk.IsStatusErrorCode(err, dpdk.NOT_FOUND) {
 			return netip.Addr{}, fmt.Errorf("error getting dpdk loadbalancer: %w", err)
 		}
 

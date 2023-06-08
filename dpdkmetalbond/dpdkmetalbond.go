@@ -153,7 +153,7 @@ func (c *Client) AddRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error
 					MaxPort: hop.NATPortRangeTo,
 				},
 			},
-		}); dpdk.IgnoreStatusErrorCode(err, dpdk.ADD_NEIGHNAT_ALREADY_EXISTS) != nil {
+		}); dpdk.IgnoreStatusErrorCode(err, dpdk.ALREADY_EXISTS) != nil {
 			return fmt.Errorf("error nat route: %w", err)
 		}
 		return nil
@@ -177,7 +177,7 @@ func (c *Client) AddRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error
 				Address: hop.TargetAddress,
 			},
 		},
-	}); dpdk.IgnoreStatusErrorCode(err, dpdk.ADD_ROUTE_EXISTS) != nil {
+	}); dpdk.IgnoreStatusErrorCode(err, dpdk.ROUTE_EXISTS) != nil {
 		return fmt.Errorf("error creating route: %w", err)
 	}
 	return nil
@@ -203,7 +203,8 @@ func (c *Client) RemoveRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) er
 			Spec: dpdk.LBTargetIPSpec{
 				Address: hop.TargetAddress,
 			},
-		}); err != nil {
+		}); dpdk.IgnoreStatusErrorCode(err, dpdk.NOT_FOUND) != nil &&
+			dpdk.IgnoreStatusErrorCode(err, dpdk.NO_BACKIP) != nil {
 			return fmt.Errorf("error deleting lb target: %w", err)
 		}
 		return nil
@@ -223,7 +224,7 @@ func (c *Client) RemoveRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) er
 					MaxPort: hop.NATPortRangeTo,
 				},
 			},
-		}); dpdk.IgnoreStatusErrorCode(err, dpdk.DEL_NEIGHNAT_NOT_FOUND) != nil {
+		}); dpdk.IgnoreStatusErrorCode(err, dpdk.NOT_FOUND) != nil {
 			return fmt.Errorf("error deleting nat route: %w", err)
 		}
 		return nil
@@ -240,9 +241,8 @@ func (c *Client) RemoveRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) er
 				Address: hop.TargetAddress,
 			},
 		},
-	}); dpdk.IgnoreStatusErrorCode(err, dpdk.DEL_ROUTE_NO_VM) != nil &&
-		dpdk.IgnoreStatusErrorCode(err, dpdk.DEL_ROUTE_NOT_FOUND) != nil &&
-		dpdk.IgnoreStatusErrorCode(err, dpdk.DEL_ROUTE_BAD_PORT) != nil {
+	}); dpdk.IgnoreStatusErrorCode(err, dpdk.NO_VNI) != nil &&
+		dpdk.IgnoreStatusErrorCode(err, dpdk.ROUTE_NOT_FOUND) != nil {
 		return fmt.Errorf("error deleting route: %w", err)
 	}
 	return nil

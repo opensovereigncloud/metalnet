@@ -18,36 +18,84 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/go-logr/logr"
 	mb "github.com/onmetal/metalbond"
 	mbproto "github.com/onmetal/metalbond/pb"
 	"github.com/onmetal/metalnet/dpdk"
 	dpdkproto "github.com/onmetal/net-dpservice-go/proto"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-type LBServerAccess interface {
+type MbInternalAccess interface {
 	AddRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error
 	RemoveRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error
 	AddLoadBalancerServer(vni uint32, ip string, uid types.UID) error
 	RemoveLoadBalancerServer(vni uint32, ip string, uid types.UID) error
+	IsVniPeered(vni uint32) bool
+	GetPeerVnis(vni uint32) (sets.Set[uint32], error)
+	AddVniToPeerVnis(log logr.Logger, vni, peeredVNI uint32) error
+	RemoveVniFromPeerVnis(log logr.Logger, vni, peeredVNI uint32) error
 }
 
 type Client struct {
 	dpdk        dpdk.Client
 	config      ClientOptions
 	lbServerMap map[uint32]map[string]types.UID
+	vniMap      map[uint32]sets.Set[uint32]
 }
 
 type ClientOptions struct {
 	IPv4Only bool
 }
 
-func NewClient(dpdk dpdk.Client, opts ClientOptions) (*Client, error) {
+func NewClient(dpdkClient dpdk.Client, opts ClientOptions) (*Client, error) {
 	return &Client{
-		dpdk:        dpdk,
+		dpdk:        dpdkClient,
 		config:      opts,
 		lbServerMap: make(map[uint32]map[string]types.UID),
+		vniMap:      make(map[uint32]sets.Set[uint32]),
 	}, nil
+}
+
+func (c *Client) IsVniPeered(vni uint32) bool {
+	for _, peeredVnis := range c.vniMap {
+		if peeredVnis.Has(vni) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Client) GetPeerVnis(vni uint32) (sets.Set[uint32], error) {
+	vnis, ok := c.vniMap[vni]
+	if !ok {
+		return sets.New[uint32](), nil
+	}
+	return vnis, nil
+}
+
+func (c *Client) AddVniToPeerVnis(log logr.Logger, vni, peeredVNI uint32) error {
+	log.V(1).Info("Adding to peered VNI list", "VNI", vni, "peeredVNI", peeredVNI)
+	set, ok := c.vniMap[vni]
+	if !ok {
+		set = sets.New[uint32]()
+		c.vniMap[vni] = set
+	}
+	set.Insert(peeredVNI)
+	log.V(1).Info("Added to peered VNI list", "VNI", vni, "peeredVNI", peeredVNI)
+	return nil
+}
+
+func (c *Client) RemoveVniFromPeerVnis(log logr.Logger, vni, peeredVNI uint32) error {
+	log.V(1).Info("Removing from peered VNI list", "VNI", vni, "peeredVNI", peeredVNI)
+	set, ok := c.vniMap[vni]
+	if !ok {
+		return nil
+	}
+	set.Delete(peeredVNI)
+	log.V(1).Info("Removed from peered VNI list", "VNI", vni, "peeredVNI", peeredVNI)
+	return nil
 }
 
 func (c *Client) AddLoadBalancerServer(vni uint32, ip string, uid types.UID) error {

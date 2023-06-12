@@ -113,7 +113,7 @@ func (c *Client) RemoveLoadBalancerServer(vni uint32, ip string, uid types.UID) 
 	return nil
 }
 
-func (c *Client) addLocalRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error {
+func (c *Client) AddRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error {
 	ctx := context.TODO()
 
 	if c.config.IPv4Only && dest.IPVersion != mb.IPV4 {
@@ -180,11 +180,10 @@ func (c *Client) addLocalRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) 
 	}); dpdk.IgnoreStatusErrorCode(err, dpdk.ADD_RT_FAIL4) != nil {
 		return fmt.Errorf("error creating route: %w", err)
 	}
-
 	return nil
 }
 
-func (c *Client) removeLocalRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error {
+func (c *Client) RemoveRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error {
 	ctx := context.TODO()
 
 	if c.config.IPv4Only && dest.IPVersion != mb.IPV4 {
@@ -244,14 +243,5 @@ func (c *Client) removeLocalRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHo
 	}); dpdk.IgnoreStatusErrorCode(err, dpdk.DEL_RT) != nil {
 		return fmt.Errorf("error deleting route: %w", err)
 	}
-
 	return nil
-}
-
-func (c *Client) AddRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error {
-	return c.addLocalRoute(vni, dest, hop)
-}
-
-func (c *Client) RemoveRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error {
-	return c.removeLocalRoute(vni, dest, hop)
 }

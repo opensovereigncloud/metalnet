@@ -17,14 +17,15 @@ package dpdkmetalbond
 import (
 	"context"
 	"fmt"
-
 	"github.com/go-logr/logr"
 	mb "github.com/onmetal/metalbond"
 	mbproto "github.com/onmetal/metalbond/pb"
 	"github.com/onmetal/metalnet/dpdk"
 	dpdkproto "github.com/onmetal/net-dpservice-go/proto"
+	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"net"
 )
 
 type MbInternalAccess interface {
@@ -43,10 +44,12 @@ type Client struct {
 	config      ClientOptions
 	lbServerMap map[uint32]map[string]types.UID
 	vniMap      map[uint32]sets.Set[uint32]
+	log         *logrus.Entry
 }
 
 type ClientOptions struct {
-	IPv4Only bool
+	IPv4Only         bool
+	PreferredNetwork *net.IPNet
 }
 
 func NewClient(dpdkClient dpdk.Client, opts ClientOptions) (*Client, error) {
@@ -55,6 +58,7 @@ func NewClient(dpdkClient dpdk.Client, opts ClientOptions) (*Client, error) {
 		config:      opts,
 		lbServerMap: make(map[uint32]map[string]types.UID),
 		vniMap:      make(map[uint32]sets.Set[uint32]),
+		log:         logrus.WithFields(nil),
 	}, nil
 }
 
@@ -126,6 +130,15 @@ func (c *Client) AddRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error
 		if !ok {
 			return fmt.Errorf("no registered LoadBalancer on this client for vni %d and ip %s", vni, ip)
 		}
+
+		if c.config.PreferredNetwork != nil {
+			targetAddress := net.ParseIP(hop.TargetAddress.String())
+			if !c.config.PreferredNetwork.Contains(targetAddress) {
+				c.log.Infof("LB target %s is not in preferred network %s, ignoring...", targetAddress, c.config.PreferredNetwork)
+				return nil
+			}
+		}
+
 		if _, err := c.dpdk.CreateLBTargetIP(ctx, &dpdk.LBTargetIP{
 			LBTargetIPMetadata: dpdk.LBTargetIPMetadata{
 				UID: c.lbServerMap[uint32(vni)][ip],

@@ -95,9 +95,14 @@ func (r *LoadBalancerReconciler) delete(ctx context.Context, log logr.Logger, lb
 
 	log.V(1).Info("Getting dpdk loadbalancer")
 	dpdkLoadBalancer, err := r.DPDK.GetLoadBalancer(ctx, lb.UID)
+	ip := lb.Spec.IP.Addr.String()
 	if err != nil {
 		if !dpdk.IsStatusErrorCode(err, dpdk.NOT_FOUND) {
 			return ctrl.Result{}, fmt.Errorf("error getting dpdk loadbalancer: %w", err)
+		}
+		log.V(1).Info("Remove LoadBalancer server", "ip", ip)
+		if err := r.MBInternal.RemoveLoadBalancerServer(ip, lb.UID); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error deleting dpdk loadbalancer from internal cache: %w", err)
 		}
 		log.V(1).Info("No dpdk loadbalancer, removing finalizer")
 		if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, lb, loadBalancerFinalizer); err != nil {
@@ -109,28 +114,8 @@ func (r *LoadBalancerReconciler) delete(ctx context.Context, log logr.Logger, lb
 	}
 
 	vni := dpdkLoadBalancer.Spec.VNI
-	ip := lb.Spec.IP.Addr.String()
 	underlayRoute := dpdkLoadBalancer.Status.UnderlayRoute
 	log.V(1).Info("Got dpdk LoadBalancer", "VNI", vni, "UnderlayRoute", underlayRoute)
-
-	if err != nil {
-		if !dpdk.IsStatusErrorCode(err, dpdk.NOT_FOUND) {
-			return ctrl.Result{}, fmt.Errorf("error getting dpdk loadbalancer: %w", err)
-		}
-
-		log.V(1).Info("Remove LoadBalancer server", "vni", vni, "ip", ip)
-		if err := r.MBInternal.RemoveLoadBalancerServer(vni, ip, lb.UID); err != nil {
-			return ctrl.Result{}, fmt.Errorf("error deleting dpdk loadbalancer from internal cache: %w", err)
-		}
-
-		log.V(1).Info("No dpdk loadbalancer, removing finalizer")
-		if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, lb, loadBalancerFinalizer); err != nil {
-			return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
-		}
-		log.V(1).Info("Removed finalizer")
-
-		return ctrl.Result{}, nil
-	}
 
 	log.V(1).Info("Deleting LoadBalancer")
 	if err := r.deleteLoadBalancer(ctx, log, lb, vni, underlayRoute); err != nil {
@@ -138,7 +123,7 @@ func (r *LoadBalancerReconciler) delete(ctx context.Context, log logr.Logger, lb
 	}
 	log.V(1).Info("Deleted Loadbalancer")
 	log.V(1).Info("Remove LoadBalancer server", "vni", vni, "ip", ip)
-	if err := r.MBInternal.RemoveLoadBalancerServer(vni, ip, lb.UID); err != nil {
+	if err := r.MBInternal.RemoveLoadBalancerServer(ip, lb.UID); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error deleting dpdk loadbalancer from internal cache: %w", err)
 	}
 

@@ -288,14 +288,14 @@ func (r *NetworkInterfaceReconciler) removeLBTargetRouteIfExists(ctx context.Con
 }
 
 func (r *NetworkInterfaceReconciler) deleteDPDKLBTargetIfExists(ctx context.Context, nicUID types.UID, prefix netip.Prefix) error {
-	if err := r.DPDK.DeleteLBPrefix(ctx, nicUID, prefix); dpdk.IgnoreStatusErrorCode(err, dpdk.NO_VM) != nil {
-		return fmt.Errorf("error deleting lb target: %w", err)
+	if err := r.DPDK.DeleteLBPrefix(ctx, nicUID, prefix); dpdk.IgnoreStatusErrorCode(err, dpdk.NO_VM) != nil && dpdk.IgnoreStatusErrorCode(err, dpdk.NOT_FOUND) != nil {
+		return fmt.Errorf("error deleting lb prefix: %w", err)
 	}
 	return nil
 }
 
 func (r *NetworkInterfaceReconciler) deleteDPDKPrefixIfExists(ctx context.Context, nicUID types.UID, prefix netip.Prefix) error {
-	if err := r.DPDK.DeletePrefix(ctx, nicUID, prefix); dpdk.IgnoreStatusErrorCode(err, dpdk.NO_VM) != nil {
+	if err := r.DPDK.DeletePrefix(ctx, nicUID, prefix); dpdk.IgnoreStatusErrorCode(err, dpdk.NO_VM) != nil && dpdk.IgnoreStatusErrorCode(err, dpdk.NOT_FOUND) != nil {
 		return fmt.Errorf("error deleting prefix: %w", err)
 	}
 	return nil

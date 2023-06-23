@@ -117,7 +117,7 @@ func (c *Client) RemoveLoadBalancerServer(ip string, uid types.UID) error {
 	return nil
 }
 
-func (c *Client) AddRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error {
+func (c *Client) addLocalRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error {
 	ctx := context.TODO()
 
 	if c.config.IPv4Only && dest.IPVersion != mb.IPV4 {
@@ -187,7 +187,7 @@ func (c *Client) AddRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error
 	return nil
 }
 
-func (c *Client) RemoveRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error {
+func (c *Client) removeLocalRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error {
 	ctx := context.TODO()
 
 	if c.config.IPv4Only && dest.IPVersion != mb.IPV4 {
@@ -249,6 +249,32 @@ func (c *Client) RemoveRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) er
 	}); dpdk.IgnoreStatusErrorCode(err, dpdk.NO_VNI) != nil &&
 		dpdk.IgnoreStatusErrorCode(err, dpdk.ROUTE_NOT_FOUND) != nil {
 		return fmt.Errorf("error deleting route: %w", err)
+	}
+	return nil
+}
+
+func (c *Client) AddRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error {
+	if err := c.addLocalRoute(vni, dest, hop); err != nil {
+		return err
+	}
+	mbPeerVnis, _ := c.GetPeerVnis(uint32(vni))
+	for _, peeredVNI := range mbPeerVnis.UnsortedList() {
+		if err := c.addLocalRoute(mb.VNI(peeredVNI), dest, hop); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Client) RemoveRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error {
+	if err := c.removeLocalRoute(vni, dest, hop); err != nil {
+		return err
+	}
+	mbPeerVnis, _ := c.GetPeerVnis(uint32(vni))
+	for _, peeredVNI := range mbPeerVnis.UnsortedList() {
+		if err := c.removeLocalRoute(mb.VNI(peeredVNI), dest, hop); err != nil {
+			return err
+		}
 	}
 	return nil
 }

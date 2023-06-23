@@ -20,13 +20,9 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"strconv"
 
 	"github.com/go-logr/logr"
-	"github.com/onmetal/controller-utils/clientutils"
-	metalnetv1alpha1 "github.com/onmetal/metalnet/api/v1alpha1"
-	"github.com/onmetal/metalnet/dpdk"
-	"github.com/onmetal/metalnet/dpdkmetalbond"
-	"github.com/onmetal/metalnet/metalbond"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -38,6 +34,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	"github.com/onmetal/controller-utils/clientutils"
+	metalnetv1alpha1 "github.com/onmetal/metalnet/api/v1alpha1"
+	"github.com/onmetal/metalnet/dpdk"
+	"github.com/onmetal/metalnet/dpdkmetalbond"
+	"github.com/onmetal/metalnet/metalbond"
 )
 
 const (
@@ -49,9 +51,8 @@ type NetworkReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 
-	DPDK          dpdk.Client
-	Metalbond     metalbond.Client
-	MBInternal    dpdkmetalbond.MbInternalAccess
+	MetalbondFactory metalbond.MetalbondFactory
+	dpdkmetalbond.MbInternalAccess
 	RouterAddress netip.Addr
 	NodeName      string
 }
@@ -89,12 +90,14 @@ func (r *NetworkReconciler) delete(ctx context.Context, log logr.Logger, network
 		return ctrl.Result{}, nil
 	}
 
+	//TODO only allow deletion if no network interfaces or loadBalancer are left
+
 	log.V(1).Info("Finalizer present, doing cleanup")
 
 	vni := uint32(network.Spec.ID)
 
 	log.V(1).Info("Unsubscribing from metalbond if not subscribed")
-	if err := r.unsubscribeIfSubscribed(ctx, vni); err != nil {
+	if err := r.unsubscribeIfSubscribed(ctx, vni, vni); err != nil {
 		return ctrl.Result{}, err
 	}
 	log.V(1).Info("Unsubscribed from metalbond if subscribed")
@@ -105,11 +108,9 @@ func (r *NetworkReconciler) delete(ctx context.Context, log logr.Logger, network
 	}
 	log.V(1).Info("Deleted default route if existed")
 
-	log.V(1).Info("Deleting peered VNIs")
-	if err := r.deletePeeredVNIs(ctx, log, network, vni); err != nil {
-		return ctrl.Result{}, err
-	}
-	log.V(1).Info("Deleted peered VNIs")
+	log.V(1).Info("Cleaning up metalbond factory")
+	r.MetalbondFactory.Cleanup(vni)
+	log.V(1).Info("Cleaned up metalbond factory")
 
 	log.V(1).Info("Cleanup done, removing finalizer")
 	if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, network, r.networkFinalizer()); err != nil {
@@ -135,30 +136,20 @@ func (r *NetworkReconciler) reconcile(ctx context.Context, log logr.Logger, netw
 	log.V(1).Info("Ensured finalizer")
 
 	vni := uint32(network.Spec.ID)
+	if !r.MetalbondFactory.Ready(vni) {
+		err := r.MetalbondFactory.New(ctx, vni)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+	}
 
 	log.V(1).Info("Checking existence of the VNI")
-	vniAvail, err := r.DPDK.IsVniAvailable(ctx, vni)
+	vniAvail, err := r.MetalbondFactory.DPDK.IsVniAvailable(ctx, vni)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	if !vniAvail {
-		if !r.MBInternal.IsVniPeered(vni) {
-			log.V(1).Info("VNI doesn't exist in dp-service and no peering, unsubscribe from it")
-			if err := r.unsubscribeIfSubscribed(ctx, vni); err != nil {
-				return ctrl.Result{}, err
-			}
-			log.V(1).Info("VNI doesn't exist in dp-service and no peering, unsubscribed from it")
-		}
-
-		log.V(1).Info("Reconciling peered VNIs")
-		if err := r.reconcilePeeredVNIs(ctx, log, network, vni, vniAvail); err != nil {
-			return ctrl.Result{}, err
-		}
-		log.V(1).Info("Reconciled peered VNIs")
-		return ctrl.Result{}, nil
-	}
-	log.V(1).Info("Checked existence of the VNI")
+	log.V(1).Info("Checked existence of the VNI", "vniAvail", vniAvail)
 
 	log.V(1).Info("Creating dpdk default route if not exists")
 	if err := r.createDefaultRouteIfNotExists(ctx, vni); err != nil {
@@ -173,7 +164,7 @@ func (r *NetworkReconciler) reconcile(ctx context.Context, log logr.Logger, netw
 	log.V(1).Info("Reconciled peered VNIs")
 
 	log.V(1).Info("Subscribing to metalbond if not subscribed")
-	if err := r.subscribeIfNotSubscribed(ctx, vni); err != nil {
+	if err := r.subscribeIfNotSubscribed(ctx, vni, vni); err != nil {
 		return ctrl.Result{}, err
 	}
 	log.V(1).Info("Subscribed to metalbond if not subscribed")
@@ -182,7 +173,7 @@ func (r *NetworkReconciler) reconcile(ctx context.Context, log logr.Logger, netw
 }
 
 func (r *NetworkReconciler) createDefaultRouteIfNotExists(ctx context.Context, vni uint32) error {
-	if _, err := r.DPDK.CreateRoute(ctx, &dpdk.Route{
+	if _, err := r.MetalbondFactory.DPDK.CreateRoute(ctx, &dpdk.Route{
 		RouteMetadata: dpdk.RouteMetadata{
 			VNI: vni,
 		},
@@ -200,7 +191,7 @@ func (r *NetworkReconciler) createDefaultRouteIfNotExists(ctx context.Context, v
 }
 
 func (r *NetworkReconciler) deleteDefaultRouteIfExists(ctx context.Context, vni uint32) error {
-	if err := r.DPDK.DeleteRoute(ctx, &dpdk.Route{
+	if err := r.MetalbondFactory.DPDK.DeleteRoute(ctx, &dpdk.Route{
 		RouteMetadata: dpdk.RouteMetadata{
 			VNI: vni,
 		},
@@ -218,151 +209,69 @@ func (r *NetworkReconciler) deleteDefaultRouteIfExists(ctx context.Context, vni 
 	return nil
 }
 
-func (r *NetworkReconciler) subscribeIfNotSubscribed(ctx context.Context, vni uint32) error {
-	if err := r.Metalbond.Subscribe(ctx, metalbond.VNI(vni)); metalbond.IgnoreAlreadySubscribedToVNIError(err) != nil {
+func (r *NetworkReconciler) subscribeIfNotSubscribed(ctx context.Context, vni, peeredVni uint32) error {
+	if err := r.MetalbondFactory.Client(vni).Subscribe(ctx, metalbond.VNI(peeredVni)); metalbond.IgnoreAlreadySubscribedToVNIError(err) != nil {
 		return fmt.Errorf("error subscribing to vni: %w", err)
 	}
 	return nil
 }
 
-func (r *NetworkReconciler) setDifference(s1, s2 sets.Set[uint32]) sets.Set[uint32] {
-	diff := sets.New[uint32]()
-	for k := range s1 {
-		if _, ok := s2[k]; !ok {
-			diff.Insert(k)
-		}
-	}
-	return diff
-}
-
 func (r *NetworkReconciler) reconcilePeeredVNIs(ctx context.Context, log logr.Logger, network *metalnetv1alpha1.Network, vni uint32, ownVniAvail bool) error {
-	mbPeerVnis, err := r.MBInternal.GetPeerVnis(vni)
-	if err != nil {
-		return err
-	}
+	mbPeerVnis := r.MetalbondFactory.Internal(vni).GetPeeredVnis()
 	specPeerVnis := sets.New[uint32]()
 	if network.Spec.PeeredIDs != nil {
 		for _, v := range network.Spec.PeeredIDs {
 			specPeerVnis.Insert(uint32(v))
 		}
 	}
-	missing := r.setDifference(mbPeerVnis, specPeerVnis)
-	added := r.setDifference(specPeerVnis, mbPeerVnis)
 
-	if missing.Len() == 0 && added.Len() == 0 {
-		if mbPeerVnis.Len() == 0 {
-			return nil
-		}
-
-		for _, peeredVNI := range mbPeerVnis.UnsortedList() {
-			if !ownVniAvail {
-				if err := r.MBInternal.RemoveVniFromPeerVnis(log, vni, peeredVNI); err != nil {
-					return err
-				}
-			}
-		}
-	}
-
-	if missing.Len() != 0 || added.Len() != 0 {
-		for _, peeredVNI := range missing.UnsortedList() {
-			log.V(1).Info("Checking the existence of the peeredVNI in dp-service", "peeredVNI", peeredVNI)
-			peeredVniAvail, err := r.DPDK.IsVniAvailable(ctx, peeredVNI)
+	// prepare peered prefixes
+	peeredPrefixes := map[uint32][]netip.Prefix{}
+	if len(network.Spec.PeeredPrefixes) > 0 {
+		for vni, prefixes := range network.Spec.PeeredPrefixes {
+			peeredVni, err := r.convertVni(vni)
 			if err != nil {
 				return err
 			}
-			log.V(1).Info("Checked the existence of the peeredVNI in dp-service", "peeredVNI", peeredVNI)
 
-			if !peeredVniAvail {
-				if err := r.unsubscribeIfSubscribed(ctx, peeredVNI); err != nil {
-					return err
-				}
-			} else if peeredVniAvail && ownVniAvail {
-				if err := r.recycleVNISubscription(ctx, vni); err != nil {
-					return err
-				}
-				if err := r.recycleVNISubscription(ctx, peeredVNI); err != nil {
-					return err
-				}
-			} else {
-				if err := r.recycleVNISubscription(ctx, peeredVNI); err != nil {
-					return err
-				}
-			}
-			if err := r.MBInternal.RemoveVniFromPeerVnis(log, vni, peeredVNI); err != nil {
-				return err
-			}
-		}
-
-		for _, peeredVNI := range added.UnsortedList() {
-			if !ownVniAvail {
-				return nil
-			}
-			log.V(1).Info("Checking the existence of the peeredVNI in dp-service", "peeredVNI", peeredVNI)
-			peeredVniAvail, err := r.DPDK.IsVniAvailable(ctx, peeredVNI)
-			if err != nil {
-				return err
-			}
-			log.V(1).Info("Checked the existence of the peeredVNI in dp-service", "peeredVNI", peeredVNI)
-			if ownVniAvail && !peeredVniAvail {
-				if err := r.subscribeIfNotSubscribed(ctx, peeredVNI); err != nil {
-					return err
-				}
-			}
-			if ownVniAvail && peeredVniAvail {
-				if err := r.recycleVNISubscription(ctx, vni); err != nil {
-					return err
-				}
-				if err := r.recycleVNISubscription(ctx, peeredVNI); err != nil {
-					return err
-				}
-			}
-			if err := r.MBInternal.AddVniToPeerVnis(log, vni, peeredVNI); err != nil {
-				return err
+			peeredPrefixes[peeredVni] = []netip.Prefix{}
+			for _, prefix := range prefixes {
+				peeredPrefixes[peeredVni] = append(peeredPrefixes[peeredVni], prefix.Prefix)
 			}
 		}
 	}
+	r.MetalbondFactory.Internal(vni).SetPeeredPrefixes(peeredPrefixes)
 
-	return nil
-}
-
-func (r *NetworkReconciler) deletePeeredVNIs(ctx context.Context, log logr.Logger, network *metalnetv1alpha1.Network, vni uint32) error {
-	mbPeerVnis, _ := r.MBInternal.GetPeerVnis(vni)
-
-	for _, peeredVNI := range mbPeerVnis.UnsortedList() {
-		log.V(1).Info("Checking existence of the ", "peered VNI", peeredVNI)
-		vniAvail, err := r.DPDK.IsVniAvailable(ctx, peeredVNI)
-		if err != nil {
-			return err
-		}
-		if !vniAvail {
-			if err := r.unsubscribeIfSubscribed(ctx, peeredVNI); err != nil {
-				return err
-			}
-		}
-		if err := r.MBInternal.RemoveVniFromPeerVnis(log, vni, peeredVNI); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (r *NetworkReconciler) recycleVNISubscription(ctx context.Context, vni uint32) error {
-	if err := r.unsubscribeIfSubscribed(ctx, vni); err != nil {
+	// cleanup not peered routes
+	err := r.MetalbondFactory.Internal(vni).CleanupNotPeeredRoutes()
+	if err != nil {
 		return err
 	}
 
-	if err := r.DPDK.ResetVni(ctx, vni); err != nil {
-		return fmt.Errorf("error resetting vni: %w", err)
+	// calculate peered vnis to add and remove
+	added := specPeerVnis.Difference(mbPeerVnis)
+	removed := mbPeerVnis.Difference(specPeerVnis)
+
+	log.V(1).Info("Reconciling peered VNIs", "added", added, "removed", removed)
+	for _, peeredVNI := range added.UnsortedList() {
+		r.MetalbondFactory.Internal(vni).AddPeeredVni(peeredVNI)
+		if err := r.subscribeIfNotSubscribed(ctx, vni, peeredVNI); err != nil {
+			return err
+		}
 	}
 
-	if err := r.subscribeIfNotSubscribed(ctx, vni); err != nil {
-		return err
+	for _, peeredVNI := range removed.UnsortedList() {
+		r.MetalbondFactory.Internal(vni).RemovePeeredVni(peeredVNI)
+		if err := r.unsubscribeIfSubscribed(ctx, vni, peeredVNI); err != nil {
+			return err
+		}
 	}
+
 	return nil
 }
 
-func (r *NetworkReconciler) unsubscribeIfSubscribed(ctx context.Context, vni uint32) error {
-	if err := r.Metalbond.Unsubscribe(ctx, metalbond.VNI(vni)); metalbond.IgnoreNotSubscribedToVNIError(err) != nil {
+func (r *NetworkReconciler) unsubscribeIfSubscribed(ctx context.Context, vni, peeredVNI uint32) error {
+	if err := r.MetalbondFactory.Client(vni).Unsubscribe(ctx, metalbond.VNI(peeredVNI)); metalbond.IgnoreNotSubscribedToVNIError(err) != nil {
 		return fmt.Errorf("error subscribing to vni: %w", err)
 	}
 	return nil
@@ -416,4 +325,12 @@ func (r *NetworkReconciler) findObjectsForLoadBalancer(obj client.Object) []reco
 			Namespace: loadBalancer.GetNamespace(),
 		},
 	}}
+}
+
+func (r *NetworkReconciler) convertVni(vni string) (uint32, error) {
+	id, err := strconv.Atoi(vni)
+	if err != nil {
+		return 0, fmt.Errorf("error converting network vni to uint32: %w", err)
+	}
+	return uint32(id), nil
 }

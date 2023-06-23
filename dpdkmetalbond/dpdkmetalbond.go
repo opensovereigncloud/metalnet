@@ -17,15 +17,18 @@ package dpdkmetalbond
 import (
 	"context"
 	"fmt"
-	"github.com/go-logr/logr"
+	"net"
+	"net/netip"
+	"sync"
+
+	"github.com/sirupsen/logrus"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
+
 	mb "github.com/onmetal/metalbond"
 	mbproto "github.com/onmetal/metalbond/pb"
 	"github.com/onmetal/metalnet/dpdk"
 	dpdkproto "github.com/onmetal/net-dpservice-go/proto"
-	"github.com/sirupsen/logrus"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/sets"
-	"net"
 )
 
 type MbInternalAccess interface {
@@ -34,17 +37,22 @@ type MbInternalAccess interface {
 	AddLoadBalancerServer(vni uint32, ip string, uid types.UID) error
 	RemoveLoadBalancerServer(ip string, uid types.UID) error
 	IsVniPeered(vni uint32) bool
-	GetPeerVnis(vni uint32) (sets.Set[uint32], error)
-	AddVniToPeerVnis(log logr.Logger, vni, peeredVNI uint32) error
-	RemoveVniFromPeerVnis(log logr.Logger, vni, peeredVNI uint32) error
+	GetPeeredVnis() sets.Set[uint32]
+	AddPeeredVni(peeredVNI uint32)
+	RemovePeeredVni(peeredVNI uint32)
+	SetPeeredPrefixes(peeredPrefixes map[uint32][]netip.Prefix)
+	CleanupNotPeeredRoutes() error
 }
 
 type Client struct {
-	dpdk        dpdk.Client
-	config      ClientOptions
-	lbServerMap map[uint32]map[string]types.UID
-	vniMap      map[uint32]sets.Set[uint32]
-	log         *logrus.Entry
+	log            *logrus.Entry
+	dpdk           dpdk.Client
+	config         ClientOptions
+	lbServerMap    map[uint32]map[string]types.UID
+	vni            uint32
+	peeredVnis     sets.Set[uint32]
+	peeredPrefixes map[uint32][]netip.Prefix
+	mtxPeeredVnis  sync.RWMutex
 }
 
 type ClientOptions struct {
@@ -52,54 +60,47 @@ type ClientOptions struct {
 	PreferredNetwork *net.IPNet
 }
 
-func NewClient(dpdkClient dpdk.Client, opts ClientOptions) (*Client, error) {
+func NewClient(dpdkClient dpdk.Client, opts ClientOptions, vni uint32) (*Client, error) {
 	return &Client{
-		dpdk:        dpdkClient,
-		config:      opts,
-		lbServerMap: make(map[uint32]map[string]types.UID),
-		vniMap:      make(map[uint32]sets.Set[uint32]),
-		log:         logrus.WithFields(nil),
+		log:            logrus.WithFields(nil),
+		dpdk:           dpdkClient,
+		config:         opts,
+		lbServerMap:    make(map[uint32]map[string]types.UID),
+		vni:            vni,
+		peeredVnis:     sets.New[uint32](),
+		peeredPrefixes: make(map[uint32][]netip.Prefix),
 	}, nil
 }
 
 func (c *Client) IsVniPeered(vni uint32) bool {
-	for _, peeredVnis := range c.vniMap {
-		if peeredVnis.Has(vni) {
-			return true
-		}
+	c.mtxPeeredVnis.RLock()
+	defer c.mtxPeeredVnis.RUnlock()
+
+	if c.peeredVnis.Has(vni) {
+		return true
 	}
+
 	return false
 }
 
-func (c *Client) GetPeerVnis(vni uint32) (sets.Set[uint32], error) {
-	vnis, ok := c.vniMap[vni]
-	if !ok {
-		return sets.New[uint32](), nil
-	}
-	return vnis, nil
+func (c *Client) GetPeeredVnis() sets.Set[uint32] {
+	return c.peeredVnis
 }
 
-func (c *Client) AddVniToPeerVnis(log logr.Logger, vni, peeredVNI uint32) error {
-	log.V(1).Info("Adding to peered VNI list", "VNI", vni, "peeredVNI", peeredVNI)
-	set, ok := c.vniMap[vni]
-	if !ok {
-		set = sets.New[uint32]()
-		c.vniMap[vni] = set
-	}
-	set.Insert(peeredVNI)
-	log.V(1).Info("Added to peered VNI list", "VNI", vni, "peeredVNI", peeredVNI)
-	return nil
+func (c *Client) AddPeeredVni(peeredVNI uint32) {
+	c.log.Infof("Adding %d to peered VNI list", peeredVNI)
+	c.mtxPeeredVnis.Lock()
+	c.peeredVnis.Insert(peeredVNI)
+	c.mtxPeeredVnis.Unlock()
+	c.log.Infof("Added %d to peered VNI list", peeredVNI)
 }
 
-func (c *Client) RemoveVniFromPeerVnis(log logr.Logger, vni, peeredVNI uint32) error {
-	log.V(1).Info("Removing from peered VNI list", "VNI", vni, "peeredVNI", peeredVNI)
-	set, ok := c.vniMap[vni]
-	if !ok {
-		return nil
-	}
-	set.Delete(peeredVNI)
-	log.V(1).Info("Removed from peered VNI list", "VNI", vni, "peeredVNI", peeredVNI)
-	return nil
+func (c *Client) RemovePeeredVni(peeredVNI uint32) {
+	c.log.Infof("Removing %d from peered VNI list", peeredVNI)
+	c.mtxPeeredVnis.Lock()
+	c.peeredVnis.Delete(peeredVNI)
+	c.mtxPeeredVnis.Unlock()
+	c.log.Infof("Removed %d from peered VNI list", peeredVNI)
 }
 
 func (c *Client) AddLoadBalancerServer(vni uint32, ip string, uid types.UID) error {
@@ -121,7 +122,8 @@ func (c *Client) RemoveLoadBalancerServer(ip string, uid types.UID) error {
 	return nil
 }
 
-func (c *Client) addLocalRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error {
+func (c *Client) addLocalRoute(vni, dstVni mb.VNI, dest mb.Destination, hop mb.NextHop) error {
+	c.log.Infof("Adding local route for vni %d dstvni %d, dest %s, hop %s", vni, dstVni, dest, hop)
 	ctx := context.TODO()
 
 	if c.config.IPv4Only && dest.IPVersion != mb.IPV4 {
@@ -183,6 +185,7 @@ func (c *Client) addLocalRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) 
 	prefix.IpVersion = dpdkproto.IPVersion_IPv4 //only ipv4 in overlay is supported so far
 	prefix.Address = []byte(dest.Prefix.Addr().String())
 
+	c.log.Infof("CreateRoute vni %d dstvni %d, dest %s, hop %s", vni, dstVni, dest, hop)
 	if _, err := c.dpdk.CreateRoute(ctx, &dpdk.Route{
 		RouteMetadata: dpdk.RouteMetadata{
 			VNI: uint32(vni),
@@ -190,7 +193,7 @@ func (c *Client) addLocalRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) 
 		Spec: dpdk.RouteSpec{
 			Prefix: dest.Prefix,
 			NextHop: dpdk.RouteNextHop{
-				VNI:     uint32(vni),
+				VNI:     uint32(dstVni),
 				Address: hop.TargetAddress,
 			},
 		},
@@ -200,7 +203,7 @@ func (c *Client) addLocalRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) 
 	return nil
 }
 
-func (c *Client) removeLocalRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error {
+func (c *Client) removeLocalRoute(vni, dstVni mb.VNI, dest mb.Destination, hop mb.NextHop) error {
 	ctx := context.TODO()
 
 	if c.config.IPv4Only && dest.IPVersion != mb.IPV4 {
@@ -255,7 +258,7 @@ func (c *Client) removeLocalRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHo
 		Spec: dpdk.RouteSpec{
 			Prefix: dest.Prefix,
 			NextHop: dpdk.RouteNextHop{
-				VNI:     uint32(vni),
+				VNI:     uint32(dstVni),
 				Address: hop.TargetAddress,
 			},
 		},
@@ -267,27 +270,69 @@ func (c *Client) removeLocalRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHo
 }
 
 func (c *Client) AddRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error {
-	if err := c.addLocalRoute(vni, dest, hop); err != nil {
-		return err
-	}
-	mbPeerVnis, _ := c.GetPeerVnis(uint32(vni))
-	for _, peeredVNI := range mbPeerVnis.UnsortedList() {
-		if err := c.addLocalRoute(mb.VNI(peeredVNI), dest, hop); err != nil {
+	c.log.Infof("AddRoute: vni=%d, dest=%s, hop=%s, peeredPrefixes=%v", vni, dest, hop, c.peeredPrefixes)
+	dstVni := mb.VNI(c.vni)
+	// the route belongs to the local VNI
+	if dstVni == vni {
+		if err := c.addLocalRoute(vni, vni, dest, hop); err != nil {
 			return err
+		}
+	} else {
+		// the route is belongs to a peered VNI and is of type standard
+		if hop.Type == mbproto.NextHopType_STANDARD {
+			// if we have set peered prefixes for this VNI, we need to check if the destination is in the list
+			peeredPrefixes, exists := c.peeredPrefixes[uint32(vni)]
+			// by default we add the route if no peered prefixes are set
+			addRoute := true
+			c.log.Infof("AddRoute peeredPrefixes %v", peeredPrefixes)
+			if exists {
+				// if the destination is not in the list of peered prefixes, we don't add the route
+				addRoute = false
+				for _, peeredPrefix := range peeredPrefixes {
+					if peeredPrefix.Contains(dest.Prefix.Addr()) {
+						addRoute = true
+						break
+					}
+				}
+			}
+
+			c.log.Infof("AddRoute addRoute %v", addRoute)
+			if addRoute {
+				if err := c.addLocalRoute(dstVni, vni, dest, hop); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil
 }
 
 func (c *Client) RemoveRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error {
-	if err := c.removeLocalRoute(vni, dest, hop); err != nil {
-		return err
-	}
-	mbPeerVnis, _ := c.GetPeerVnis(uint32(vni))
-	for _, peeredVNI := range mbPeerVnis.UnsortedList() {
-		if err := c.removeLocalRoute(mb.VNI(peeredVNI), dest, hop); err != nil {
+	c.log.Infof("RemoveRoute: vni=%d, dest=%s, hop=%s", vni, dest, hop)
+	dstVni := mb.VNI(c.vni)
+	// the route belongs to the local VNI
+	if dstVni == vni {
+		if err := c.removeLocalRoute(vni, vni, dest, hop); err != nil {
 			return err
 		}
+	} else {
+		// the route is belongs to a peered VNI and is of type standard
+		if hop.Type == mbproto.NextHopType_STANDARD {
+			if err := c.removeLocalRoute(dstVni, vni, dest, hop); err != nil {
+				return err
+			}
+		}
 	}
+	return nil
+}
+
+func (c *Client) SetPeeredPrefixes(peeredPrefixes map[uint32][]netip.Prefix) {
+	c.log.Infof("SetPeeredPrefixes: %v for vni %d", peeredPrefixes, c.vni)
+	c.peeredPrefixes = peeredPrefixes
+}
+
+func (c *Client) CleanupNotPeeredRoutes() error {
+	// TODO: implement
+
 	return nil
 }

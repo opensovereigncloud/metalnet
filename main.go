@@ -178,29 +178,16 @@ func main() {
 	dpdkProtoClient := dpdkproto.NewDPDKonmetalClient(conn)
 	dpdkClient := dpdk.NewClient(dpdkProtoClient)
 
-	var mbClient dpdkmetalbond.MbInternalAccess
-	config := mb.Config{
-		KeepaliveInterval: 3,
+	MetalbondFactory := metalbond.MetalbondFactory{
+		Config: mb.Config{KeepaliveInterval: 3},
+		Peers:  metalbondPeers,
+		DPDK:   dpdkClient,
+		ClientOptions: dpdkmetalbond.ClientOptions{
+			IPv4Only:         true,
+			PreferredNetwork: preferredNetwork,
+		},
 	}
-
-	mbClient, err = dpdkmetalbond.NewClient(dpdkClient, dpdkmetalbond.ClientOptions{
-		IPv4Only:         true,
-		PreferredNetwork: preferredNetwork,
-	})
-	if err != nil {
-		setupLog.Error(err, "unable to initialize metalbond client")
-		os.Exit(1)
-	}
-
-	mbInstance := mb.NewMetalBond(config, mbClient)
-	metalbondClient := metalbond.NewClient(mbInstance)
-
-	for _, metalbondPeer := range metalbondPeers {
-		if err := mbInstance.AddPeer(metalbondPeer, ""); err != nil {
-			setupLog.Error(err, "failed to add metalbond peer", "MetalbondPeer", metalbondPeer)
-			os.Exit(1)
-		}
-	}
+	MetalbondFactory.Init()
 
 	_, err = dpdkProtoClient.Init(context.Background(), &dpdkproto.InitConfig{})
 	if err != nil {
@@ -225,40 +212,36 @@ func main() {
 	}
 
 	if err = (&controllers.NetworkReconciler{
-		Client:        mgr.GetClient(),
-		Scheme:        mgr.GetScheme(),
-		DPDK:          dpdkClient,
-		Metalbond:     metalbondClient,
-		MBInternal:    mbClient,
-		RouterAddress: netip.MustParseAddr(routerAddress.String()),
-		NodeName:      nodeName,
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		MetalbondFactory: MetalbondFactory,
+		RouterAddress:    netip.MustParseAddr(routerAddress.String()),
+		NodeName:         nodeName,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Network")
 		os.Exit(1)
 	}
 	if err = (&controllers.NetworkInterfaceReconciler{
-		Client:        mgr.GetClient(),
-		EventRecorder: mgr.GetEventRecorderFor("networkinterface"),
-		Scheme:        mgr.GetScheme(),
-		DPDK:          dpdk.NewClient(dpdkProtoClient),
-		Metalbond:     metalbond.NewClient(mbInstance),
-		NetFnsManager: netFnsManager,
-		SysFS:         sysFS,
-		NodeName:      nodeName,
-		PublicVNI:     publicVNI,
+		Client:           mgr.GetClient(),
+		EventRecorder:    mgr.GetEventRecorderFor("networkinterface"),
+		Scheme:           mgr.GetScheme(),
+		MetalbondFactory: MetalbondFactory,
+		NetFnsManager:    netFnsManager,
+		SysFS:            sysFS,
+		NodeName:         nodeName,
+		PublicVNI:        publicVNI,
+		RouterAddress:    netip.MustParseAddr(routerAddress.String()),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkInterface")
 		os.Exit(1)
 	}
 
 	if err = (&controllers.LoadBalancerReconciler{
-		Client:     mgr.GetClient(),
-		Scheme:     mgr.GetScheme(),
-		DPDK:       dpdk.NewClient(dpdkProtoClient),
-		Metalbond:  metalbond.NewClient(mbInstance),
-		NodeName:   nodeName,
-		PublicVNI:  publicVNI,
-		MBInternal: mbClient,
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		MetalbondFactory: MetalbondFactory,
+		NodeName:         nodeName,
+		PublicVNI:        publicVNI,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LoadBalancer")
 		os.Exit(1)

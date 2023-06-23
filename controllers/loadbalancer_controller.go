@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/netip"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -29,11 +30,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	"github.com/go-logr/logr"
 	"github.com/onmetal/controller-utils/clientutils"
+	"github.com/onmetal/metalbond/pb"
 	metalnetv1alpha1 "github.com/onmetal/metalnet/api/v1alpha1"
 	"github.com/onmetal/metalnet/dpdk"
-	"github.com/onmetal/metalnet/dpdkmetalbond"
 	"github.com/onmetal/metalnet/metalbond"
 )
 
@@ -47,11 +47,10 @@ type LoadBalancerReconciler struct {
 	record.EventRecorder
 	Scheme *runtime.Scheme
 
-	DPDK       dpdk.Client
-	MBInternal dpdkmetalbond.MbInternalAccess
-	Metalbond  metalbond.Client
-	NodeName   string
-	PublicVNI  int
+	MetalbondFactory metalbond.MetalbondFactory
+
+	NodeName  string
+	PublicVNI int
 }
 
 //+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=loadbalancers,verbs=get;list;watch;create;update;patch;delete
@@ -93,15 +92,42 @@ func (r *LoadBalancerReconciler) delete(ctx context.Context, log logr.Logger, lb
 	}
 	log.V(1).Info("Finalizer present, cleaning up")
 
-	log.V(1).Info("Getting dpdk loadbalancer")
-	dpdkLoadBalancer, err := r.DPDK.GetLoadBalancer(ctx, lb.UID)
+	network := &metalnetv1alpha1.Network{}
+	networkKey := client.ObjectKey{Namespace: lb.Namespace, Name: lb.Spec.NetworkRef.Name}
+	log.V(1).Info("Getting network", "NetworkKey", networkKey)
+	if err := r.Get(ctx, networkKey, network); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return ctrl.Result{}, fmt.Errorf("error getting network %s: %w", networkKey, err)
+		}
+
+		r.Eventf(lb, corev1.EventTypeWarning, "NetworkNotFound", "Network %s could not be found", networkKey.Name)
+		if err := r.patchStatus(ctx, lb, func() {
+			lb.Status = metalnetv1alpha1.LoadBalancerStatus{
+				State: metalnetv1alpha1.LoadBalancerStatePending,
+			}
+		}); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
+	vni := uint32(network.Spec.ID)
+	log.V(1).Info("Got network", "NetworkKey", networkKey, "VNI", vni)
+
+	if !r.MetalbondFactory.Ready(vni) {
+		log.V(1).Info("MetalbondFactory not ready, requeue...", "VNI", vni)
+		return ctrl.Result{Requeue: true}, nil
+	}
+
 	ip := lb.Spec.IP.Addr.String()
+	log.V(1).Info("Getting dpdk loadbalancer")
+	dpdkLoadBalancer, err := r.MetalbondFactory.DPDK.GetLoadBalancer(ctx, lb.UID)
 	if err != nil {
 		if !dpdk.IsStatusErrorCode(err, dpdk.NOT_FOUND) {
 			return ctrl.Result{}, fmt.Errorf("error getting dpdk loadbalancer: %w", err)
 		}
 		log.V(1).Info("Remove LoadBalancer server", "ip", ip)
-		if err := r.MBInternal.RemoveLoadBalancerServer(ip, lb.UID); err != nil {
+		if err := r.MetalbondFactory.Internal(vni).RemoveLoadBalancerServer(ip, lb.UID); err != nil {
 			return ctrl.Result{}, fmt.Errorf("error deleting dpdk loadbalancer from internal cache: %w", err)
 		}
 		log.V(1).Info("No dpdk loadbalancer, removing finalizer")
@@ -113,7 +139,6 @@ func (r *LoadBalancerReconciler) delete(ctx context.Context, log logr.Logger, lb
 		return ctrl.Result{}, nil
 	}
 
-	vni := dpdkLoadBalancer.Spec.VNI
 	underlayRoute := dpdkLoadBalancer.Status.UnderlayRoute
 	log.V(1).Info("Got dpdk LoadBalancer", "VNI", vni, "UnderlayRoute", underlayRoute)
 
@@ -123,7 +148,7 @@ func (r *LoadBalancerReconciler) delete(ctx context.Context, log logr.Logger, lb
 	}
 	log.V(1).Info("Deleted Loadbalancer")
 	log.V(1).Info("Remove LoadBalancer server", "vni", vni, "ip", ip)
-	if err := r.MBInternal.RemoveLoadBalancerServer(ip, lb.UID); err != nil {
+	if err := r.MetalbondFactory.Internal(vni).RemoveLoadBalancerServer(ip, lb.UID); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error deleting dpdk loadbalancer from internal cache: %w", err)
 	}
 
@@ -149,7 +174,7 @@ func (r *LoadBalancerReconciler) deleteLoadBalancer(
 	log.V(1).Info("Removed loadbalancer route if existed")
 
 	log.V(1).Info("Deleting dpdk loadbalancer if exists")
-	if err := r.DPDK.DeleteLoadBalancer(ctx, lb.UID); dpdk.IgnoreStatusErrorCode(err, dpdk.NOT_FOUND) != nil {
+	if err := r.MetalbondFactory.DPDK.DeleteLoadBalancer(ctx, lb.UID); dpdk.IgnoreStatusErrorCode(err, dpdk.NOT_FOUND) != nil {
 		return fmt.Errorf("error deleting loadbalancer: %w", err)
 	}
 
@@ -166,7 +191,7 @@ func (r *LoadBalancerReconciler) removeLoadBalancerRouteIfExists(ctx context.Con
 	} else {
 		localVni = uint32(r.PublicVNI)
 	}
-	if err := r.Metalbond.RemoveRoute(ctx, metalbond.VNI(localVni), metalbond.Destination{
+	if err := r.MetalbondFactory.Client(vni).RemoveRoute(ctx, metalbond.VNI(localVni), metalbond.Destination{
 		Prefix: NetIPAddrPrefix(lb.Spec.IP.Addr),
 	}, metalbond.NextHop{
 		TargetVNI:     0,
@@ -185,11 +210,12 @@ func (r *LoadBalancerReconciler) addLoadBalancerRouteIfNotExists(ctx context.Con
 	} else {
 		localVni = uint32(r.PublicVNI)
 	}
-	if err := r.Metalbond.AddRoute(ctx, metalbond.VNI(localVni), metalbond.Destination{
+	if err := r.MetalbondFactory.Client(vni).AddRoute(ctx, metalbond.VNI(localVni), metalbond.Destination{
 		Prefix: NetIPAddrPrefix(lb.Spec.IP.Addr),
 	}, metalbond.NextHop{
 		TargetVNI:     0,
 		TargetAddress: underlayRoute,
+		TargetHopType: pb.NextHopType_STANDARD,
 	}); metalbond.IgnoreNextHopAlreadyExistsError(err) != nil {
 		return fmt.Errorf("error adding loadbalancer route: %w", err)
 	}
@@ -247,6 +273,11 @@ func (r *LoadBalancerReconciler) reconcile(ctx context.Context, log logr.Logger,
 	vni := uint32(network.Spec.ID)
 	log.V(1).Info("Got network", "NetworkKey", networkKey, "VNI", vni)
 
+	if !r.MetalbondFactory.Ready(vni) {
+		log.V(1).Info("MetalbondFactory not ready, requeue...", "VNI", vni)
+		return ctrl.Result{Requeue: true}, nil
+	}
+
 	log.V(1).Info("Applying loadbalancer")
 	underlayRoute, err := r.applyLoadBalancer(ctx, log, lb, vni)
 	if err != nil {
@@ -274,7 +305,7 @@ func (r *LoadBalancerReconciler) reconcile(ctx context.Context, log logr.Logger,
 func (r *LoadBalancerReconciler) applyLoadBalancer(ctx context.Context, log logr.Logger, lb *metalnetv1alpha1.LoadBalancer, vni uint32) (netip.Addr, error) {
 	log.V(1).Info("Getting dpdk loadbalancer")
 	ip := lb.Spec.IP.Addr.String()
-	lbalancer, err := r.DPDK.GetLoadBalancer(ctx, lb.UID)
+	lbalancer, err := r.MetalbondFactory.DPDK.GetLoadBalancer(ctx, lb.UID)
 	if err != nil {
 		if !dpdk.IsStatusErrorCode(err, dpdk.NOT_FOUND) {
 			return netip.Addr{}, fmt.Errorf("error getting dpdk loadbalancer: %w", err)
@@ -291,7 +322,7 @@ func (r *LoadBalancerReconciler) applyLoadBalancer(ctx context.Context, log logr
 
 		log.V(1).Info("DPDK loadbalancer does not yet exist, creating it")
 
-		lbalancer, err := r.DPDK.CreateLoadBalancer(ctx, &dpdk.DpLoadBalancer{
+		lbalancer, err := r.MetalbondFactory.DPDK.CreateLoadBalancer(ctx, &dpdk.DpLoadBalancer{
 			DpLoadBalancerMetadata: dpdk.DpLoadBalancerMetadata{UID: lb.UID},
 			Spec: dpdk.DpLoadBalancerSpec{
 				VNI:                     vni,
@@ -303,7 +334,7 @@ func (r *LoadBalancerReconciler) applyLoadBalancer(ctx context.Context, log logr
 			return netip.Addr{}, fmt.Errorf("error creating dpdk loadbalancer: %w", err)
 		}
 		log.V(1).Info("Adding loadbalancer server", "vni", vni, "ip", ip)
-		if err := r.MBInternal.AddLoadBalancerServer(vni, ip, lb.UID); err != nil {
+		if err := r.MetalbondFactory.Internal(vni).AddLoadBalancerServer(vni, ip, lb.UID); err != nil {
 			return netip.Addr{}, fmt.Errorf("error adding dpdk loadbalancer to internal cache: %w", err)
 		}
 		log.V(1).Info("Adding loadbalancer route if not exists")
@@ -316,7 +347,7 @@ func (r *LoadBalancerReconciler) applyLoadBalancer(ctx context.Context, log logr
 
 	log.V(1).Info("DPDK loadbalancer exists")
 	log.V(1).Info("Adding loadbalancer server", "vni", vni, "ip", ip)
-	if err := r.MBInternal.AddLoadBalancerServer(vni, ip, lb.UID); err != nil {
+	if err := r.MetalbondFactory.Internal(vni).AddLoadBalancerServer(vni, ip, lb.UID); err != nil {
 		return netip.Addr{}, fmt.Errorf("error adding dpdk loadbalancer to internal cache: %w", err)
 	}
 	log.V(1).Info("Adding loadbalancer route if not exists")

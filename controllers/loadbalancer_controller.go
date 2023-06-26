@@ -117,6 +117,8 @@ func (r *LoadBalancerReconciler) delete(ctx context.Context, log logr.Logger, lb
 	if !r.MetalbondFactory.Ready(vni) {
 		log.V(1).Info("MetalbondFactory not ready, requeue...", "VNI", vni)
 		return ctrl.Result{Requeue: true}, nil
+	} else {
+		log.V(1).Info("MetalbondFactory is ready", "VNI", vni)
 	}
 
 	ip := lb.Spec.IP.Addr.String()
@@ -276,6 +278,8 @@ func (r *LoadBalancerReconciler) reconcile(ctx context.Context, log logr.Logger,
 	if !r.MetalbondFactory.Ready(vni) {
 		log.V(1).Info("MetalbondFactory not ready, requeue...", "VNI", vni)
 		return ctrl.Result{Requeue: true}, nil
+	} else {
+		log.V(1).Info("MetalbondFactory is ready", "VNI", vni)
 	}
 
 	log.V(1).Info("Applying loadbalancer")

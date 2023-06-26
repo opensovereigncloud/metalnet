@@ -476,7 +476,7 @@ func (r *NetworkInterfaceReconciler) reconcileVirtualIP(ctx context.Context, log
 	}
 
 	log.V(1).Info("Delete virtual ip")
-	return r.deleteVirtualIP(ctx, log, nic)
+	return r.deleteVirtualIP(ctx, log, vni, nic)
 }
 
 func (r *NetworkInterfaceReconciler) applyVirtualIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, virtualIP netip.Addr, vni uint32) error {
@@ -533,7 +533,7 @@ func (r *NetworkInterfaceReconciler) createVirtualIP(ctx context.Context, log lo
 	return nil
 }
 
-func (r *NetworkInterfaceReconciler) deleteVirtualIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface) error {
+func (r *NetworkInterfaceReconciler) deleteVirtualIP(ctx context.Context, log logr.Logger, vni uint32, nic *metalnetv1alpha1.NetworkInterface) error {
 	log.V(1).Info("Getting dpdk virtual ip if exists")
 	dpdkVIP, err := r.MetalbondFactory.DPDK.GetVirtualIP(ctx, nic.UID)
 	if err != nil {
@@ -548,7 +548,7 @@ func (r *NetworkInterfaceReconciler) deleteVirtualIP(ctx context.Context, log lo
 	virtualIP := dpdkVIP.Spec.Address
 	underlayRoute := dpdkVIP.Status.UnderlayRoute
 	log.V(1).Info("Virtual ip exists", "ExistingVirtualIP", virtualIP, "UnderlayRoute", underlayRoute)
-	return r.deleteExistingVirtualIP(ctx, log, nic, virtualIP, underlayRoute, 0)
+	return r.deleteExistingVirtualIP(ctx, log, nic, virtualIP, underlayRoute, vni)
 }
 
 func (r *NetworkInterfaceReconciler) deleteExistingVirtualIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, virtualIP, underlayRoute netip.Addr, vni uint32) error {
@@ -605,6 +605,8 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 	if !r.MetalbondFactory.Ready(vni) {
 		log.V(1).Info("MetalbondFactory not ready, requeue...", "VNI", vni)
 		return ctrl.Result{Requeue: true}, nil
+	} else {
+		log.V(1).Info("MetalbondFactory is ready", "VNI", vni)
 	}
 
 	log.V(1).Info("Applying interface")
@@ -1042,6 +1044,13 @@ func (r *NetworkInterfaceReconciler) delete(ctx context.Context, log logr.Logger
 	}
 
 	vni := dpdkIface.Spec.VNI
+	if !r.MetalbondFactory.Ready(vni) {
+		log.V(1).Info("MetalbondFactory not ready, requeue...", "VNI", vni)
+		return ctrl.Result{Requeue: true}, nil
+	} else {
+		log.V(1).Info("MetalbondFactory is ready", "VNI", vni)
+	}
+
 	underlayRoute := dpdkIface.Status.UnderlayRoute
 	log.V(1).Info("Got dpdk interface", "VNI", vni, "UnderlayRoute", underlayRoute)
 
@@ -1064,7 +1073,7 @@ func (r *NetworkInterfaceReconciler) delete(ctx context.Context, log logr.Logger
 	log.V(1).Info("Deleted nat ip")
 
 	log.V(1).Info("Deleting virtual ip")
-	if err := r.deleteVirtualIP(ctx, log, nic); err != nil {
+	if err := r.deleteVirtualIP(ctx, log, vni, nic); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error deleting virtual ip: %w", err)
 	}
 	log.V(1).Info("Deleted virtual ip")

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/netip"
 	"strconv"
+	"time"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -37,6 +38,7 @@ import (
 
 	"github.com/onmetal/controller-utils/clientutils"
 	metalnetv1alpha1 "github.com/onmetal/metalnet/api/v1alpha1"
+	metalnetclient "github.com/onmetal/metalnet/client"
 	"github.com/onmetal/metalnet/dpdk"
 	"github.com/onmetal/metalnet/dpdkmetalbond"
 	"github.com/onmetal/metalnet/metalbond"
@@ -90,7 +92,33 @@ func (r *NetworkReconciler) delete(ctx context.Context, log logr.Logger, network
 		return ctrl.Result{}, nil
 	}
 
-	//TODO only allow deletion if no network interfaces or loadBalancer are left
+	nicList := &metalnetv1alpha1.NetworkInterfaceList{}
+	if err := r.List(ctx, nicList,
+		client.InNamespace(network.Namespace),
+		client.MatchingFields{metalnetclient.NetworkInterfaceNetworkRefNameField: network.Name},
+	); err != nil {
+		log.Error(err, "Error listing network interfaces referencing network", "NetworkKey", client.ObjectKeyFromObject(network))
+		return ctrl.Result{}, err
+	}
+
+	if len(nicList.Items) > 0 {
+		log.V(1).Info("Network still has network interfaces, not deleting, requeue deletion...")
+		return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+	}
+
+	lbList := &metalnetv1alpha1.LoadBalancerList{}
+	if err := r.List(ctx, lbList,
+		client.InNamespace(network.Namespace),
+		client.MatchingFields{metalnetclient.LoadBalancerNetworkRefNameField: network.Name},
+	); err != nil {
+		log.Error(err, "Error listing loadbalancer referencing network", "NetworkKey", client.ObjectKeyFromObject(network))
+		return ctrl.Result{}, err
+	}
+
+	if len(lbList.Items) > 0 {
+		log.V(1).Info("Network still has loadbalancer, not deleting, requeue deletion...")
+		return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+	}
 
 	log.V(1).Info("Finalizer present, doing cleanup")
 

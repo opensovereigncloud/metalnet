@@ -488,7 +488,7 @@ func (r *NetworkInterfaceReconciler) applyVirtualIP(ctx context.Context, log log
 		}
 
 		log.V(1).Info("DPDK virtual ip does not exist, creating it")
-		return r.createVirtualIP(ctx, log, nic, virtualIP)
+		return r.createVirtualIP(ctx, log, nic, virtualIP, vni)
 	}
 	underlayRoute := dpdkVIP.Status.UnderlayRoute
 	existingVirtualIP := dpdkVIP.Spec.Address
@@ -510,14 +510,14 @@ func (r *NetworkInterfaceReconciler) applyVirtualIP(ctx context.Context, log log
 	log.V(1).Info("Deleted existing virtual ip")
 
 	log.V(1).Info("Creating virtual ip")
-	if err := r.createVirtualIP(ctx, log, nic, virtualIP); err != nil {
+	if err := r.createVirtualIP(ctx, log, nic, virtualIP, vni); err != nil {
 		return err
 	}
 	log.V(1).Info("Created virtual ip")
 	return nil
 }
 
-func (r *NetworkInterfaceReconciler) createVirtualIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, virtualIP netip.Addr) error {
+func (r *NetworkInterfaceReconciler) createVirtualIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, virtualIP netip.Addr, vni uint32) error {
 	dpdkVIP, err := r.MetalbondFactory.DPDK.CreateVirtualIP(ctx, &dpdk.VirtualIP{
 		VirtualIPMetadata: dpdk.VirtualIPMetadata{InterfaceUID: nic.UID},
 		Spec:              dpdk.VirtualIPSpec{Address: virtualIP},
@@ -526,7 +526,7 @@ func (r *NetworkInterfaceReconciler) createVirtualIP(ctx context.Context, log lo
 		return fmt.Errorf("error creating dpdk virtual ip: %w", err)
 	}
 	log.V(1).Info("Adding virtual ip route if not exists")
-	if err := r.addVirtualIPRouteIfNotExists(ctx, virtualIP, dpdkVIP.Status.UnderlayRoute, 0); err != nil {
+	if err := r.addVirtualIPRouteIfNotExists(ctx, virtualIP, dpdkVIP.Status.UnderlayRoute, vni); err != nil {
 		return err
 	}
 	log.V(1).Info("Added virtual ip route if not existed")

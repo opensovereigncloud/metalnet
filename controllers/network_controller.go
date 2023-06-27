@@ -73,6 +73,14 @@ func (r *NetworkReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	vni := uint32(network.Spec.ID)
+	if !r.MetalbondFactory.Ready(vni) {
+		err := r.MetalbondFactory.New(ctx, vni)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
 	return r.reconcileExists(ctx, log, network)
 }
 
@@ -164,13 +172,6 @@ func (r *NetworkReconciler) reconcile(ctx context.Context, log logr.Logger, netw
 	log.V(1).Info("Ensured finalizer")
 
 	vni := uint32(network.Spec.ID)
-	if !r.MetalbondFactory.Ready(vni) {
-		err := r.MetalbondFactory.New(ctx, vni)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-	}
-
 	log.V(1).Info("Checking existence of the VNI")
 	vniAvail, err := r.MetalbondFactory.DPDK.IsVniAvailable(ctx, vni)
 	if err != nil {
@@ -271,7 +272,7 @@ func (r *NetworkReconciler) reconcilePeeredVNIs(ctx context.Context, log logr.Lo
 	r.MetalbondFactory.Internal(vni).SetPeeredPrefixes(peeredPrefixes)
 
 	// cleanup not peered routes
-	err := r.MetalbondFactory.Internal(vni).CleanupNotPeeredRoutes()
+	err := r.MetalbondFactory.Internal(vni).CleanupNotPeeredRoutes(ctx)
 	if err != nil {
 		return err
 	}

@@ -41,7 +41,7 @@ type MbInternalAccess interface {
 	AddPeeredVni(peeredVNI uint32)
 	RemovePeeredVni(peeredVNI uint32)
 	SetPeeredPrefixes(peeredPrefixes map[uint32][]netip.Prefix)
-	CleanupNotPeeredRoutes() error
+	CleanupNotPeeredRoutes(ctx context.Context) error
 }
 
 type Client struct {
@@ -331,8 +331,38 @@ func (c *Client) SetPeeredPrefixes(peeredPrefixes map[uint32][]netip.Prefix) {
 	c.peeredPrefixes = peeredPrefixes
 }
 
-func (c *Client) CleanupNotPeeredRoutes() error {
-	// TODO: implement
+func (c *Client) CleanupNotPeeredRoutes(ctx context.Context) error {
+	c.log.Infof("CleanupNotPeeredRoutes for vni %d", c.vni)
+
+	routes, err := c.dpdk.ListRoutes(ctx, c.vni)
+	if err != nil {
+		return fmt.Errorf("error listing dpdk routes for vni %d: %w", c.vni, err)
+	}
+
+	c.log.Infof("found %d routes for vni %d", len(routes), c.vni)
+	// loop over all routes and delete the ones that are not peered
+	for _, route := range routes {
+		// only delete route if it is not the local vni and not peered
+		if route.Spec.NextHop.VNI != c.vni && !c.peeredVnis.Has(route.Spec.NextHop.VNI) {
+			c.log.Infof("deleting route %s from vni %d that is not longer peered", route.Spec.Prefix.String(), route.Spec.NextHop.VNI)
+			if err := c.dpdk.DeleteRoute(ctx, &dpdk.Route{
+				RouteMetadata: dpdk.RouteMetadata{
+					VNI: c.vni,
+				},
+				Spec: dpdk.RouteSpec{
+					Prefix: route.Spec.Prefix,
+					NextHop: dpdk.RouteNextHop{
+						VNI:     route.Spec.NextHop.VNI,
+						Address: route.Spec.NextHop.Address,
+					},
+				},
+			}); dpdk.IgnoreStatusErrorCode(err, dpdk.NO_VNI) != nil &&
+				dpdk.IgnoreStatusErrorCode(err, dpdk.ROUTE_NOT_FOUND) != nil {
+				return fmt.Errorf("error deleting route: %w", err)
+			}
+			c.log.Infof("deleted route %s from vni %d that was not longer peered", route.Spec.Prefix.String(), route.Spec.NextHop.VNI)
+		}
+	}
 
 	return nil
 }

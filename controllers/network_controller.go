@@ -192,12 +192,6 @@ func (r *NetworkReconciler) reconcile(ctx context.Context, log logr.Logger, netw
 	}
 	log.V(1).Info("Reconciled peered VNIs")
 
-	log.V(1).Info("Subscribing to metalbond if not subscribed")
-	if err := r.subscribeIfNotSubscribed(ctx, vni, vni); err != nil {
-		return ctrl.Result{}, err
-	}
-	log.V(1).Info("Subscribed to metalbond if not subscribed")
-
 	return ctrl.Result{}, nil
 }
 

@@ -35,6 +35,7 @@ type MbInternalAccess interface {
 	AddRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error
 	RemoveRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error
 	AddLoadBalancerServer(vni uint32, ip string, uid types.UID) error
+	LoadBalancerServerExists(vni uint32, ip string) bool
 	RemoveLoadBalancerServer(ip string, uid types.UID) error
 	IsVniPeered(vni uint32) bool
 	GetPeeredVnis() sets.Set[uint32]
@@ -109,6 +110,18 @@ func (c *Client) AddLoadBalancerServer(vni uint32, ip string, uid types.UID) err
 	}
 	c.lbServerMap[vni][ip] = uid
 	return nil
+}
+
+func (c *Client) LoadBalancerServerExists(vni uint32, ip string) bool {
+	if _, exists := c.lbServerMap[vni]; !exists {
+		return false
+	}
+
+	if _, exists := c.lbServerMap[vni][ip]; !exists {
+		return false
+	}
+
+	return true
 }
 
 func (c *Client) RemoveLoadBalancerServer(ip string, uid types.UID) error {

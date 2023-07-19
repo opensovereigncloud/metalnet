@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/go-logr/logr v1.2.4
-	github.com/jaypipes/ghw v0.9.0
+	github.com/jaypipes/ghw v0.12.0
 	github.com/onmetal/controller-utils v0.7.0
 	github.com/onmetal/metalbond v0.3.2
 	github.com/onmetal/net-dpservice-go v0.1.12

@@ -283,7 +283,8 @@ func (c *Client) removeLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.Destinatio
 			},
 		},
 	}); dpdk.IgnoreStatusErrorCode(err, dpdk.NO_VNI) != nil &&
-		dpdk.IgnoreStatusErrorCode(err, dpdk.ROUTE_NOT_FOUND) != nil {
+		dpdk.IgnoreStatusErrorCode(err, dpdk.ROUTE_NOT_FOUND) != nil &&
+		dpdk.IgnoreStatusErrorCode(err, dpdk.ROUTE_BAD_PORT) != nil {
 		return fmt.Errorf("error deleting route: %w", err)
 	}
 	return nil

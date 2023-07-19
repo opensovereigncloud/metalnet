@@ -51,6 +51,33 @@ spec:
                 maximum: 16777215
                 minimum: 1
                 type: integer
+              peeredIDs:
+                description: PeeredIDs are the IDs of networks to peer with.
+                items:
+                  format: int32
+                  type: integer
+                type: array
+              peeredPrefixes:
+                description: PeeredPrefixes are the allowed CIDRs of the peered networks.
+                items:
+                  description: PeeredPrefix contains information of the peered networks
+                    and their allowed CIDRs.
+                  properties:
+                    id:
+                      format: int32
+                      type: integer
+                    prefixes:
+                      items:
+                        type: string
+                      type: array
+                  required:
+                  - id
+                  - prefixes
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - id
+                x-kubernetes-list-type: map
             required:
             - id
             type: object

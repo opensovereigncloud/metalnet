@@ -46,6 +46,7 @@ import (
 
 	mb "github.com/onmetal/metalbond"
 	dpdkproto "github.com/onmetal/net-dpservice-go/proto"
+	log "github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -78,21 +79,25 @@ func main() {
 	var nodeName string
 	var dpserviceAddr string
 	var metalbondPeers []string
+	var metalbondDebug bool
 	var routerAddress net.IP
 	var publicVNI int
 	var metalnetDir string
+	var preferNetwork string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.StringVar(&nodeName, "node-name", hostName, "The node name to react to when reconciling network interfaces.")
 	flag.StringVar(&dpserviceAddr, "dp-service-address", "127.0.0.1:1337", "The address of net-dpservice.")
 	flag.StringSliceVar(&metalbondPeers, "metalbond-peer", nil, "The addresses of the metalbond peers.")
+	flag.BoolVar(&metalbondDebug, "metalbond-debug", false, "Enable metalbond debug.")
 	flag.IPVar(&routerAddress, "router-address", net.IP{}, "The address of the next router.")
 	flag.IntVar(&publicVNI, "public-vni", 100, "Virtual network identifier used for public routing announcements.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&metalnetDir, "metalnet-dir", "/var/lib/metalnet", "Directory to store metalnet data at.")
+	flag.StringVar(&preferNetwork, "prefer-network", "", "Prefer network routes (e.g. 2001:db8::1/52)")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -100,7 +105,13 @@ func main() {
 	flag.CommandLine.AddGoFlagSet(goflag.CommandLine)
 	flag.Parse()
 
+	logger := zap.New(zap.UseFlagOptions(&opts))
+	ctrl.SetLogger(logger)
+
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	if metalbondDebug {
+		log.SetLevel(log.DebugLevel)
+	}
 
 	if routerAddress.Equal(net.IP{}) {
 		setupLog.Error(fmt.Errorf("must specify --router-address"), "invalid flags")
@@ -144,6 +155,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	var preferredNetwork *net.IPNet
+	if len(preferNetwork) > 0 {
+		_, preferredNetwork, err = net.ParseCIDR(preferNetwork)
+		if err != nil {
+			log.Fatalf("invalid prefer network address: %s - %v", preferNetwork, err)
+		}
+	}
+
 	// setup net-dpservice client
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
@@ -162,13 +181,14 @@ func main() {
 	dpdkProtoClient := dpdkproto.NewDPDKonmetalClient(conn)
 	dpdkClient := dpdk.NewClient(dpdkProtoClient)
 
-	var mbClient dpdkmetalbond.LBServerAccess
+	var mbClient dpdkmetalbond.MbInternalAccess
 	config := mb.Config{
 		KeepaliveInterval: 3,
 	}
 
-	mbClient, err = dpdkmetalbond.NewClient(dpdkClient, dpdkmetalbond.ClientOptions{
-		IPv4Only: true,
+	mbClient, err = dpdkmetalbond.NewClient(&logger, dpdkClient, dpdkmetalbond.ClientOptions{
+		IPv4Only:         true,
+		PreferredNetwork: preferredNetwork,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to initialize metalbond client")
@@ -179,22 +199,25 @@ func main() {
 	metalbondClient := metalbond.NewClient(mbInstance)
 
 	for _, metalbondPeer := range metalbondPeers {
-		if err := mbInstance.AddPeer(metalbondPeer); err != nil {
+		if err := mbInstance.AddPeer(metalbondPeer, ""); err != nil {
 			setupLog.Error(err, "failed to add metalbond peer", "MetalbondPeer", metalbondPeer)
 			os.Exit(1)
 		}
 	}
 
-	_, err = dpdkProtoClient.Init(context.Background(), &dpdkproto.InitConfig{})
-	if err != nil {
-		setupLog.Error(err, "dp-service can not be initialized")
-		os.Exit(1)
-	}
-
 	dpdkUUID, err := dpdkProtoClient.Initialized(context.Background(), &dpdkproto.Empty{})
 	if err != nil {
-		setupLog.Error(err, "dp-service down")
-		os.Exit(1)
+		_, err = dpdkProtoClient.Init(context.Background(), &dpdkproto.InitConfig{})
+		if err != nil {
+			setupLog.Error(err, "dp-service can not be initialized")
+			os.Exit(1)
+		}
+
+		dpdkUUID, err = dpdkProtoClient.Initialized(context.Background(), &dpdkproto.Empty{})
+		if err != nil {
+			setupLog.Error(err, "dp-service down")
+			os.Exit(1)
+		}
 	}
 
 	if err := metalnetclient.SetupNetworkInterfaceNetworkRefNameFieldIndexer(context.TODO(), mgr.GetFieldIndexer()); err != nil {
@@ -212,7 +235,9 @@ func main() {
 		Scheme:        mgr.GetScheme(),
 		DPDK:          dpdkClient,
 		Metalbond:     metalbondClient,
+		MBInternal:    mbClient,
 		RouterAddress: netip.MustParseAddr(routerAddress.String()),
+		NodeName:      nodeName,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Network")
 		os.Exit(1)
@@ -233,13 +258,13 @@ func main() {
 	}
 
 	if err = (&controllers.LoadBalancerReconciler{
-		Client:    mgr.GetClient(),
-		Scheme:    mgr.GetScheme(),
-		DPDK:      dpdk.NewClient(dpdkProtoClient),
-		Metalbond: metalbond.NewClient(mbInstance),
-		NodeName:  nodeName,
-		PublicVNI: publicVNI,
-		LBServer:  mbClient,
+		Client:     mgr.GetClient(),
+		Scheme:     mgr.GetScheme(),
+		DPDK:       dpdk.NewClient(dpdkProtoClient),
+		Metalbond:  metalbond.NewClient(mbInstance),
+		NodeName:   nodeName,
+		PublicVNI:  publicVNI,
+		MBInternal: mbClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LoadBalancer")
 		os.Exit(1)

@@ -20,58 +20,43 @@ import (
 )
 
 const (
-	ADD                  = 100
-	ADD_IPV6_FORMAT      = 101
-	ADD_VM_NAME_ERR      = 102
-	ADD_VM_LPM4          = 104
-	ADD_VM_LPM6          = 105
-	ADD_VM_ADD_ROUT4     = 106
-	ADD_VM_ADD_ROUT6     = 107
-	ADD_VM_NO_VFS        = 108
-	ALREADY_ALLOCATED    = 109
-	CANT_GET_NAME        = 110
-	DEL                  = 150
-	DEL_VM_NOT_FND       = 151
-	GET_VM_NOT_FND       = 171
-	LIST                 = 200
-	ADD_RT               = 250
-	ADD_RT_FAIL4         = 251
-	ADD_RT_FAIL6         = 252
-	ADD_RT_NO_VNI        = 253
-	DEL_RT               = 300
-	ADD_NAT              = 350
-	ADD_NAT_IP_EXISTS    = 351
-	ADD_NAT_ALLOC        = 352
-	ADD_NAT_ADD_KEY      = 353
-	ADD_NAT_ADD_DATA     = 354
-	ADD_NEIGHNAT_EXIST   = 372
-	DEL_NEIGHNAT_NOFOUND = 374
-	ADD_DNAT             = 400
-	ADD_DNAT_IP_EXISTS   = 401
-	ADD_DNAT_ALLOC       = 402
-	ADD_DNAT_ADD_KEY     = 403
-	ADD_DNAT_ADD_DATA    = 404
-	DEL_NAT              = 450
-	GET_NAT              = 500
-	GET_NAT_NO_IP_SET    = 501
-	ADD_LB_VIP           = 550
-	ADD_LB_NO_VNI_EXIST  = 551
-	ADD_LB_UNSUPP_IP     = 552
-	DEL_LB_VIP           = 600
-	DEL_LB_NO_VNI_EXIST  = 601
-	DEL_LB_UNSUPP_IP     = 602
-	ADD_PFX              = 650
-	ADD_PFX_NO_VM        = 651
-	ADD_PFX_ROUTE        = 652
-	DEL_PFX              = 700
-	DEL_PFX_NO_VM        = 701
-	CREATE_LB_UNSUPP_IP  = 750
-	CREATE_LB_ERR        = 751
-	DEL_LB_ID_ERR        = 755
-	DEL_LB_BACK_IP_ERR   = 756
-	GET_LB_ID_ERR        = 760
-	GET_LB_BACK_IP_ERR   = 761
+	BAD_REQUEST     = 101
+	NOT_FOUND       = 201
+	ALREADY_EXISTS  = 202
+	WRONG_TYPE      = 203
+	BAD_IPVER       = 204
+	NO_VM           = 205
+	NO_VNI          = 206
+	ITERATOR        = 207
+	OUT_OF_MEMORY   = 208
+	LIMIT_REACHED   = 209
+	ROUTE_EXISTS    = 301
+	ROUTE_NOT_FOUND = 302
+	ROUTE_INSERT    = 303
+	ROUTE_BAD_PORT  = 304
+	ROUTE_RESET     = 305
+	DNAT_NO_DATA    = 321
+	DNAT_CREATE     = 322
+	DNAT_EXISTS     = 323
+	SNAT_NO_DATA    = 341
+	SNAT_CREATE     = 342
+	SNAT_EXISTS     = 343
+	VNI_INIT4       = 361
+	VNI_INIT6       = 362
+	VNI_FREE4       = 363
+	VNI_FREE6       = 364
+	PORT_START      = 381
+	PORT_STOP       = 382
+	VNF_INSERT      = 401
+	VM_HANDLE       = 402
+	NO_BACKIP       = 421
+	NO_LB           = 422
+	NO_DROP_SUPPORT = 441
+
+	SERVER_ERROR = 2
 )
+
+var ErrServerError = fmt.Errorf("server error")
 
 type StatusError struct {
 	errorCode int32

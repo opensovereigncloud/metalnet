@@ -27,6 +27,8 @@ type Client interface {
 	RemoveRoute(ctx context.Context, vni VNI, destination Destination, nextHop NextHop) error
 	Subscribe(ctx context.Context, vni VNI) error
 	Unsubscribe(ctx context.Context, vni VNI) error
+	IsSubscribed(ctx context.Context, vni VNI) bool
+	GetRoutesForVni(ctx context.Context, vni VNI) error
 }
 
 type client struct {
@@ -93,7 +95,13 @@ func (c *client) Subscribe(_ context.Context, vni VNI) error {
 }
 
 func (c *client) Unsubscribe(_ context.Context, vni VNI) error {
-	// TODO: Check error as soon as it is implemented.
-	_ = c.metalbond.Unsubscribe(vni)
-	return nil
+	return c.metalbond.Unsubscribe(vni)
+}
+
+func (c *client) IsSubscribed(_ context.Context, vni VNI) bool {
+	return c.metalbond.IsSubscribed(vni)
+}
+
+func (c *client) GetRoutesForVni(_ context.Context, vni VNI) error {
+	return c.metalbond.GetRoutesForVni(vni)
 }

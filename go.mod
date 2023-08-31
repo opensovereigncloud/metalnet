@@ -90,4 +90,10 @@ require (
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
 
+replace (
+	k8s.io/api => k8s.io/api v0.26.3
+	k8s.io/apimachinery => k8s.io/apimachinery v0.26.3
+	k8s.io/apiserver => k8s.io/apiserver v0.26.3
+)
+
 replace github.com/vishvananda/netlink => github.com/byteocean/netlink v1.1.1-0.20220608143109-d6cf8228de69

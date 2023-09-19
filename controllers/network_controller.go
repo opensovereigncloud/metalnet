@@ -196,7 +196,9 @@ func (r *NetworkReconciler) createDefaultRouteIfNotExists(ctx context.Context, v
 				IP:  &r.RouterAddress,
 			},
 		},
-	}); dpdkerrors.IgnoreStatusErrorCode(err, dpdkerrors.ROUTE_EXISTS) != nil {
+	},
+		dpdkerrors.Ignore(dpdkerrors.ROUTE_EXISTS),
+	); err != nil {
 		return fmt.Errorf("error creating route: %w", err)
 	}
 	return nil
@@ -204,7 +206,12 @@ func (r *NetworkReconciler) createDefaultRouteIfNotExists(ctx context.Context, v
 
 func (r *NetworkReconciler) deleteDefaultRouteIfExists(ctx context.Context, vni uint32) error {
 	defaultRoutePrefix := netip.MustParsePrefix("0.0.0.0/0")
-	if _, err := r.DPDK.DeleteRoute(ctx, vni, &defaultRoutePrefix); dpdkerrors.IgnoreStatusErrorCode(err, dpdkerrors.NO_VNI, dpdkerrors.ROUTE_NOT_FOUND) != nil {
+	if _, err := r.DPDK.DeleteRoute(
+		ctx,
+		vni,
+		&defaultRoutePrefix,
+		dpdkerrors.Ignore(dpdkerrors.NO_VNI, dpdkerrors.ROUTE_NOT_FOUND),
+	); err != nil {
 		return fmt.Errorf("error deleting route: %w", err)
 	}
 	return nil

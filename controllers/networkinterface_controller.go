@@ -167,7 +167,11 @@ func (r *NetworkInterfaceReconciler) releaseNetFnIfClaimExists(uid types.UID) er
 }
 
 func (r *NetworkInterfaceReconciler) deleteDPDKVirtualIPIfExists(ctx context.Context, nic *metalnetv1alpha1.NetworkInterface) error {
-	if _, err := r.DPDK.DeleteVirtualIP(ctx, string(nic.UID)); dpdkerrors.IgnoreStatusErrorCode(err, dpdkerrors.NO_VM) != nil {
+	if _, err := r.DPDK.DeleteVirtualIP(
+		ctx,
+		string(nic.UID),
+		dpdkerrors.Ignore(dpdkerrors.NO_VM),
+	); err != nil {
 		return fmt.Errorf("error deleting dpdk virtual ip: %w", err)
 	}
 	return nil
@@ -411,28 +415,47 @@ func (r *NetworkInterfaceReconciler) createDPDKFwRule(ctx context.Context, nic *
 }
 
 func (r *NetworkInterfaceReconciler) deleteDPDKfwRuleIDIfExists(ctx context.Context, nicUID string, ruleUID string) error {
-	if _, err := r.DPDK.DeleteFirewallRule(ctx, nicUID, ruleUID); dpdkerrors.IgnoreStatusErrorCode(err, dpdkerrors.NO_VM, dpdkerrors.NOT_FOUND) != nil {
+	if _, err := r.DPDK.DeleteFirewallRule(
+		ctx,
+		nicUID,
+		ruleUID,
+		dpdkerrors.Ignore(dpdkerrors.NO_VM, dpdkerrors.NOT_FOUND),
+	); err != nil {
 		return fmt.Errorf("error deleting firewall rule: %w", err)
 	}
 	return nil
 }
 
 func (r *NetworkInterfaceReconciler) deleteDPDKLBTargetIfExists(ctx context.Context, nicUID types.UID, prefix netip.Prefix) error {
-	if _, err := r.DPDK.DeleteLoadBalancerPrefix(ctx, string(nicUID), &prefix); dpdkerrors.IgnoreStatusErrorCode(err, dpdkerrors.NO_VM, dpdkerrors.NOT_FOUND) != nil {
+	if _, err := r.DPDK.DeleteLoadBalancerPrefix(
+		ctx,
+		string(nicUID),
+		&prefix,
+		dpdkerrors.Ignore(dpdkerrors.NO_VM, dpdkerrors.NOT_FOUND),
+	); err != nil {
 		return fmt.Errorf("error deleting lb prefix: %w", err)
 	}
 	return nil
 }
 
 func (r *NetworkInterfaceReconciler) deleteDPDKPrefixIfExists(ctx context.Context, nicUID types.UID, prefix netip.Prefix) error {
-	if _, err := r.DPDK.DeletePrefix(ctx, string(nicUID), &prefix); dpdkerrors.IgnoreStatusErrorCode(err, dpdkerrors.NO_VM, dpdkerrors.NOT_FOUND) != nil {
+	if _, err := r.DPDK.DeletePrefix(
+		ctx,
+		string(nicUID),
+		&prefix,
+		dpdkerrors.Ignore(dpdkerrors.NO_VM, dpdkerrors.NOT_FOUND),
+	); err != nil {
 		return fmt.Errorf("error deleting prefix: %w", err)
 	}
 	return nil
 }
 
 func (r *NetworkInterfaceReconciler) deleteDPDKInterfaceIfExists(ctx context.Context, uid types.UID) error {
-	if _, err := r.DPDK.DeleteInterface(ctx, string(uid)); dpdkerrors.IgnoreStatusErrorCode(err, dpdkerrors.NOT_FOUND) != nil {
+	if _, err := r.DPDK.DeleteInterface(
+		ctx,
+		string(uid),
+		dpdkerrors.Ignore(dpdkerrors.NOT_FOUND),
+	); err != nil {
 		return fmt.Errorf("error deleting interface: %w", err)
 	}
 	return nil
@@ -543,7 +566,11 @@ func (r *NetworkInterfaceReconciler) deleteExistingNATIP(ctx context.Context, lo
 }
 
 func (r *NetworkInterfaceReconciler) deleteDPDKNATIPIfExists(ctx context.Context, nic *metalnetv1alpha1.NetworkInterface) error {
-	if _, err := r.DPDK.DeleteNat(ctx, string(nic.UID)); dpdkerrors.IgnoreStatusErrorCode(err, dpdkerrors.NO_VM) != nil {
+	if _, err := r.DPDK.DeleteNat(
+		ctx,
+		string(nic.UID),
+		dpdkerrors.Ignore(dpdkerrors.NO_VM),
+	); err != nil {
 		return fmt.Errorf("error deleting dpdk nat ip: %w", err)
 	}
 	return nil

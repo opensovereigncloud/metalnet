@@ -640,8 +640,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 				Expect(updatedIface.Spec.FirewallRules[0].DestinationPrefix.String()).To(Equal("10.0.0.10/32"))
 				Expect(updatedIface.Status.State).To(Equal(metalnetv1alpha1.NetworkInterfaceStateReady))
 
-				// TODO parameters in GetFwRule currently not in correct oreder, they need to be swapped when it is fixed in library
-				fw1, err := dpdkClient.GetFirewallRule(ctx, string(fr1.FirewallRuleID), string(updatedIface.UID))
+				fw1, err := dpdkClient.GetFirewallRule(ctx, string(updatedIface.UID), string(fr1.FirewallRuleID))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(fw1.Spec.FirewallAction).To(Equal("Accept"))
 				Expect(fw1.Spec.TrafficDirection).To(Equal("Ingress"))
@@ -687,8 +686,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 				Expect(updatedIface.Spec.FirewallRules).To(BeEmpty())
 				Expect(updatedIface.Status.State).To(Equal(metalnetv1alpha1.NetworkInterfaceStateReady))
 
-				// TODO parameters in GetFwRule currently not in correct oreder, they need to be swapped when it is fixed in library
-				fw1, err = dpdkClient.GetFirewallRule(ctx, string(fr1.FirewallRuleID), string(updatedIface.UID))
+				fw1, err = dpdkClient.GetFirewallRule(ctx, string(updatedIface.UID), string(fr1.FirewallRuleID))
 				Expect(err).To(HaveOccurred())
 				Expect(fw1.Status.Code).To(Equal(int32(dpdkerrors.NOT_FOUND)))
 			})

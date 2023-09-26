@@ -173,7 +173,8 @@ func (c *Client) addLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.Destination, 
 			Spec: dpdk.LoadBalancerTargetSpec{
 				TargetIP: &hop.TargetAddress,
 			},
-		}); dpdkerrors.IgnoreStatusErrorCode(err, dpdkerrors.ALREADY_EXISTS) != nil {
+		}, dpdkerrors.Ignore(dpdkerrors.ALREADY_EXISTS),
+		); err != nil {
 			return fmt.Errorf("error creating lb target: %w", err)
 		}
 		return nil
@@ -191,7 +192,8 @@ func (c *Client) addLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.Destination, 
 				MaxPort:       uint32(hop.NATPortRangeTo),
 				UnderlayRoute: &hop.TargetAddress,
 			},
-		}); dpdkerrors.IgnoreStatusErrorCode(err, dpdkerrors.ALREADY_EXISTS) != nil {
+		}, dpdkerrors.Ignore(dpdkerrors.ALREADY_EXISTS),
+		); err != nil {
 			return fmt.Errorf("error nat route: %w", err)
 		}
 		return nil
@@ -208,7 +210,8 @@ func (c *Client) addLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.Destination, 
 				IP:  &hop.TargetAddress,
 			},
 		},
-	}); dpdkerrors.IgnoreStatusErrorCode(err, dpdkerrors.ROUTE_EXISTS) != nil {
+	}, dpdkerrors.Ignore(dpdkerrors.ROUTE_EXISTS),
+	); err != nil {
 		return fmt.Errorf("error creating route: %w", err)
 	}
 	return nil
@@ -232,7 +235,8 @@ func (c *Client) removeLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.Destinatio
 			ctx,
 			string(c.lbServerMap[uint32(vni)][ip]),
 			&hop.TargetAddress,
-		); dpdkerrors.IgnoreStatusErrorCode(err, dpdkerrors.NOT_FOUND, dpdkerrors.NO_BACKIP, dpdkerrors.NO_LB) != nil {
+			dpdkerrors.Ignore(dpdkerrors.NOT_FOUND, dpdkerrors.NO_BACKIP, dpdkerrors.NO_LB),
+		); err != nil {
 			return fmt.Errorf("error deleting lb target: %w", err)
 		}
 		return nil
@@ -250,7 +254,8 @@ func (c *Client) removeLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.Destinatio
 				MaxPort:       uint32(hop.NATPortRangeTo),
 				UnderlayRoute: &hop.TargetAddress,
 			},
-		}); dpdkerrors.IgnoreStatusErrorCode(err, dpdkerrors.NOT_FOUND) != nil {
+		}, dpdkerrors.Ignore(dpdkerrors.NOT_FOUND),
+		); err != nil {
 			return fmt.Errorf("error deleting nat route: %w", err)
 		}
 		return nil
@@ -260,7 +265,8 @@ func (c *Client) removeLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.Destinatio
 		ctx,
 		uint32(vni),
 		&dest.Prefix,
-	); dpdkerrors.IgnoreStatusErrorCode(err, dpdkerrors.NO_VNI, dpdkerrors.ROUTE_NOT_FOUND) != nil {
+		dpdkerrors.Ignore(dpdkerrors.NO_VNI, dpdkerrors.ROUTE_NOT_FOUND),
+	); err != nil {
 		return fmt.Errorf("error deleting route: %w", err)
 	}
 	return nil
@@ -349,7 +355,12 @@ func (c *Client) CleanupNotPeeredRoutes(vni uint32) error {
 	for _, route := range routes.Items {
 		// only delete route if it is not the local vni and not peered
 		if route.Spec.NextHop.VNI != vni && (ok && !set.Has(route.Spec.NextHop.VNI)) {
-			if _, err := c.dpdk.DeleteRoute(ctx, vni, route.Spec.Prefix); dpdkerrors.IgnoreStatusErrorCode(err, dpdkerrors.NO_VNI, dpdkerrors.ROUTE_NOT_FOUND) != nil {
+			if _, err := c.dpdk.DeleteRoute(
+				ctx,
+				vni,
+				route.Spec.Prefix,
+				dpdkerrors.Ignore(dpdkerrors.NO_VNI, dpdkerrors.ROUTE_NOT_FOUND),
+			); err != nil {
 				return fmt.Errorf("error deleting route: %w", err)
 			}
 		}

@@ -152,7 +152,11 @@ func (r *LoadBalancerReconciler) deleteLoadBalancer(
 	log.V(1).Info("Removed loadbalancer route if existed")
 
 	log.V(1).Info("Deleting dpdk loadbalancer if exists")
-	if _, err := r.DPDK.DeleteLoadBalancer(ctx, string(lb.UID)); dpdkerrors.IgnoreStatusErrorCode(err, dpdkerrors.NOT_FOUND) != nil {
+	if _, err := r.DPDK.DeleteLoadBalancer(
+		ctx,
+		string(lb.UID),
+		dpdkerrors.Ignore(dpdkerrors.NOT_FOUND),
+	); err != nil {
 		return fmt.Errorf("error deleting loadbalancer: %w", err)
 	}
 

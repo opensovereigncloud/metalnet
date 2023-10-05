@@ -150,9 +150,8 @@ var _ = Describe("Network Controller", Label("network"), Ordered, func() {
 
 var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 	var (
-		loadBalancer          *metalnetv1alpha1.LoadBalancer
-		networkInterface      *metalnetv1alpha1.NetworkInterface
-		wrongNetworkInterface *metalnetv1alpha1.NetworkInterface
+		loadBalancer     *metalnetv1alpha1.LoadBalancer
+		networkInterface *metalnetv1alpha1.NetworkInterface
 	)
 	ctx := SetupContext()
 	ns := SetupTest(ctx)
@@ -672,81 +671,6 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 				Expect(vniAvail.Spec.InUse).To(BeFalse())
 			})
 		})
-
-		// TODO: finish use case when wrong data is entered and remove Pending
-		When("creating a NetworkInterface with wrong data", Label("test"), func() {
-			It("should fail", func() {
-				By("wrong FirewallRule data")
-				var protocolType metalnetv1alpha1.ProtocolType = "TCP"
-				var srcPort int32 = 80
-				wfr1 := metalnetv1alpha1.FirewallRuleSpec{
-					FirewallRuleID:    "wfr1",
-					Direction:         "XXX",
-					Action:            "ACCEPT",
-					IpFamily:          "IPv4",
-					SourcePrefix:      metalnetv1alpha1.MustParseNewIPPrefix("0.0.0.0/0"),
-					DestinationPrefix: metalnetv1alpha1.MustParseNewIPPrefix("10.0.0.10/32"),
-					ProtocolMatch: &metalnetv1alpha1.ProtocolMatch{
-						ProtocolType: &protocolType,
-						PortRange: &metalnetv1alpha1.PortMatch{
-							SrcPort:    &srcPort,
-							EndSrcPort: 80,
-						},
-					},
-				}
-				// Define a new NetworkInterface object
-				wrongNetworkInterface = &metalnetv1alpha1.NetworkInterface{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "wrong-network-interface",
-						Namespace: ns.Name,
-					},
-					Spec: metalnetv1alpha1.NetworkInterfaceSpec{
-						NetworkRef: corev1.LocalObjectReference{
-							Name: "test-network",
-						},
-						NodeName:   &testNode,
-						IPFamilies: []corev1.IPFamily{corev1.IPv4Protocol},
-						IPs: []metalnetv1alpha1.IP{
-							{
-								Addr: netip.MustParseAddr("10.0.0.1"),
-							},
-						},
-						FirewallRules: []metalnetv1alpha1.FirewallRuleSpec{wfr1},
-					},
-				}
-
-				// Create the NetworkInterface k8s object
-				Expect(k8sClient.Create(ctx, wrongNetworkInterface)).To(Succeed())
-
-				// Ensure it's created
-				createdNetworkInterface := &metalnetv1alpha1.NetworkInterface{}
-				Expect(k8sClient.Get(ctx, client.ObjectKey{
-					Namespace: ns.Name,
-					Name:      "wrong-network-interface",
-				}, createdNetworkInterface)).To(Succeed())
-
-				Expect(createdNetworkInterface.Spec.NetworkRef.Name).To(Equal("test-network"))
-				Expect(createdNetworkInterface.Spec.IPs[0].Addr.String()).To(Equal("10.0.0.1"))
-
-				// Reconcile loop should fail, because of unsupported direction string
-				// Error: traffic direction can be only: Ingress = 0/Egress = 1
-				Expect(ifaceReconcile(ctx, *createdNetworkInterface)).ToNot(Succeed())
-
-				// It should be now created in dpservice
-				iface, err := dpdkClient.GetInterface(ctx, string(wrongNetworkInterface.ObjectMeta.UID))
-				Expect(err).ToNot(HaveOccurred())
-				fmt.Println(iface.Spec)
-
-				// dpservice FWRule object is not created during reconciliation, because of unsupported direction string
-				_, err = dpdkClient.GetFirewallRule(ctx, "wfr1", string(wrongNetworkInterface.ObjectMeta.UID))
-				Expect(err).To(HaveOccurred())
-
-				// Delete the NetworkInterface object from k8s
-				Expect(k8sClient.Delete(ctx, wrongNetworkInterface)).To(Succeed())
-				// and reconcile
-				ifaceReconcile(ctx, *wrongNetworkInterface)
-			})
-		})
 	})
 
 	Context("Loadbalancer", Label("lb", "loadbalancer"), Ordered, func() {
@@ -897,6 +821,250 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 	})
 })
 
+var _ = Describe("Negative cases", Label("negative"), func() {
+	var wrongNetworkInterface *metalnetv1alpha1.NetworkInterface
+	var wrongLoadBalancer *metalnetv1alpha1.LoadBalancer
+	var wfr1 metalnetv1alpha1.FirewallRuleSpec
+
+	ctx := SetupContext()
+	ns := SetupTest(ctx)
+
+	// Creates the k8s network object and runs the reconcile loop before spec
+	BeforeEach(func() {
+		network = &metalnetv1alpha1.Network{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "negative-test-network",
+				Namespace: ns.Name,
+			},
+			Spec: metalnetv1alpha1.NetworkSpec{
+				ID:        200 + int32(GinkgoParallelProcess()),
+				PeeredIDs: []int32{2, 3},
+				PeeredPrefixes: []metalnetv1alpha1.PeeredPrefix{
+					{
+						ID:       2,
+						Prefixes: []metalnetv1alpha1.IPPrefix{}, // Add desired IPPrefixes here
+					},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, network)).To(Succeed())
+
+		networkReconcile(ctx, *network)
+
+		var protocolType metalnetv1alpha1.ProtocolType = "TCP"
+		var srcPort int32 = 80
+		var dstPort int32 = 443
+		wfr1 = metalnetv1alpha1.FirewallRuleSpec{
+			FirewallRuleID:    "wfr1",
+			Direction:         "Egress",
+			Action:            "ACCEPT",
+			IpFamily:          "IPv4",
+			SourcePrefix:      metalnetv1alpha1.MustParseNewIPPrefix("1.1.1.0/24"),
+			DestinationPrefix: metalnetv1alpha1.MustParseNewIPPrefix("10.0.0.10/32"),
+			ProtocolMatch: &metalnetv1alpha1.ProtocolMatch{
+				ProtocolType: &protocolType,
+				PortRange: &metalnetv1alpha1.PortMatch{
+					SrcPort:    &srcPort,
+					EndSrcPort: 80,
+					DstPort:    &dstPort,
+					EndDstPort: 443,
+				},
+			},
+		}
+
+		// Define a new NetworkInterface object
+		wrongNetworkInterface = &metalnetv1alpha1.NetworkInterface{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "wrong-network-interface",
+				Namespace: ns.Name,
+			},
+			Spec: metalnetv1alpha1.NetworkInterfaceSpec{
+				NetworkRef: corev1.LocalObjectReference{
+					Name: "negative-test-network",
+				},
+				NodeName:   &testNode,
+				IPFamilies: []corev1.IPFamily{corev1.IPv4Protocol},
+				IPs: []metalnetv1alpha1.IP{
+					{
+						Addr: netip.MustParseAddr("10.0.0.1"),
+					},
+				},
+				Prefixes:            []metalnetv1alpha1.IPPrefix{metalnetv1alpha1.MustParseIPPrefix("5.5.5.5/32")},
+				LoadBalancerTargets: []metalnetv1alpha1.IPPrefix{metalnetv1alpha1.MustParseIPPrefix("5.5.5.5/32")},
+				//NAT:                 &nat,
+				VirtualIP:     metalnetv1alpha1.MustParseNewIP("5.5.5.5"),
+				FirewallRules: []metalnetv1alpha1.FirewallRuleSpec{},
+			},
+		}
+
+		// Deletes the k8s network object after spec is completed
+		DeferCleanup(func(ctx SpecContext) {
+			Expect(k8sClient.Delete(ctx, network)).To(Succeed())
+			networkReconcile(ctx, *network)
+		})
+	})
+
+	// TODO: finish use case when wrong data is entered and remove Pending
+	When("creating a NetworkInterface with wrong data", Label("test"), func() {
+		It("should fail", func() {
+			By("unsupported direction string")
+			wfr1.Direction = "XXX"
+			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRuleSpec{wfr1}
+			// Create the NetworkInterface k8s object
+			Expect(k8sClient.Create(ctx, wrongNetworkInterface)).To(Succeed())
+
+			// Ensure it's created
+			createdNetworkInterface := &metalnetv1alpha1.NetworkInterface{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: ns.Name,
+				Name:      "wrong-network-interface",
+			}, createdNetworkInterface)).To(Succeed())
+
+			Expect(createdNetworkInterface.Spec.NetworkRef.Name).To(Equal("negative-test-network"))
+			Expect(createdNetworkInterface.Spec.IPs[0].Addr.String()).To(Equal("10.0.0.1"))
+
+			// Reconcile loop should fail, because of unsupported direction string
+			// Error: traffic direction can be only: Ingress = 0/Egress = 1
+			Expect(ifaceReconcile(ctx, *createdNetworkInterface)).ToNot(Succeed())
+
+			// Interface should be now created in dpservice
+			iface, err := dpdkClient.GetInterface(ctx, string(wrongNetworkInterface.ObjectMeta.UID))
+			Expect(err).ToNot(HaveOccurred())
+			fmt.Println(iface.Spec)
+
+			// dpservice FWRule object is not created during reconciliation, because of unsupported direction string
+			_, err = dpdkClient.GetFirewallRule(ctx, "wfr1", string(wrongNetworkInterface.ObjectMeta.UID))
+			Expect(err).To(HaveOccurred())
+
+			// Delete the NetworkInterface object from k8s
+			Expect(k8sClient.Delete(ctx, wrongNetworkInterface)).To(Succeed())
+			// and reconcile
+			Expect(ifaceReconcile(ctx, *wrongNetworkInterface)).To(Succeed())
+		})
+	})
+
+	When("creating a NetworkInterface with wrong data", Label("test"), func() {
+		It("should fail", func() {
+			By("unsupported action string")
+			wfr1.Action = "XXX"
+			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRuleSpec{wfr1}
+			// Create the NetworkInterface k8s object
+			Expect(k8sClient.Create(ctx, wrongNetworkInterface)).To(Succeed())
+
+			// Ensure it's created
+			createdNetworkInterface := &metalnetv1alpha1.NetworkInterface{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: ns.Name,
+				Name:      "wrong-network-interface",
+			}, createdNetworkInterface)).To(Succeed())
+
+			Expect(createdNetworkInterface.Spec.NetworkRef.Name).To(Equal("negative-test-network"))
+			Expect(createdNetworkInterface.Spec.IPs[0].Addr.String()).To(Equal("10.0.0.1"))
+
+			// Reconcile loop should fail, because of unsupported action string
+			// Error: action can be only: Allow = 0/Drop = 1
+			Expect(ifaceReconcile(ctx, *createdNetworkInterface)).ToNot(Succeed())
+
+			// Interface should be now created in dpservice
+			iface, err := dpdkClient.GetInterface(ctx, string(wrongNetworkInterface.ObjectMeta.UID))
+			Expect(err).ToNot(HaveOccurred())
+			fmt.Println(iface.Spec)
+
+			// dpservice FWRule object is not created during reconciliation, because of unsupported direction string
+			_, err = dpdkClient.GetFirewallRule(ctx, "wfr1", string(wrongNetworkInterface.ObjectMeta.UID))
+			Expect(err).To(HaveOccurred())
+
+			// Delete the NetworkInterface object from k8s
+			Expect(k8sClient.Delete(ctx, wrongNetworkInterface)).To(Succeed())
+			// and reconcile
+			Expect(ifaceReconcile(ctx, *wrongNetworkInterface)).To(Succeed())
+
+		})
+	})
+
+	When("creating a NetworkInterface with wrong data", Label("test"), func() {
+		It("should fail", func() {
+			By("fw rule port out of range")
+			wfr1.ProtocolMatch.PortRange.EndSrcPort = 75000
+			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRuleSpec{wfr1}
+			// Create the NetworkInterface k8s object
+			Expect(k8sClient.Create(ctx, wrongNetworkInterface)).To(Succeed())
+
+			// Ensure it's created
+			createdNetworkInterface := &metalnetv1alpha1.NetworkInterface{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: ns.Name,
+				Name:      "wrong-network-interface",
+			}, createdNetworkInterface)).To(Succeed())
+
+			Expect(createdNetworkInterface.Spec.NetworkRef.Name).To(Equal("negative-test-network"))
+			Expect(createdNetworkInterface.Spec.IPs[0].Addr.String()).To(Equal("10.0.0.1"))
+
+			// Reconcile loop should fail, because of port out of range
+			// Error: tcp/udp ports can only be in range <-1,65535>
+			Expect(ifaceReconcile(ctx, *createdNetworkInterface)).ToNot(Succeed())
+
+			// Interface should be now created in dpservice
+			iface, err := dpdkClient.GetInterface(ctx, string(wrongNetworkInterface.ObjectMeta.UID))
+			Expect(err).ToNot(HaveOccurred())
+			fmt.Println(iface.Spec)
+
+			// dpservice FWRule object is not created during reconciliation, because of port out of range
+			_, err = dpdkClient.GetFirewallRule(ctx, "wfr1", string(wrongNetworkInterface.ObjectMeta.UID))
+			Expect(err).To(HaveOccurred())
+
+			// Delete the NetworkInterface object from k8s
+			Expect(k8sClient.Delete(ctx, wrongNetworkInterface)).To(Succeed())
+			// and reconcile
+			Expect(ifaceReconcile(ctx, *wrongNetworkInterface)).To(Succeed())
+
+		})
+	})
+
+	When("creating a Loadbalancer with wrong data", Label("test"), func() {
+		It("should fail", func() {
+			By("TCP port out of range")
+			// Define a new Loadbalancer object
+			wrongLoadBalancer = &metalnetv1alpha1.LoadBalancer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "wrong-test-loadbalancer",
+					Namespace: ns.Name,
+				},
+				Spec: metalnetv1alpha1.LoadBalancerSpec{
+					NetworkRef: corev1.LocalObjectReference{Name: "negative-test-network"},
+					LBtype:     "Public",
+					IPFamily:   corev1.IPv4Protocol,
+					IP: metalnetv1alpha1.IP{
+						Addr: netip.MustParseAddr("11.5.5.1"),
+					},
+					Ports: []metalnetv1alpha1.LBPort{
+						{Protocol: "TCP", Port: -1},
+						{Protocol: "UDP", Port: 80},
+					},
+					NodeName: &testNode,
+				},
+			}
+
+			// Create the LoadBalancer object in k8s
+			Expect(k8sClient.Create(ctx, wrongLoadBalancer)).To(Succeed())
+
+			// Ensure it's created
+			createdLB := &metalnetv1alpha1.LoadBalancer{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: ns.Name,
+				Name:      "wrong-test-loadbalancer",
+			}, createdLB)).To(Succeed())
+
+			Expect(lbReconcile(ctx, *wrongLoadBalancer)).To(HaveOccurred())
+
+			Expect(k8sClient.Delete(ctx, wrongLoadBalancer)).To(Succeed())
+
+			Expect(lbReconcile(ctx, *wrongLoadBalancer)).ToNot(HaveOccurred())
+		})
+	})
+
+})
+
 func networkReconcile(ctx context.Context, network metalnetv1alpha1.Network) {
 	// error location will always be in the spec that called the helper, and not the helper itself
 	GinkgoHelper()
@@ -959,7 +1127,7 @@ func ifaceReconcile(ctx context.Context, networkInterface metalnetv1alpha1.Netwo
 	return nil
 }
 
-func lbReconcile(ctx context.Context, loadBalancer metalnetv1alpha1.LoadBalancer) {
+func lbReconcile(ctx context.Context, loadBalancer metalnetv1alpha1.LoadBalancer) error {
 	// error location will always be in the spec that called the helper, and not the helper itself
 	GinkgoHelper()
 
@@ -981,10 +1149,13 @@ func lbReconcile(ctx context.Context, loadBalancer metalnetv1alpha1.LoadBalancer
 				Namespace: loadBalancer.Namespace,
 			},
 		})
-		Expect(err).ToNot(HaveOccurred())
+		if err != nil {
+			return err
+		}
 
 		if res.Requeue == false {
 			break
 		}
 	}
+	return nil
 }

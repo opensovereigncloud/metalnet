@@ -81,14 +81,27 @@ check: manifests generate fmt addlicense lint test ## Generate manifests, code, 
 
 ENVTEST_ASSETS_DIR=$(shell pwd)/testbin
 .PHONY: test
+<<<<<<< HEAD
 test: envtest manifests generate fmt vet ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test -v ./... -coverprofile cover.out -ginkgo.v -ginkgo.label-filter=$(labels) -ginkgo.randomize-all
+=======
+test: envtest manifests generate fmt checklicense ## Run tests.
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test -v ./... -coverprofile cover.out -ginkgo.v -ginkgo.label-filter=$(labels) -ginkgo.randomize-all
+
+.PHONY: check
+check: generate fmt addlicense lint test ## Lint and run tests.
+>>>>>>> 7090042 (add more negative tests)
 
 ##@ Build
 
 .PHONY: build
+<<<<<<< HEAD
 build: manifests generate fmt lint ## Build the binary
 	go build -ldflags "-X main.buildVersion=${shell git describe --tags}'" -o bin/metalnet ./main.go
+=======
+build: manifests generate fmt addlicense lint ## Build the binary
+	go build -ldflags "-X main.buildVersion=${shell git describe --tags --long}'" -o bin/metalnet ./main.go
+>>>>>>> 7090042 (add more negative tests)
 
 .PHONY: run
 run-base: generate fmt lint ## Run the binary

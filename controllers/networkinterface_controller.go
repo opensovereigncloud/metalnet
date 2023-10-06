@@ -1224,7 +1224,7 @@ func (r *NetworkInterfaceReconciler) applyInterface(ctx context.Context, log log
 
 func (r *NetworkInterfaceReconciler) convertToDPDKDevice(addr ghw.PCIAddress) (string, error) {
 	if strings.Contains(addr.Device, "tap") {
-		return addr.Device, nil
+		return strings.ReplaceAll(strings.ReplaceAll(addr.Device, ":", ""), ".", ""), nil
 	}
 	pciFunction, err := strconv.ParseUint(addr.Function, 8, 64)
 	if err != nil {

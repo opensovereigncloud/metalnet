@@ -904,8 +904,7 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 		})
 	})
 
-	// TODO: finish use case when wrong data is entered and remove Pending
-	When("creating a NetworkInterface with wrong data", Label("test"), func() {
+	When("creating a NetworkInterface with wrong data", func() {
 		It("should fail", func() {
 			By("unsupported direction string")
 			wfr1.Direction = "XXX"
@@ -943,7 +942,7 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 		})
 	})
 
-	When("creating a NetworkInterface with wrong data", Label("test"), func() {
+	When("creating a NetworkInterface with wrong data", func() {
 		It("should fail", func() {
 			By("unsupported action string")
 			wfr1.Action = "XXX"
@@ -982,7 +981,7 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 		})
 	})
 
-	When("creating a NetworkInterface with wrong data", Label("test"), func() {
+	When("creating a NetworkInterface with wrong data", func() {
 		It("should fail", func() {
 			By("fw rule port out of range")
 			wfr1.ProtocolMatch.PortRange.EndSrcPort = 75000
@@ -1021,7 +1020,134 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 		})
 	})
 
-	When("creating a Loadbalancer with wrong data", Label("test"), func() {
+	When("creating a NetworkInterface with wrong data", func() {
+		It("should fail", func() {
+			By("fw rule DstPortEnd lower than DstPort ")
+			// wfr1.ProtocolMatch.PortRange.DstPort is 443
+			wfr1.ProtocolMatch.PortRange.EndDstPort = 80
+			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRuleSpec{wfr1}
+			// Create the NetworkInterface k8s object
+			Expect(k8sClient.Create(ctx, wrongNetworkInterface)).To(Succeed())
+
+			// Ensure it's created
+			createdNetworkInterface := &metalnetv1alpha1.NetworkInterface{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: ns.Name,
+				Name:      "wrong-network-interface",
+			}, createdNetworkInterface)).To(Succeed())
+
+			Expect(createdNetworkInterface.Spec.NetworkRef.Name).To(Equal("negative-test-network"))
+			Expect(createdNetworkInterface.Spec.IPs[0].Addr.String()).To(Equal("10.0.0.1"))
+
+			// Reconcile loop should fail, because of end port is lower than start
+			Expect(ifaceReconcile(ctx, *createdNetworkInterface)).ToNot(Succeed())
+
+			// Interface should be now created in dpservice
+			iface, err := dpdkClient.GetInterface(ctx, string(wrongNetworkInterface.ObjectMeta.UID))
+			Expect(err).ToNot(HaveOccurred())
+			fmt.Println(iface.Spec)
+
+			// dpservice FWRule object is not created during reconciliation, because of port issue
+			_, err = dpdkClient.GetFirewallRule(ctx, "wfr1", string(wrongNetworkInterface.ObjectMeta.UID))
+			Expect(err).To(HaveOccurred())
+
+			// Delete the NetworkInterface object from k8s
+			Expect(k8sClient.Delete(ctx, wrongNetworkInterface)).To(Succeed())
+			// and reconcile
+			Expect(ifaceReconcile(ctx, *wrongNetworkInterface)).To(Succeed())
+
+		})
+	})
+
+	When("creating a NetworkInterface with wrong data", func() {
+		It("should fail", func() {
+			By("negative icmp type")
+			var protocolType metalnetv1alpha1.ProtocolType = "ICMP"
+			var icmpType = int32(-5)
+			var icmpCode = int32(0)
+			wfr1.ProtocolMatch = &metalnetv1alpha1.ProtocolMatch{
+				ProtocolType: &protocolType,
+				ICMP: &metalnetv1alpha1.ICMPMatch{
+					IcmpType: &icmpType,
+					IcmpCode: &icmpCode,
+				},
+			}
+			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRuleSpec{wfr1}
+			// Create the NetworkInterface k8s object
+			Expect(k8sClient.Create(ctx, wrongNetworkInterface)).To(Succeed())
+
+			// Ensure it's created
+			createdNetworkInterface := &metalnetv1alpha1.NetworkInterface{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: ns.Name,
+				Name:      "wrong-network-interface",
+			}, createdNetworkInterface)).To(Succeed())
+
+			Expect(createdNetworkInterface.Spec.NetworkRef.Name).To(Equal("negative-test-network"))
+			Expect(createdNetworkInterface.Spec.IPs[0].Addr.String()).To(Equal("10.0.0.1"))
+
+			// Reconcile loop should fail, because of wrong icmp type
+			Expect(ifaceReconcile(ctx, *createdNetworkInterface)).ToNot(Succeed())
+
+			// Interface should be now created in dpservice
+			iface, err := dpdkClient.GetInterface(ctx, string(wrongNetworkInterface.ObjectMeta.UID))
+			Expect(err).ToNot(HaveOccurred())
+			fmt.Println(iface.Spec)
+
+			// dpservice FWRule object is not created during reconciliation, because of wrong icmp type
+			_, err = dpdkClient.GetFirewallRule(ctx, "wfr1", string(wrongNetworkInterface.ObjectMeta.UID))
+			Expect(err).To(HaveOccurred())
+
+			// Delete the NetworkInterface object from k8s
+			Expect(k8sClient.Delete(ctx, wrongNetworkInterface)).To(Succeed())
+			// and reconcile
+			Expect(ifaceReconcile(ctx, *wrongNetworkInterface)).To(Succeed())
+
+		})
+	})
+
+	When("creating a NetworkInterface with wrong data", Label("test"), func() {
+		It("should fail", func() {
+			By("wrong port in NAT config")
+			nat := metalnetv1alpha1.NATDetails{
+				IP:      metalnetv1alpha1.MustParseNewIP("7.7.7.7"),
+				Port:    100,
+				EndPort: 10,
+			}
+			wrongNetworkInterface.Spec.NAT = &nat
+			// Create the NetworkInterface k8s object
+			Expect(k8sClient.Create(ctx, wrongNetworkInterface)).To(Succeed())
+
+			// Ensure it's created
+			createdNetworkInterface := &metalnetv1alpha1.NetworkInterface{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: ns.Name,
+				Name:      "wrong-network-interface",
+			}, createdNetworkInterface)).To(Succeed())
+
+			Expect(createdNetworkInterface.Spec.NetworkRef.Name).To(Equal("negative-test-network"))
+			Expect(createdNetworkInterface.Spec.IPs[0].Addr.String()).To(Equal("10.0.0.1"))
+
+			// Reconcile loop should fail, because of wrong nat port
+			Expect(ifaceReconcile(ctx, *createdNetworkInterface)).ToNot(Succeed())
+
+			// Interface should be now created in dpservice
+			iface, err := dpdkClient.GetInterface(ctx, string(wrongNetworkInterface.ObjectMeta.UID))
+			Expect(err).ToNot(HaveOccurred())
+			fmt.Println(iface.Spec)
+
+			// dpservice FWRule object is not created during reconciliation, because of wrong nat port
+			_, err = dpdkClient.GetFirewallRule(ctx, "wfr1", string(wrongNetworkInterface.ObjectMeta.UID))
+			Expect(err).To(HaveOccurred())
+
+			// Delete the NetworkInterface object from k8s
+			Expect(k8sClient.Delete(ctx, wrongNetworkInterface)).To(Succeed())
+			// and reconcile
+			Expect(ifaceReconcile(ctx, *wrongNetworkInterface)).To(Succeed())
+		})
+	})
+
+	When("creating a Loadbalancer with wrong data", func() {
 		It("should fail", func() {
 			By("TCP port out of range")
 			// Define a new Loadbalancer object

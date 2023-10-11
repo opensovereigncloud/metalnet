@@ -64,6 +64,10 @@ addlicense: ## Add license headers to all go files.
 fmt: ## Run go fmt against code.
 	go fmt ./...
 
+.PHONY: vet
+vet: ## Run go vet against code.
+	go vet ./...
+
 .PHONY: checklicense
 checklicense: ## Check that every file has a license header present.
 	find . -name '*.go' -exec go run github.com/google/addlicense  -check -c 'OnMetal authors' {} +
@@ -73,21 +77,18 @@ lint: ## Run golangci-lint against code.
 	golangci-lint run ./...
 
 .PHONY: check
-check: manifests generate addlicense lint test
+check: manifests generate fmt addlicense lint test ## Generate manifests, code, lint, add licenses, test
 
 ENVTEST_ASSETS_DIR=$(shell pwd)/testbin
 .PHONY: test
-test: envtest manifests generate fmt checklicense ## Run tests.
+test: envtest manifests generate fmt vet ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test -v ./... -coverprofile cover.out -ginkgo.v -ginkgo.label-filter=$(labels) -ginkgo.randomize-all
-
-.PHONY: check
-check: generate fmt addlicense lint test ## Lint and run tests.
 
 ##@ Build
 
 .PHONY: build
-build: manifests generate fmt addlicense lint ## Build the binary
-	go build -ldflags "-X main.buildVersion=${shell git describe --tags --long}'" -o bin/metalnet ./main.go
+build: manifests generate fmt lint ## Build the binary
+	go build -ldflags "-X main.buildVersion=${shell git describe --tags}'" -o bin/metalnet ./main.go
 
 .PHONY: run
 run-base: generate fmt lint ## Run the binary

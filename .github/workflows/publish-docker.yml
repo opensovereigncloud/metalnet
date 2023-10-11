@@ -4,9 +4,6 @@ env:
   platforms: linux/amd64,linux/arm64
 
 on:
-  release:
-    types:
-      - published
   push:
     branches:
       - main
@@ -24,12 +21,14 @@ on:
 jobs:
   buildAndPush:
     if: ${{ github.event.label.name == 'ok-to-image' }} || ${{ github.event.label.name == 'ok-to-🐳' }} || ${{ github.ref == 'refs/heads/main' }}
-    runs-on: self-hosted
+    runs-on:
+      labels: self-hosted
+      group: organization/default
     steps:
       - uses: actions/checkout@v3
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      - uses: docker/metadata-action@v4
+      - uses: docker/metadata-action@v5
         id: meta
         with:
           images: |

@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"fmt"
 	"net/netip"
 
 	. "github.com/onmetal/onmetal-api/utils/testing"
@@ -81,7 +80,7 @@ var _ = Describe("Network Controller", Label("network"), Ordered, func() {
 
 		It("should reconcile successfully", func() {
 			// Create and initialize network reconciler
-			networkReconcile(ctx, *network)
+			Expect(networkReconcile(ctx, *network)).To(Succeed())
 
 			// Fetch the updated Network object from k8s
 			fetchedNetwork := &metalnetv1alpha1.Network{}
@@ -103,7 +102,7 @@ var _ = Describe("Network Controller", Label("network"), Ordered, func() {
 			patchNetwork.Spec.PeeredIDs = []int32{4, 5}
 			Expect(k8sClient.Patch(ctx, patchNetwork, client.MergeFrom(network))).To(Succeed())
 
-			networkReconcile(ctx, *network)
+			Expect(networkReconcile(ctx, *network)).To(Succeed())
 
 			// Fetch updated k8s network object
 			updatedNetwork := &metalnetv1alpha1.Network{}
@@ -131,7 +130,7 @@ var _ = Describe("Network Controller", Label("network"), Ordered, func() {
 
 		It("should reconcile successfully after delete", func() {
 			// Create and initialize network reconciler
-			networkReconcile(ctx, *network)
+			Expect(networkReconcile(ctx, *network)).To(Succeed())
 
 			// Fetch the updated Network object from k8s
 			fetchedNetwork := &metalnetv1alpha1.Network{}
@@ -177,12 +176,12 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 		}
 		Expect(k8sClient.Create(ctx, network)).To(Succeed())
 
-		networkReconcile(ctx, *network)
+		Expect(networkReconcile(ctx, *network)).To(Succeed())
 
 		// Deletes the k8s network object after spec is completed
 		DeferCleanup(func(ctx SpecContext) {
 			Expect(k8sClient.Delete(ctx, network)).To(Succeed())
-			networkReconcile(ctx, *network)
+			Expect(networkReconcile(ctx, *network)).To(Succeed())
 		})
 	})
 
@@ -849,7 +848,7 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 		}
 		Expect(k8sClient.Create(ctx, network)).To(Succeed())
 
-		networkReconcile(ctx, *network)
+		Expect(networkReconcile(ctx, *network)).To(Succeed())
 
 		var protocolType metalnetv1alpha1.ProtocolType = "TCP"
 		var srcPort int32 = 80
@@ -897,10 +896,30 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 			},
 		}
 
+		wrongLoadBalancer = &metalnetv1alpha1.LoadBalancer{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "wrong-test-loadbalancer",
+				Namespace: ns.Name,
+			},
+			Spec: metalnetv1alpha1.LoadBalancerSpec{
+				NetworkRef: corev1.LocalObjectReference{Name: "negative-test-network"},
+				LBtype:     "Public",
+				IPFamily:   corev1.IPv4Protocol,
+				IP: metalnetv1alpha1.IP{
+					Addr: netip.MustParseAddr("11.5.5.1"),
+				},
+				Ports: []metalnetv1alpha1.LBPort{
+					{Protocol: "TCP", Port: 80},
+					{Protocol: "UDP", Port: 80},
+				},
+				NodeName: &testNode,
+			},
+		}
+
 		// Deletes the k8s network object after spec is completed
 		DeferCleanup(func(ctx SpecContext) {
 			Expect(k8sClient.Delete(ctx, network)).To(Succeed())
-			networkReconcile(ctx, *network)
+			Expect(networkReconcile(ctx, *network)).To(Succeed())
 		})
 	})
 
@@ -927,9 +946,8 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 			Expect(ifaceReconcile(ctx, *createdNetworkInterface)).ToNot(Succeed())
 
 			// Interface should be now created in dpservice
-			iface, err := dpdkClient.GetInterface(ctx, string(wrongNetworkInterface.ObjectMeta.UID))
+			_, err := dpdkClient.GetInterface(ctx, string(wrongNetworkInterface.ObjectMeta.UID))
 			Expect(err).ToNot(HaveOccurred())
-			fmt.Println(iface.Spec)
 
 			// dpservice FWRule object is not created during reconciliation, because of unsupported direction string
 			_, err = dpdkClient.GetFirewallRule(ctx, "wfr1", string(wrongNetworkInterface.ObjectMeta.UID))
@@ -965,9 +983,8 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 			Expect(ifaceReconcile(ctx, *createdNetworkInterface)).ToNot(Succeed())
 
 			// Interface should be now created in dpservice
-			iface, err := dpdkClient.GetInterface(ctx, string(wrongNetworkInterface.ObjectMeta.UID))
+			_, err := dpdkClient.GetInterface(ctx, string(wrongNetworkInterface.ObjectMeta.UID))
 			Expect(err).ToNot(HaveOccurred())
-			fmt.Println(iface.Spec)
 
 			// dpservice FWRule object is not created during reconciliation, because of unsupported direction string
 			_, err = dpdkClient.GetFirewallRule(ctx, "wfr1", string(wrongNetworkInterface.ObjectMeta.UID))
@@ -1004,9 +1021,47 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 			Expect(ifaceReconcile(ctx, *createdNetworkInterface)).ToNot(Succeed())
 
 			// Interface should be now created in dpservice
-			iface, err := dpdkClient.GetInterface(ctx, string(wrongNetworkInterface.ObjectMeta.UID))
+			_, err := dpdkClient.GetInterface(ctx, string(wrongNetworkInterface.ObjectMeta.UID))
 			Expect(err).ToNot(HaveOccurred())
-			fmt.Println(iface.Spec)
+
+			// dpservice FWRule object is not created during reconciliation, because of port out of range
+			_, err = dpdkClient.GetFirewallRule(ctx, "wfr1", string(wrongNetworkInterface.ObjectMeta.UID))
+			Expect(err).To(HaveOccurred())
+
+			// Delete the NetworkInterface object from k8s
+			Expect(k8sClient.Delete(ctx, wrongNetworkInterface)).To(Succeed())
+			// and reconcile
+			Expect(ifaceReconcile(ctx, *wrongNetworkInterface)).To(Succeed())
+
+		})
+	})
+
+	When("creating a NetworkInterface with wrong data", func() {
+		It("should fail", func() {
+			By("fw rule port is negative")
+			srcPort := int32(-10)
+			wfr1.ProtocolMatch.PortRange.SrcPort = &srcPort
+			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRuleSpec{wfr1}
+			// Create the NetworkInterface k8s object
+			Expect(k8sClient.Create(ctx, wrongNetworkInterface)).To(Succeed())
+
+			// Ensure it's created
+			createdNetworkInterface := &metalnetv1alpha1.NetworkInterface{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: ns.Name,
+				Name:      "wrong-network-interface",
+			}, createdNetworkInterface)).To(Succeed())
+
+			Expect(createdNetworkInterface.Spec.NetworkRef.Name).To(Equal("negative-test-network"))
+			Expect(createdNetworkInterface.Spec.IPs[0].Addr.String()).To(Equal("10.0.0.1"))
+
+			// Reconcile loop should fail, because of port out of range
+			// Error: tcp/udp ports can only be in range <-1,65535>
+			Expect(ifaceReconcile(ctx, *createdNetworkInterface)).ToNot(Succeed())
+
+			// Interface should be now created in dpservice
+			_, err := dpdkClient.GetInterface(ctx, string(wrongNetworkInterface.ObjectMeta.UID))
+			Expect(err).ToNot(HaveOccurred())
 
 			// dpservice FWRule object is not created during reconciliation, because of port out of range
 			_, err = dpdkClient.GetFirewallRule(ctx, "wfr1", string(wrongNetworkInterface.ObjectMeta.UID))
@@ -1043,9 +1098,8 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 			Expect(ifaceReconcile(ctx, *createdNetworkInterface)).ToNot(Succeed())
 
 			// Interface should be now created in dpservice
-			iface, err := dpdkClient.GetInterface(ctx, string(wrongNetworkInterface.ObjectMeta.UID))
+			_, err := dpdkClient.GetInterface(ctx, string(wrongNetworkInterface.ObjectMeta.UID))
 			Expect(err).ToNot(HaveOccurred())
-			fmt.Println(iface.Spec)
 
 			// dpservice FWRule object is not created during reconciliation, because of port issue
 			_, err = dpdkClient.GetFirewallRule(ctx, "wfr1", string(wrongNetworkInterface.ObjectMeta.UID))
@@ -1090,9 +1144,8 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 			Expect(ifaceReconcile(ctx, *createdNetworkInterface)).ToNot(Succeed())
 
 			// Interface should be now created in dpservice
-			iface, err := dpdkClient.GetInterface(ctx, string(wrongNetworkInterface.ObjectMeta.UID))
+			_, err := dpdkClient.GetInterface(ctx, string(wrongNetworkInterface.ObjectMeta.UID))
 			Expect(err).ToNot(HaveOccurred())
-			fmt.Println(iface.Spec)
 
 			// dpservice FWRule object is not created during reconciliation, because of wrong icmp type
 			_, err = dpdkClient.GetFirewallRule(ctx, "wfr1", string(wrongNetworkInterface.ObjectMeta.UID))
@@ -1106,7 +1159,7 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 		})
 	})
 
-	When("creating a NetworkInterface with wrong data", Label("test"), func() {
+	When("creating a NetworkInterface with wrong data", func() {
 		It("should fail", func() {
 			By("wrong port in NAT config")
 			nat := metalnetv1alpha1.NATDetails{
@@ -1132,9 +1185,8 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 			Expect(ifaceReconcile(ctx, *createdNetworkInterface)).ToNot(Succeed())
 
 			// Interface should be now created in dpservice
-			iface, err := dpdkClient.GetInterface(ctx, string(wrongNetworkInterface.ObjectMeta.UID))
+			_, err := dpdkClient.GetInterface(ctx, string(wrongNetworkInterface.ObjectMeta.UID))
 			Expect(err).ToNot(HaveOccurred())
-			fmt.Println(iface.Spec)
 
 			// dpservice FWRule object is not created during reconciliation, because of wrong nat port
 			_, err = dpdkClient.GetFirewallRule(ctx, "wfr1", string(wrongNetworkInterface.ObjectMeta.UID))
@@ -1147,28 +1199,84 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 		})
 	})
 
-	When("creating a Loadbalancer with wrong data", func() {
+	When("creating a Loadbalancer with wrong data", Label("lb"), func() {
 		It("should fail", func() {
-			By("TCP port out of range")
-			// Define a new Loadbalancer object
-			wrongLoadBalancer = &metalnetv1alpha1.LoadBalancer{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "wrong-test-loadbalancer",
-					Namespace: ns.Name,
-				},
-				Spec: metalnetv1alpha1.LoadBalancerSpec{
-					NetworkRef: corev1.LocalObjectReference{Name: "negative-test-network"},
-					LBtype:     "Public",
-					IPFamily:   corev1.IPv4Protocol,
-					IP: metalnetv1alpha1.IP{
-						Addr: netip.MustParseAddr("11.5.5.1"),
-					},
-					Ports: []metalnetv1alpha1.LBPort{
-						{Protocol: "TCP", Port: -1},
-						{Protocol: "UDP", Port: 80},
-					},
-					NodeName: &testNode,
-				},
+			By("TCP port is negative")
+			// Set port to be negative
+			wrongLoadBalancer.Spec.Ports[0].Port = -1
+
+			// Create the LoadBalancer object in k8s
+			Expect(k8sClient.Create(ctx, wrongLoadBalancer)).To(Succeed())
+
+			// Ensure it's created
+			createdLB := &metalnetv1alpha1.LoadBalancer{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: ns.Name,
+				Name:      "wrong-test-loadbalancer",
+			}, createdLB)).To(Succeed())
+
+			Expect(lbReconcile(ctx, *wrongLoadBalancer)).ToNot(Succeed())
+
+			Expect(k8sClient.Delete(ctx, wrongLoadBalancer)).To(Succeed())
+
+			Expect(lbReconcile(ctx, *wrongLoadBalancer)).To(Succeed())
+		})
+	})
+
+	When("creating a Loadbalancer with wrong data", Label("lb"), func() {
+		It("should fail", func() {
+			By("UDP port out of range")
+			// Set port to be put of range
+			wrongLoadBalancer.Spec.Ports[1].Port = 75000
+
+			// Create the LoadBalancer object in k8s
+			Expect(k8sClient.Create(ctx, wrongLoadBalancer)).To(Succeed())
+
+			// Ensure it's created
+			createdLB := &metalnetv1alpha1.LoadBalancer{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: ns.Name,
+				Name:      "wrong-test-loadbalancer",
+			}, createdLB)).To(Succeed())
+
+			Expect(lbReconcile(ctx, *wrongLoadBalancer)).ToNot(Succeed())
+
+			Expect(k8sClient.Delete(ctx, wrongLoadBalancer)).To(Succeed())
+
+			Expect(lbReconcile(ctx, *wrongLoadBalancer)).To(Succeed())
+		})
+	})
+
+	When("creating a Loadbalancer with wrong data", Label("lb"), func() {
+		It("should fail", func() {
+			By("wrong protocol type")
+			// Set protocol to wrong value
+			wrongLoadBalancer.Spec.Ports[0].Protocol = "XXX"
+
+			// Create the LoadBalancer object in k8s
+			Expect(k8sClient.Create(ctx, wrongLoadBalancer)).To(Succeed())
+
+			// Ensure it's created
+			createdLB := &metalnetv1alpha1.LoadBalancer{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: ns.Name,
+				Name:      "wrong-test-loadbalancer",
+			}, createdLB)).To(Succeed())
+
+			Expect(lbReconcile(ctx, *wrongLoadBalancer)).ToNot(Succeed())
+
+			Expect(k8sClient.Delete(ctx, wrongLoadBalancer)).To(Succeed())
+
+			Expect(lbReconcile(ctx, *wrongLoadBalancer)).To(Succeed())
+		})
+	})
+
+	When("creating a Loadbalancer with wrong data", Label("lb"), func() {
+		It("should fail", func() {
+			By("using IPv6 address")
+			// set wrong IP (IPv6 is not supported yet)
+			wrongLoadBalancer.Spec.IP = metalnetv1alpha1.IP{
+				Addr: netip.MustParseAddr("ff80::1"),
 			}
 
 			// Create the LoadBalancer object in k8s
@@ -1181,17 +1289,54 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 				Name:      "wrong-test-loadbalancer",
 			}, createdLB)).To(Succeed())
 
-			Expect(lbReconcile(ctx, *wrongLoadBalancer)).To(HaveOccurred())
+			Expect(lbReconcile(ctx, *wrongLoadBalancer)).ToNot(Succeed())
 
 			Expect(k8sClient.Delete(ctx, wrongLoadBalancer)).To(Succeed())
 
-			Expect(lbReconcile(ctx, *wrongLoadBalancer)).ToNot(HaveOccurred())
+			Expect(lbReconcile(ctx, *wrongLoadBalancer)).To(Succeed())
 		})
 	})
 
+	// TODO: fix the conversion of PeeredIDs to uint32 and remove Pending
+	When("creating a Network with wrong data", Pending, func() {
+		It("should fail", func() {
+			By("negative peered ID")
+			// Define a new Network object
+			wrongNetwork := &metalnetv1alpha1.Network{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "wrong-test-network",
+					Namespace: ns.Name,
+				},
+				Spec: metalnetv1alpha1.NetworkSpec{
+					ID:        123,
+					PeeredIDs: []int32{-5},
+					PeeredPrefixes: []metalnetv1alpha1.PeeredPrefix{
+						{
+							ID:       2,
+							Prefixes: []metalnetv1alpha1.IPPrefix{}, // Add desired IPPrefixes here
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, wrongNetwork)).To(Succeed())
+
+			Expect(networkReconcile(ctx, *wrongNetwork)).ToNot(Succeed())
+
+			// Ensure it's created
+			createdNetwork := &metalnetv1alpha1.Network{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: ns.Name,
+				Name:      "wrong-test-network",
+			}, createdNetwork)).To(Succeed())
+
+			Expect(k8sClient.Delete(ctx, wrongNetwork)).To(Succeed())
+
+			Expect(networkReconcile(ctx, *wrongNetwork)).To(Succeed())
+		})
+	})
 })
 
-func networkReconcile(ctx context.Context, network metalnetv1alpha1.Network) {
+func networkReconcile(ctx context.Context, network metalnetv1alpha1.Network) error {
 	// error location will always be in the spec that called the helper, and not the helper itself
 	GinkgoHelper()
 
@@ -1204,7 +1349,7 @@ func networkReconcile(ctx context.Context, network metalnetv1alpha1.Network) {
 		NodeName:      testNode,
 	}
 
-	// Loop the reconciler until Requeue is false
+	// Loop the reconciler until Requeue is false or error occurs
 	for {
 		res, err := reconciler.Reconcile(ctx, ctrl.Request{
 			NamespacedName: types.NamespacedName{
@@ -1212,11 +1357,15 @@ func networkReconcile(ctx context.Context, network metalnetv1alpha1.Network) {
 				Namespace: network.Namespace,
 			},
 		})
-		Expect(err).ToNot(HaveOccurred())
+		if err != nil {
+			return err
+		}
+
 		if res.Requeue == false {
 			break
 		}
 	}
+	return nil
 }
 
 func ifaceReconcile(ctx context.Context, networkInterface metalnetv1alpha1.NetworkInterface) error {
@@ -1234,7 +1383,7 @@ func ifaceReconcile(ctx context.Context, networkInterface metalnetv1alpha1.Netwo
 		PublicVNI:     100,
 	}
 
-	// Loop the reconciler until Requeue is false
+	// Loop the reconciler until Requeue is false or error occurs
 	for {
 		res, err := reconciler.Reconcile(ctx, ctrl.Request{
 			NamespacedName: types.NamespacedName{
@@ -1267,7 +1416,7 @@ func lbReconcile(ctx context.Context, loadBalancer metalnetv1alpha1.LoadBalancer
 		PublicVNI:     100,
 	}
 
-	// Loop the reconciler until Requeue is false
+	// Loop the reconciler until Requeue is false or error occurs
 	for {
 		res, err := reconciler.Reconcile(ctx, ctrl.Request{
 			NamespacedName: types.NamespacedName{

@@ -185,6 +185,18 @@ func (r *NetworkReconciler) reconcile(ctx context.Context, log logr.Logger, netw
 
 func (r *NetworkReconciler) createDefaultRouteIfNotExists(ctx context.Context, vni uint32) error {
 	defaultRoutePrefix := netip.MustParsePrefix("0.0.0.0/0")
+
+	routes, _ := r.DPDK.ListRoutes(ctx, vni)
+	for _, route := range routes.Items {
+		if *route.Spec.Prefix == defaultRoutePrefix {
+			if route.Spec.NextHop.IP != &r.RouterAddress {
+				if _, err := r.DPDK.DeleteRoute(ctx, vni, &defaultRoutePrefix, dpdkerrors.Ignore(dpdkerrors.ROUTE_NOT_FOUND)); err != nil {
+					return fmt.Errorf("error deleting default route: %w", err)
+				}
+			}
+		}
+	}
+
 	if _, err := r.DPDK.CreateRoute(ctx, &dpdk.Route{
 		RouteMeta: dpdk.RouteMeta{
 			VNI: vni,

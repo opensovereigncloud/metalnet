@@ -86,6 +86,8 @@ spec:
                   properties:
                     port:
                       format: int32
+                      maximum: 65535
+                      minimum: 0
                       type: integer
                     protocol:
                       type: string
@@ -93,6 +95,7 @@ spec:
                   - port
                   - protocol
                   type: object
+                minItems: 1
                 type: array
               type:
                 description: Type defines whether the loadbalancer is using an internal
@@ -101,6 +104,7 @@ spec:
             required:
             - ipFamily
             - networkRef
+            - ports
             - type
             type: object
           status:

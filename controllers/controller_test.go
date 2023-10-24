@@ -35,9 +35,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// TODO:	'It' specs should be independent, now they are correct because inner spec run in order (to change it use 'ginkgo --randomize-all')
-//			can be fixed by creating single 'It' or by 'Ordered containers'
-
 var _ = Describe("Network Controller", Label("network"), Ordered, func() {
 	ctx := SetupContext()
 	ns := SetupTest(ctx)
@@ -71,7 +68,6 @@ var _ = Describe("Network Controller", Label("network"), Ordered, func() {
 
 			// Equal() uses reflect.DeepEqual to compare (it compares whole structs recursively)
 			Expect(createdNetwork).To(Equal(network))
-			//Expect(createdNetwork.Spec.ID).To(Equal(network.Spec.ID))
 
 			vniAvail, err := dpdkClient.GetVni(ctx, 123, uint8(dpdk.VniType_VNI_IPV4))
 			Expect(err).NotTo(HaveOccurred())
@@ -232,7 +228,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 			})
 
 			It("should reconcile successfully", func() {
-				ifaceReconcile(ctx, *networkInterface)
+				Expect(ifaceReconcile(ctx, *networkInterface)).To(Succeed())
 				// Fetch the updated Iface object from k8s
 				fetchedIface := &metalnetv1alpha1.NetworkInterface{}
 				Expect(k8sClient.Get(ctx, client.ObjectKey{
@@ -266,7 +262,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 				// Apply patch
 				Expect(k8sClient.Patch(ctx, patchIface, client.MergeFrom(networkInterface))).To(Succeed())
 
-				ifaceReconcile(ctx, *networkInterface)
+				Expect(ifaceReconcile(ctx, *networkInterface)).To(Succeed())
 
 				// Fetch updated k8s NetworkInterface object
 				updatedIface := &metalnetv1alpha1.NetworkInterface{}
@@ -287,7 +283,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 
 				Expect(k8sClient.Patch(ctx, patchIface, client.MergeFrom(networkInterface))).To(Succeed())
 
-				ifaceReconcile(ctx, *networkInterface)
+				Expect(ifaceReconcile(ctx, *networkInterface)).To(Succeed())
 
 				// Fetch updated k8s interface object
 				updatedIface := &metalnetv1alpha1.NetworkInterface{}
@@ -313,7 +309,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 
 				Expect(k8sClient.Patch(ctx, patchIface, client.MergeFrom(updatedIface))).To(Succeed())
 
-				ifaceReconcile(ctx, *updatedIface)
+				Expect(ifaceReconcile(ctx, *updatedIface)).To(Succeed())
 
 				// Fetch updated k8s object
 				Expect(k8sClient.Get(ctx, client.ObjectKey{
@@ -331,7 +327,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 
 				Expect(k8sClient.Patch(ctx, patchIface, client.MergeFrom(updatedIface))).To(Succeed())
 
-				ifaceReconcile(ctx, *updatedIface)
+				Expect(ifaceReconcile(ctx, *updatedIface)).To(Succeed())
 
 				// Fetch updated k8s interface object
 				Expect(k8sClient.Get(ctx, client.ObjectKey{
@@ -360,7 +356,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 
 				Expect(k8sClient.Patch(ctx, patchIface, client.MergeFrom(networkInterface))).To(Succeed())
 
-				ifaceReconcile(ctx, *networkInterface)
+				Expect(ifaceReconcile(ctx, *networkInterface)).To(Succeed())
 
 				// Fetch updated k8s interface object
 				updatedIface := &metalnetv1alpha1.NetworkInterface{}
@@ -385,7 +381,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 
 				Expect(k8sClient.Patch(ctx, patchIface, client.MergeFrom(updatedIface))).To(Succeed())
 
-				ifaceReconcile(ctx, *updatedIface)
+				Expect(ifaceReconcile(ctx, *updatedIface)).To(Succeed())
 
 				// Fetch updated k8s interface object
 				Expect(k8sClient.Get(ctx, client.ObjectKey{
@@ -405,7 +401,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 
 				Expect(k8sClient.Patch(ctx, patchIface, client.MergeFrom(updatedIface))).To(Succeed())
 
-				ifaceReconcile(ctx, *updatedIface)
+				Expect(ifaceReconcile(ctx, *updatedIface)).To(Succeed())
 
 				// Fetch updated k8s interface object
 				Expect(k8sClient.Get(ctx, client.ObjectKey{
@@ -426,7 +422,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 
 				Expect(k8sClient.Patch(ctx, patchIface, client.MergeFrom(networkInterface))).To(Succeed())
 
-				ifaceReconcile(ctx, *networkInterface)
+				Expect(ifaceReconcile(ctx, *networkInterface)).To(Succeed())
 
 				// Fetch updated k8s interface object
 				updatedIface := &metalnetv1alpha1.NetworkInterface{}
@@ -447,7 +443,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 
 				Expect(k8sClient.Patch(ctx, patchIface, client.MergeFrom(updatedIface))).To(Succeed())
 
-				ifaceReconcile(ctx, *updatedIface)
+				Expect(ifaceReconcile(ctx, *updatedIface)).To(Succeed())
 
 				// Fetch updated k8s interface object
 				Expect(k8sClient.Get(ctx, client.ObjectKey{
@@ -465,7 +461,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 
 				Expect(k8sClient.Patch(ctx, patchIface, client.MergeFrom(updatedIface))).To(Succeed())
 
-				ifaceReconcile(ctx, *updatedIface)
+				Expect(ifaceReconcile(ctx, *updatedIface)).To(Succeed())
 
 				Expect(k8sClient.Get(ctx, client.ObjectKey{
 					Name:      networkInterface.Name,
@@ -485,7 +481,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 
 				Expect(k8sClient.Patch(ctx, patchIface, client.MergeFrom(networkInterface))).To(Succeed())
 
-				ifaceReconcile(ctx, *networkInterface)
+				Expect(ifaceReconcile(ctx, *networkInterface)).To(Succeed())
 
 				// Fetch updated k8s interface object
 				updatedIface := &metalnetv1alpha1.NetworkInterface{}
@@ -506,7 +502,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 
 				Expect(k8sClient.Patch(ctx, patchIface, client.MergeFrom(updatedIface))).To(Succeed())
 
-				ifaceReconcile(ctx, *updatedIface)
+				Expect(ifaceReconcile(ctx, *updatedIface)).To(Succeed())
 
 				Expect(k8sClient.Get(ctx, client.ObjectKey{
 					Name:      networkInterface.Name,
@@ -523,7 +519,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 
 				Expect(k8sClient.Patch(ctx, patchIface, client.MergeFrom(updatedIface))).To(Succeed())
 
-				ifaceReconcile(ctx, *updatedIface)
+				Expect(ifaceReconcile(ctx, *updatedIface)).To(Succeed())
 
 				// Fetch updated k8s interface object
 				Expect(k8sClient.Get(ctx, client.ObjectKey{
@@ -560,7 +556,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 
 				Expect(k8sClient.Patch(ctx, patchIface, client.MergeFrom(networkInterface))).To(Succeed())
 
-				ifaceReconcile(ctx, *networkInterface)
+				Expect(ifaceReconcile(ctx, *networkInterface)).To(Succeed())
 
 				// Fetch updated k8s interface object
 				updatedIface := &metalnetv1alpha1.NetworkInterface{}
@@ -590,7 +586,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 
 				Expect(k8sClient.Patch(ctx, patchIface, client.MergeFrom(updatedIface))).To(Succeed())
 
-				ifaceReconcile(ctx, *updatedIface)
+				Expect(ifaceReconcile(ctx, *updatedIface)).To(Succeed())
 
 				// Fetch updated k8s interface object
 				Expect(k8sClient.Get(ctx, client.ObjectKey{
@@ -609,7 +605,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 
 				Expect(k8sClient.Patch(ctx, patchIface, client.MergeFrom(updatedIface))).To(Succeed())
 
-				ifaceReconcile(ctx, *updatedIface)
+				Expect(ifaceReconcile(ctx, *updatedIface)).To(Succeed())
 
 				// Fetch updated k8s interface object
 				Expect(k8sClient.Get(ctx, client.ObjectKey{
@@ -650,7 +646,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 
 			It("should reconcile successfully after delete", func() {
 				// Create and initialize networkInterface reconciler
-				ifaceReconcile(ctx, *networkInterface)
+				Expect(ifaceReconcile(ctx, *networkInterface)).To(Succeed())
 
 				// Try to fetch the deleted networkInterface object from k8s
 				fetchedIface := &metalnetv1alpha1.NetworkInterface{}
@@ -725,7 +721,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 
 			It("should reconcile successfully", func() {
 				// Create and initialize loadbalancer reconciler
-				lbReconcile(ctx, *loadBalancer)
+				Expect(lbReconcile(ctx, *loadBalancer)).To(Succeed())
 
 				// Fetch the updated LB object from k8s
 				fetchedLB := &metalnetv1alpha1.LoadBalancer{}
@@ -760,7 +756,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 				}
 				Expect(k8sClient.Patch(ctx, patchLB, client.MergeFrom(loadBalancer))).To(Succeed())
 
-				lbReconcile(ctx, *loadBalancer)
+				Expect(lbReconcile(ctx, *loadBalancer)).To(Succeed())
 
 				// Fetch updated k8s loadbalancer object
 				updatedLB := &metalnetv1alpha1.LoadBalancer{}
@@ -797,7 +793,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 
 			It("should reconcile successfully after delete", func() {
 				// Create and initialize loadbalancer reconciler
-				lbReconcile(ctx, *loadBalancer)
+				Expect(lbReconcile(ctx, *loadBalancer)).To(Succeed())
 
 				// Fetch the deleted LB object from k8s
 				fetchedLB := &metalnetv1alpha1.LoadBalancer{}
@@ -1161,7 +1157,7 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 
 	When("creating a NetworkInterface with wrong data", func() {
 		It("should fail", func() {
-			By("wrong port in NAT config")
+			By("EndPort lower than StartPort in NAT config")
 			nat := metalnetv1alpha1.NATDetails{
 				IP:      metalnetv1alpha1.MustParseNewIP("7.7.7.7"),
 				Port:    100,
@@ -1199,27 +1195,63 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 		})
 	})
 
+	When("creating a NetworkInterface with wrong data", func() {
+		It("should fail", func() {
+			By("StartPort in NAT config is negative")
+			nat := metalnetv1alpha1.NATDetails{
+				IP:      metalnetv1alpha1.MustParseNewIP("7.7.7.7"),
+				Port:    -1,
+				EndPort: 80,
+			}
+			wrongNetworkInterface.Spec.NAT = &nat
+			// Try to create the NetworkInterface k8s object
+			Expect(k8sClient.Create(ctx, wrongNetworkInterface)).ToNot(Succeed())
+
+			// Ensure it's not created
+			createdNetworkInterface := &metalnetv1alpha1.NetworkInterface{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: ns.Name,
+				Name:      "wrong-network-interface",
+			}, createdNetworkInterface)).ToNot(Succeed())
+		})
+	})
+
+	When("creating a NetworkInterface with wrong data", func() {
+		It("should fail", func() {
+			By("EndPort in NAT config is out of range")
+			nat := metalnetv1alpha1.NATDetails{
+				IP:      metalnetv1alpha1.MustParseNewIP("7.7.7.7"),
+				Port:    80,
+				EndPort: 65536,
+			}
+			wrongNetworkInterface.Spec.NAT = &nat
+			// Try to create the NetworkInterface k8s object
+			Expect(k8sClient.Create(ctx, wrongNetworkInterface)).ToNot(Succeed())
+
+			// Ensure it's not created
+			createdNetworkInterface := &metalnetv1alpha1.NetworkInterface{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: ns.Name,
+				Name:      "wrong-network-interface",
+			}, createdNetworkInterface)).ToNot(Succeed())
+		})
+	})
+
 	When("creating a Loadbalancer with wrong data", Label("lb"), func() {
 		It("should fail", func() {
 			By("TCP port is negative")
 			// Set port to be negative
 			wrongLoadBalancer.Spec.Ports[0].Port = -1
 
-			// Create the LoadBalancer object in k8s
-			Expect(k8sClient.Create(ctx, wrongLoadBalancer)).To(Succeed())
+			// Try to create the LoadBalancer object in k8s
+			Expect(k8sClient.Create(ctx, wrongLoadBalancer)).ToNot(Succeed())
 
-			// Ensure it's created
+			// Ensure it's not created
 			createdLB := &metalnetv1alpha1.LoadBalancer{}
 			Expect(k8sClient.Get(ctx, client.ObjectKey{
 				Namespace: ns.Name,
 				Name:      "wrong-test-loadbalancer",
-			}, createdLB)).To(Succeed())
-
-			Expect(lbReconcile(ctx, *wrongLoadBalancer)).ToNot(Succeed())
-
-			Expect(k8sClient.Delete(ctx, wrongLoadBalancer)).To(Succeed())
-
-			Expect(lbReconcile(ctx, *wrongLoadBalancer)).To(Succeed())
+			}, createdLB)).ToNot(Succeed())
 		})
 	})
 
@@ -1229,21 +1261,15 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 			// Set port to be put of range
 			wrongLoadBalancer.Spec.Ports[1].Port = 75000
 
-			// Create the LoadBalancer object in k8s
-			Expect(k8sClient.Create(ctx, wrongLoadBalancer)).To(Succeed())
+			// Try to create the LoadBalancer object in k8s
+			Expect(k8sClient.Create(ctx, wrongLoadBalancer)).ToNot(Succeed())
 
-			// Ensure it's created
+			// Ensure it's not created
 			createdLB := &metalnetv1alpha1.LoadBalancer{}
 			Expect(k8sClient.Get(ctx, client.ObjectKey{
 				Namespace: ns.Name,
 				Name:      "wrong-test-loadbalancer",
-			}, createdLB)).To(Succeed())
-
-			Expect(lbReconcile(ctx, *wrongLoadBalancer)).ToNot(Succeed())
-
-			Expect(k8sClient.Delete(ctx, wrongLoadBalancer)).To(Succeed())
-
-			Expect(lbReconcile(ctx, *wrongLoadBalancer)).To(Succeed())
+			}, createdLB)).ToNot(Succeed())
 		})
 	})
 
@@ -1297,6 +1323,54 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 		})
 	})
 
+	When("creating a Loadbalancer with wrong data", Label("lb"), func() {
+		It("should fail", func() {
+			By("no LB ports specified")
+			// empty LB ports
+			wrongLoadBalancer.Spec.Ports = []metalnetv1alpha1.LBPort{}
+
+			// Try to create the LoadBalancer object in k8s
+			Expect(k8sClient.Create(ctx, wrongLoadBalancer)).ToNot(Succeed())
+
+			// Ensure it's not created
+			createdLB := &metalnetv1alpha1.LoadBalancer{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: ns.Name,
+				Name:      "wrong-test-loadbalancer",
+			}, createdLB)).ToNot(Succeed())
+		})
+	})
+
+	When("creating a Loadbalancer with wrong data", Label("test"), func() {
+		It("should fail", func() {
+			By("wrong network reference")
+			// change the network reference to non existent network
+			wrongLoadBalancer.Spec.NetworkRef = corev1.LocalObjectReference{Name: "non-existent-test-network"}
+
+			// Create the LoadBalancer object in k8s
+			Expect(k8sClient.Create(ctx, wrongLoadBalancer)).To(Succeed())
+
+			// Ensure it's created
+			createdLB := &metalnetv1alpha1.LoadBalancer{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: ns.Name,
+				Name:      "wrong-test-loadbalancer",
+			}, createdLB)).To(Succeed())
+
+			Expect(lbReconcile(ctx, *wrongLoadBalancer)).To(Succeed())
+
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: ns.Name,
+				Name:      "wrong-test-loadbalancer",
+			}, createdLB)).To(Succeed())
+			Expect(createdLB.Status.State).To(Equal(metalnetv1alpha1.LoadBalancerStatePending))
+
+			Expect(k8sClient.Delete(ctx, wrongLoadBalancer)).To(Succeed())
+
+			Expect(lbReconcile(ctx, *wrongLoadBalancer)).To(Succeed())
+		})
+	})
+
 	// TODO: fix the conversion of PeeredIDs to uint32 and remove Pending
 	When("creating a Network with wrong data", Pending, func() {
 		It("should fail", func() {
@@ -1309,10 +1383,10 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 				},
 				Spec: metalnetv1alpha1.NetworkSpec{
 					ID:        123,
-					PeeredIDs: []int32{-5},
+					PeeredIDs: []int32{-5, 10},
 					PeeredPrefixes: []metalnetv1alpha1.PeeredPrefix{
 						{
-							ID:       2,
+							ID:       -2,
 							Prefixes: []metalnetv1alpha1.IPPrefix{}, // Add desired IPPrefixes here
 						},
 					},

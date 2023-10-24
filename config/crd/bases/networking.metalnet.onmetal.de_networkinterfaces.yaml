@@ -162,11 +162,15 @@ spec:
                 properties:
                   endPort:
                     format: int32
+                    maximum: 65535
+                    minimum: 0
                     type: integer
                   ip:
                     type: string
                   port:
                     format: int32
+                    maximum: 65535
+                    minimum: 0
                     type: integer
                 required:
                 - endPort
@@ -213,11 +217,15 @@ spec:
                 properties:
                   endPort:
                     format: int32
+                    maximum: 65535
+                    minimum: 0
                     type: integer
                   ip:
                     type: string
                   port:
                     format: int32
+                    maximum: 65535
+                    minimum: 0
                     type: integer
                 required:
                 - endPort

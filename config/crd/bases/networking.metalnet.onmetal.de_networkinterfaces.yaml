@@ -150,6 +150,7 @@ spec:
                   moment.
                 items:
                   type: string
+                minItems: 1
                 type: array
               loadBalancerTargets:
                 description: Loadbalancer Targets are the provided Prefix

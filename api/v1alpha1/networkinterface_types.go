@@ -31,6 +31,7 @@ type NetworkInterfaceSpec struct {
 	// IPs are the provided IPs or EphemeralIPs which should be assigned to this NetworkInterface
 	// Only one IP supported at the moment.
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinItems=1
 	IPs []IP `json:"ips"`
 	// Virtual IP
 	VirtualIP *IP `json:"virtualIP,omitempty"`

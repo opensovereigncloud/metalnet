@@ -75,11 +75,8 @@ func (r *LoadBalancerReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		log.V(1).Info("LoadBalancer is not assigned to this node", "NodeName", lb.Spec.NodeName)
 		return ctrl.Result{}, nil
 	}
-	res, err := r.reconcileExists(ctx, log, lb)
-	if err != nil {
-		log.V(1).Info(err.Error())
-	}
-	return res, err
+
+	return r.reconcileExists(ctx, log, lb)
 }
 
 func (r *LoadBalancerReconciler) reconcileExists(ctx context.Context, log logr.Logger, lb *metalnetv1alpha1.LoadBalancer) (ctrl.Result, error) {

@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"net/netip"
 
 	. "github.com/onmetal/onmetal-api/utils/testing"
@@ -1237,6 +1238,22 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 		})
 	})
 
+	When("creating a NetworkInterface with wrong data", func() {
+		It("should fail", func() {
+			By("empty IP slice")
+			wrongNetworkInterface.Spec.IPs = []metalnetv1alpha1.IP{}
+			// Try to create the NetworkInterface k8s object
+			Expect(k8sClient.Create(ctx, wrongNetworkInterface)).ToNot(Succeed())
+
+			// Ensure it's not created
+			createdNetworkInterface := &metalnetv1alpha1.NetworkInterface{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: ns.Name,
+				Name:      "wrong-network-interface",
+			}, createdNetworkInterface)).ToNot(Succeed())
+		})
+	})
+
 	When("creating a Loadbalancer with wrong data", Label("lb"), func() {
 		It("should fail", func() {
 			By("TCP port is negative")
@@ -1357,6 +1374,8 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 				Name:      "wrong-test-loadbalancer",
 			}, createdLB)).To(Succeed())
 
+			// TODO: When creating LB object via yaml file, it crashes the metalnet
+			// but it works in automated tests
 			Expect(lbReconcile(ctx, *wrongLoadBalancer)).To(Succeed())
 
 			Expect(k8sClient.Get(ctx, client.ObjectKey{
@@ -1365,6 +1384,32 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 			}, createdLB)).To(Succeed())
 			Expect(createdLB.Status.State).To(Equal(metalnetv1alpha1.LoadBalancerStatePending))
 
+			/* nonexistentNetwork := &metalnetv1alpha1.Network{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "non-existent-test-network",
+					Namespace: ns.Name,
+				},
+				Spec: metalnetv1alpha1.NetworkSpec{
+					ID:        456,
+					PeeredIDs: []int32{10},
+					PeeredPrefixes: []metalnetv1alpha1.PeeredPrefix{
+						{
+							ID:       10,
+							Prefixes: []metalnetv1alpha1.IPPrefix{}, // Add desired IPPrefixes here
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, nonexistentNetwork)).To(Succeed())
+
+			Expect(networkReconcile(ctx, *nonexistentNetwork)).To(Succeed())
+
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: ns.Name,
+				Name:      "wrong-test-loadbalancer",
+			}, createdLB)).To(Succeed())
+			Expect(createdLB.Status.State).To(Equal(metalnetv1alpha1.LoadBalancerStateReady))
+			*/
 			Expect(k8sClient.Delete(ctx, wrongLoadBalancer)).To(Succeed())
 
 			Expect(lbReconcile(ctx, *wrongLoadBalancer)).To(Succeed())
@@ -1432,6 +1477,7 @@ func networkReconcile(ctx context.Context, network metalnetv1alpha1.Network) err
 			},
 		})
 		if err != nil {
+			fmt.Println(err)
 			return err
 		}
 
@@ -1466,6 +1512,7 @@ func ifaceReconcile(ctx context.Context, networkInterface metalnetv1alpha1.Netwo
 			},
 		})
 		if err != nil {
+			fmt.Println(err)
 			return err
 		}
 
@@ -1499,6 +1546,7 @@ func lbReconcile(ctx context.Context, loadBalancer metalnetv1alpha1.LoadBalancer
 			},
 		})
 		if err != nil {
+			fmt.Println(err)
 			return err
 		}
 

@@ -74,13 +74,15 @@ spec:
                 description: FirewallRules are the firewall rules to be applied to
                   this interface.
                 items:
-                  description: FirewallRuleSpec defines the desired state of FirewallRule
+                  description: FirewallRule defines the desired state of FirewallRule
                   properties:
                     action:
+                      description: FirewallRuleAction is the action of the rule.
                       type: string
                     destinationPrefix:
                       type: string
                     direction:
+                      description: FirewallRuleDirection is the direction of the rule.
                       type: string
                     firewallRuleID:
                       description: UID is a type that holds unique ID values, including

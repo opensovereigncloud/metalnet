@@ -3,7 +3,7 @@ module github.com/onmetal/metalnet
 go 1.21
 
 require (
-	github.com/go-logr/logr v1.2.4
+	github.com/go-logr/logr v1.3.0
 	github.com/jaypipes/ghw v0.12.0
 	github.com/onmetal/controller-utils v0.8.2
 	github.com/onmetal/metalbond v0.3.2

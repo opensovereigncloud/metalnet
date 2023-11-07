@@ -3,8 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.9.0
-  creationTimestamp: null
+    controller-gen.kubebuilder.io/version: v0.13.0
   name: networkinterfaces.networking.metalnet.onmetal.de
 spec:
   group: networking.metalnet.onmetal.de
@@ -74,13 +73,15 @@ spec:
                 description: FirewallRules are the firewall rules to be applied to
                   this interface.
                 items:
-                  description: FirewallRuleSpec defines the desired state of FirewallRule
+                  description: FirewallRule defines the desired state of FirewallRule
                   properties:
                     action:
+                      description: FirewallRuleAction is the action of the rule.
                       type: string
                     destinationPrefix:
                       type: string
                     direction:
+                      description: FirewallRuleDirection is the direction of the rule.
                       type: string
                     firewallRuleID:
                       description: UID is a type that holds unique ID values, including
@@ -150,6 +151,7 @@ spec:
                   moment.
                 items:
                   type: string
+                minItems: 1
                 type: array
               loadBalancerTargets:
                 description: Loadbalancer Targets are the provided Prefix
@@ -162,11 +164,15 @@ spec:
                 properties:
                   endPort:
                     format: int32
+                    maximum: 65535
+                    minimum: 0
                     type: integer
                   ip:
                     type: string
                   port:
                     format: int32
+                    maximum: 65535
+                    minimum: 0
                     type: integer
                 required:
                 - endPort
@@ -182,6 +188,7 @@ spec:
                       TODO: Add other useful fields. apiVersion, kind, uid?'
                     type: string
                 type: object
+                x-kubernetes-map-type: atomic
               nodeName:
                 description: NodeName is the name of the node on which the interface
                   should be created.
@@ -213,11 +220,15 @@ spec:
                 properties:
                   endPort:
                     format: int32
+                    maximum: 65535
+                    minimum: 0
                     type: integer
                   ip:
                     type: string
                   port:
                     format: int32
+                    maximum: 65535
+                    minimum: 0
                     type: integer
                 required:
                 - endPort

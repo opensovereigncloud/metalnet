@@ -32,7 +32,8 @@ type LoadBalancerSpec struct {
 	// IP is the provided IP which should be loadbalanced by this LoadBalancer
 	IP IP `json:"ip,omitempty"`
 	// Ports are the provided ports
-	Ports []LBPort `json:"ports,omitempty"`
+	// +kubebuilder:validation:MinItems=1
+	Ports []LBPort `json:"ports"`
 	// NodeName is the name of the node on which the LoadBalancer should be created.
 	NodeName *string `json:"nodeName,omitempty"`
 }

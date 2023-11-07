@@ -35,13 +35,21 @@ type LocalUIDReference struct {
 // LBPort consists of port and protocol
 type LBPort struct {
 	Protocol string `json:"protocol"`
-	Port     int32  `json:"port"`
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=65535
+	Port int32 `json:"port"`
 }
 
 // LBPort consists of port and protocol
 type NATDetails struct {
-	IP      *IP   `json:"ip"`
-	Port    int32 `json:"port"`
+	IP *IP `json:"ip"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=65535
+	Port int32 `json:"port"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=65535
 	EndPort int32 `json:"endPort"`
 }
 
@@ -118,9 +126,9 @@ func (i IP) Family() corev1.IPFamily {
 	}
 }
 
-func (_ IP) OpenAPISchemaType() []string { return []string{"string"} }
+func (i IP) OpenAPISchemaType() []string { return []string{"string"} }
 
-func (_ IP) OpenAPISchemaFormat() string { return "ip" }
+func (i IP) OpenAPISchemaFormat() string { return "ip" }
 
 func NewIP(ip netip.Addr) IP {
 	return IP{ip}
@@ -231,9 +239,9 @@ func (in *IPPrefix) IsZero() bool {
 	return in == nil || !in.Prefix.IsValid()
 }
 
-func (_ IPPrefix) OpenAPISchemaType() []string { return []string{"string"} }
+func (i IPPrefix) OpenAPISchemaType() []string { return []string{"string"} }
 
-func (_ IPPrefix) OpenAPISchemaFormat() string { return "ip-prefix" }
+func (i IPPrefix) OpenAPISchemaFormat() string { return "ip-prefix" }
 
 func NewIPPrefix(prefix netip.Prefix) *IPPrefix {
 	return &IPPrefix{Prefix: prefix}

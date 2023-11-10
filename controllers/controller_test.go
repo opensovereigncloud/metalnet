@@ -221,7 +221,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 				// It should not yet be created in dpservice
 				iface, err := dpdkClient.GetInterface(ctx, string(networkInterface.ObjectMeta.UID))
 				Expect(err).To(HaveOccurred())
-				Expect(iface.Status.Code).To(Equal(int32(dpdkerrors.NOT_FOUND)))
+				Expect(iface.Status.Code).To(Equal(uint32(dpdkerrors.NOT_FOUND)))
 			})
 
 			It("should fail when already existing", func() {
@@ -619,7 +619,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 
 				fw1, err = dpdkClient.GetFirewallRule(ctx, string(updatedIface.UID), string(fr1.FirewallRuleID))
 				Expect(err).To(HaveOccurred())
-				Expect(fw1.Status.Code).To(Equal(int32(dpdkerrors.NOT_FOUND)))
+				Expect(fw1.Status.Code).To(Equal(uint32(dpdkerrors.NOT_FOUND)))
 			})
 		})
 
@@ -659,7 +659,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 				// Try to fetch the deleted networkInterface object from dpservice
 				iface, err := dpdkClient.GetInterface(ctx, string(networkInterface.ObjectMeta.UID))
 				Expect(err).To(HaveOccurred())
-				Expect(iface.Status.Code).To(Equal(int32(dpdkerrors.NOT_FOUND)))
+				Expect(iface.Status.Code).To(Equal(uint32(dpdkerrors.NOT_FOUND)))
 
 				// Fetch the VNI object from dpservice
 				vniAvail, err := dpdkClient.GetVni(ctx, 123, uint8(dpdk.VniType_VNI_IPV4))
@@ -806,7 +806,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 				// Fetch the deleted LB object from dpservice
 				lb, err := dpdkClient.GetLoadBalancer(ctx, string(loadBalancer.ObjectMeta.UID))
 				Expect(err).To(HaveOccurred())
-				Expect(lb.Status.Code).To(Equal(int32(dpdkerrors.NOT_FOUND)))
+				Expect(lb.Status.Code).To(Equal(uint32(dpdkerrors.NOT_FOUND)))
 
 				// Fetch the VNI object from dpservice
 				vniAvail, err := dpdkClient.GetVni(ctx, 123, uint8(dpdk.VniType_VNI_IPV4))

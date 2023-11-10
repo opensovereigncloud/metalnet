@@ -3,7 +3,8 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.13.0
+    controller-gen.kubebuilder.io/version: v0.9.0
+  creationTimestamp: null
   name: networks.networking.metalnet.onmetal.de
 spec:
   group: networking.metalnet.onmetal.de
@@ -64,6 +65,8 @@ spec:
                   properties:
                     id:
                       format: int32
+                      maximum: 16777215
+                      minimum: 1
                       type: integer
                     prefixes:
                       items:
@@ -80,6 +83,8 @@ spec:
             required:
             - id
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true

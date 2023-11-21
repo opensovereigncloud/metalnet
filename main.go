@@ -291,13 +291,14 @@ func main() {
 	}
 
 	if err = (&controllers.LoadBalancerReconciler{
-		Client:     mgr.GetClient(),
-		Scheme:     mgr.GetScheme(),
-		DPDK:       dpdkclient.NewClient(dpdkProtoClient),
-		Metalbond:  metalbond.NewClient(mbInstance),
-		NodeName:   nodeName,
-		PublicVNI:  publicVNI,
-		MBInternal: mbClient,
+		Client:        mgr.GetClient(),
+		Scheme:        mgr.GetScheme(),
+		EventRecorder: mgr.GetEventRecorderFor("loadbalancer"),
+		DPDK:          dpdkclient.NewClient(dpdkProtoClient),
+		Metalbond:     metalbond.NewClient(mbInstance),
+		NodeName:      nodeName,
+		PublicVNI:     publicVNI,
+		MBInternal:    mbClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LoadBalancer")
 		os.Exit(1)

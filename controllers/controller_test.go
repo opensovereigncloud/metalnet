@@ -1468,12 +1468,13 @@ func networkReconcile(ctx context.Context, network metalnetv1alpha1.Network) err
 	GinkgoHelper()
 
 	reconciler := &NetworkReconciler{
-		Client:        k8sClient,
-		DPDK:          dpdkClient,
-		Metalbond:     metalbondClient,
-		MBInternal:    mbClient,
-		RouterAddress: netip.MustParseAddr("::1"),
-		NodeName:      testNode,
+		Client:           k8sClient,
+		DPDK:             dpdkClient,
+		RouteUtil:        metalbondRouteUtil,
+		MetalnetCache:    metalnetCache,
+		MetalnetMBClient: metalnetMBClient,
+		RouterAddress:    netip.MustParseAddr("::1"),
+		NodeName:         testNode,
 	}
 
 	// Loop the reconciler until Requeue is false or error occurs
@@ -1505,7 +1506,7 @@ func ifaceReconcile(ctx context.Context, networkInterface metalnetv1alpha1.Netwo
 		Client:        k8sClient,
 		EventRecorder: &record.FakeRecorder{},
 		DPDK:          dpdkClient,
-		Metalbond:     metalbondClient,
+		RouteUtil:     metalbondRouteUtil,
 		NodeName:      testNode,
 		NetFnsManager: netFnsManager,
 		PublicVNI:     100,
@@ -1539,8 +1540,8 @@ func lbReconcile(ctx context.Context, loadBalancer metalnetv1alpha1.LoadBalancer
 		Client:        k8sClient,
 		EventRecorder: &record.FakeRecorder{},
 		DPDK:          dpdkClient,
-		MBInternal:    mbClient,
-		Metalbond:     metalbondClient,
+		RouteUtil:     metalbondRouteUtil,
+		MetalnetCache: metalnetCache,
 		NodeName:      testNode,
 		PublicVNI:     100,
 	}

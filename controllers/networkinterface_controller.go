@@ -113,7 +113,7 @@ type NetworkInterfaceReconciler struct {
 	Scheme *runtime.Scheme
 
 	DPDK      dpdkclient.Client
-	Metalbond metalbond.Client
+	RouteUtil metalbond.RouteUtil
 
 	NetFnsManager *netfns.Manager
 	SysFS         sysfs.FS
@@ -179,7 +179,7 @@ func (r *NetworkInterfaceReconciler) deleteDPDKVirtualIPIfExists(ctx context.Con
 }
 
 func (r *NetworkInterfaceReconciler) removeVirtualIPRouteIfExists(ctx context.Context, virtualIP netip.Addr, underlayRoute netip.Addr) error {
-	if err := r.Metalbond.RemoveRoute(ctx, metalbond.VNI(r.PublicVNI), metalbond.Destination{
+	if err := r.RouteUtil.WithdrawRoute(ctx, metalbond.VNI(r.PublicVNI), metalbond.Destination{
 		Prefix: NetIPAddrPrefix(virtualIP),
 	}, metalbond.NextHop{
 		TargetAddress: underlayRoute,
@@ -192,7 +192,7 @@ func (r *NetworkInterfaceReconciler) removeVirtualIPRouteIfExists(ctx context.Co
 }
 
 func (r *NetworkInterfaceReconciler) addVirtualIPRouteIfNotExists(ctx context.Context, virtualIP netip.Addr, underlayRoute netip.Addr) error {
-	if err := r.Metalbond.AddRoute(ctx, metalbond.VNI(r.PublicVNI), metalbond.Destination{
+	if err := r.RouteUtil.AnnounceRoute(ctx, metalbond.VNI(r.PublicVNI), metalbond.Destination{
 		Prefix: NetIPAddrPrefix(virtualIP),
 	}, metalbond.NextHop{
 		TargetAddress: underlayRoute,
@@ -205,7 +205,7 @@ func (r *NetworkInterfaceReconciler) addVirtualIPRouteIfNotExists(ctx context.Co
 }
 
 func (r *NetworkInterfaceReconciler) addInterfaceRouteIfNotExists(ctx context.Context, vni uint32, ip, underlayRoute netip.Addr) error {
-	if err := r.Metalbond.AddRoute(ctx, metalbond.VNI(vni), metalbond.Destination{
+	if err := r.RouteUtil.AnnounceRoute(ctx, metalbond.VNI(vni), metalbond.Destination{
 		Prefix: NetIPAddrPrefix(ip),
 	}, metalbond.NextHop{
 		TargetVNI:     0,
@@ -226,7 +226,7 @@ func (r *NetworkInterfaceReconciler) addInterfaceRoutesIfNotExist(ctx context.Co
 }
 
 func (r *NetworkInterfaceReconciler) removeInterfaceRouteIfExists(ctx context.Context, vni uint32, ip, underlayRoute netip.Addr) error {
-	if err := r.Metalbond.RemoveRoute(ctx, metalbond.VNI(vni), metalbond.Destination{
+	if err := r.RouteUtil.WithdrawRoute(ctx, metalbond.VNI(vni), metalbond.Destination{
 		Prefix: NetIPAddrPrefix(ip),
 	}, metalbond.NextHop{
 		TargetVNI:     0,
@@ -247,7 +247,7 @@ func (r *NetworkInterfaceReconciler) removeInterfaceRoutesIfExist(ctx context.Co
 }
 
 func (r *NetworkInterfaceReconciler) addPrefixRouteIfNotExists(ctx context.Context, vni uint32, prefix netip.Prefix, underlayRoute netip.Addr) error {
-	if err := r.Metalbond.AddRoute(ctx, metalbond.VNI(vni), metalbond.Destination{
+	if err := r.RouteUtil.AnnounceRoute(ctx, metalbond.VNI(vni), metalbond.Destination{
 		Prefix: prefix,
 	}, metalbond.NextHop{
 		TargetVNI:     0,
@@ -260,7 +260,7 @@ func (r *NetworkInterfaceReconciler) addPrefixRouteIfNotExists(ctx context.Conte
 }
 
 func (r *NetworkInterfaceReconciler) removePrefixRouteIfExists(ctx context.Context, vni uint32, prefix netip.Prefix, underlayRoute netip.Addr) error {
-	if err := r.Metalbond.RemoveRoute(ctx, metalbond.VNI(vni), metalbond.Destination{
+	if err := r.RouteUtil.WithdrawRoute(ctx, metalbond.VNI(vni), metalbond.Destination{
 		Prefix: prefix,
 	}, metalbond.NextHop{
 		TargetVNI:     0,
@@ -273,7 +273,7 @@ func (r *NetworkInterfaceReconciler) removePrefixRouteIfExists(ctx context.Conte
 }
 
 func (r *NetworkInterfaceReconciler) addLBTargetRouteIfNotExists(ctx context.Context, vni uint32, prefix netip.Prefix, underlayRoute netip.Addr) error {
-	if err := r.Metalbond.AddRoute(ctx, metalbond.VNI(vni), metalbond.Destination{
+	if err := r.RouteUtil.AnnounceRoute(ctx, metalbond.VNI(vni), metalbond.Destination{
 		Prefix: prefix,
 	}, metalbond.NextHop{
 		TargetVNI:     0,
@@ -286,7 +286,7 @@ func (r *NetworkInterfaceReconciler) addLBTargetRouteIfNotExists(ctx context.Con
 }
 
 func (r *NetworkInterfaceReconciler) removeLBTargetRouteIfExists(ctx context.Context, vni uint32, prefix netip.Prefix, underlayRoute netip.Addr) error {
-	if err := r.Metalbond.RemoveRoute(ctx, metalbond.VNI(vni), metalbond.Destination{
+	if err := r.RouteUtil.WithdrawRoute(ctx, metalbond.VNI(vni), metalbond.Destination{
 		Prefix: prefix,
 	}, metalbond.NextHop{
 		TargetVNI:     0,
@@ -578,7 +578,7 @@ func (r *NetworkInterfaceReconciler) deleteDPDKNATIPIfExists(ctx context.Context
 }
 
 func (r *NetworkInterfaceReconciler) removeNATIPRouteIfExists(ctx context.Context, natLocal *dpdk.Nat, underlayRoute netip.Addr, vni uint32) error {
-	if err := r.Metalbond.RemoveRoute(ctx, metalbond.VNI(r.PublicVNI), metalbond.Destination{
+	if err := r.RouteUtil.WithdrawRoute(ctx, metalbond.VNI(r.PublicVNI), metalbond.Destination{
 		Prefix: NetIPAddrPrefix(*natLocal.Spec.NatIP),
 	}, metalbond.NextHop{
 		TargetAddress: underlayRoute,
@@ -587,7 +587,7 @@ func (r *NetworkInterfaceReconciler) removeNATIPRouteIfExists(ctx context.Contex
 	}); metalbond.IgnoreNextHopNotFoundError(err) != nil {
 		return fmt.Errorf("error removing metalbond route: %w", err)
 	}
-	if err := r.Metalbond.RemoveRoute(ctx, metalbond.VNI(vni), metalbond.Destination{
+	if err := r.RouteUtil.WithdrawRoute(ctx, metalbond.VNI(vni), metalbond.Destination{
 		Prefix: NetIPAddrPrefix(*natLocal.Spec.NatIP),
 	}, metalbond.NextHop{
 		TargetAddress:    underlayRoute,
@@ -602,7 +602,7 @@ func (r *NetworkInterfaceReconciler) removeNATIPRouteIfExists(ctx context.Contex
 }
 
 func (r *NetworkInterfaceReconciler) addNATIPRouteIfNotExists(ctx context.Context, natLocal *dpdk.Nat, underlayRoute netip.Addr, vni uint32) error {
-	if err := r.Metalbond.AddRoute(ctx, metalbond.VNI(r.PublicVNI), metalbond.Destination{
+	if err := r.RouteUtil.AnnounceRoute(ctx, metalbond.VNI(r.PublicVNI), metalbond.Destination{
 		Prefix: NetIPAddrPrefix(*natLocal.Spec.NatIP),
 	}, metalbond.NextHop{
 		TargetAddress: underlayRoute,
@@ -611,7 +611,7 @@ func (r *NetworkInterfaceReconciler) addNATIPRouteIfNotExists(ctx context.Contex
 	}); metalbond.IgnoreNextHopAlreadyExistsError(err) != nil {
 		return fmt.Errorf("error adding metalbond route: %w", err)
 	}
-	if err := r.Metalbond.AddRoute(ctx, metalbond.VNI(vni), metalbond.Destination{
+	if err := r.RouteUtil.AnnounceRoute(ctx, metalbond.VNI(vni), metalbond.Destination{
 		Prefix: NetIPAddrPrefix(*natLocal.Spec.NatIP),
 	}, metalbond.NextHop{
 		TargetAddress:    underlayRoute,

@@ -37,7 +37,7 @@ import (
 
 	mb "github.com/onmetal/metalbond"
 	networkingv1alpha1 "github.com/onmetal/metalnet/api/v1alpha1"
-	"github.com/onmetal/metalnet/dpdkmetalbond"
+	"github.com/onmetal/metalnet/internal"
 	"github.com/onmetal/metalnet/metalbond"
 	"github.com/onmetal/metalnet/netfns"
 	dpdkclient "github.com/onmetal/net-dpservice-go/client"
@@ -49,21 +49,22 @@ import (
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
 var (
-	cfg             *rest.Config
-	k8sClient       client.Client
-	testEnv         *envtest.Environment
-	network         *networkingv1alpha1.Network
-	ctxCancel       context.CancelFunc
-	ctxGrpc         context.Context
-	dpserviceAddr   string = "127.0.0.1:1337"
-	testNode        string = "testNode"
-	metalnetDir     string = "/tmp/var/lib/metalnet"
-	netFnsManager   *netfns.Manager
-	conn            *grpc.ClientConn
-	dpdkProtoClient dpdkproto.DPDKonmetalClient
-	dpdkClient      dpdkclient.Client
-	metalbondClient metalbond.Client
-	mbClient        dpdkmetalbond.MbInternalAccess
+	cfg                *rest.Config
+	k8sClient          client.Client
+	testEnv            *envtest.Environment
+	network            *networkingv1alpha1.Network
+	ctxCancel          context.CancelFunc
+	ctxGrpc            context.Context
+	dpserviceAddr      string = "127.0.0.1:1337"
+	testNode           string = "testNode"
+	metalnetDir        string = "/tmp/var/lib/metalnet"
+	netFnsManager      *netfns.Manager
+	conn               *grpc.ClientConn
+	dpdkProtoClient    dpdkproto.DPDKonmetalClient
+	dpdkClient         dpdkclient.Client
+	metalnetCache      *internal.MetalnetCache
+	metalnetMBClient   *metalbond.MetalnetClient
+	metalbondRouteUtil *metalbond.MBRouteUtil
 )
 
 // This assumes running metalbond server and dp-service on the same localhost of this test suite
@@ -130,14 +131,15 @@ var _ = BeforeSuite(func() {
 		Development: true,
 	}
 	logger := zap.New(zap.UseFlagOptions(&opts))
-	mbClient, err = dpdkmetalbond.NewClient(&logger, dpdkClient, dpdkmetalbond.ClientOptions{
+
+	metalnetCache = internal.NewMetalnetCache(&logger)
+	metalnetMBClient := metalbond.NewMetalnetClient(&logger, dpdkClient, metalbond.ClientOptions{
 		IPv4Only:         true,
 		PreferredNetwork: nil,
-	})
-	Expect(err).NotTo(HaveOccurred())
+	}, metalnetCache)
 
-	mbInstance := mb.NewMetalBond(config, mbClient)
-	metalbondClient = metalbond.NewClient(mbInstance)
+	mbInstance := mb.NewMetalBond(config, metalnetMBClient)
+	metalbondRouteUtil = metalbond.NewMBRouteUtil(mbInstance)
 
 	err = mbInstance.AddPeer("[::1]:4711", "")
 	Expect(err).NotTo(HaveOccurred())

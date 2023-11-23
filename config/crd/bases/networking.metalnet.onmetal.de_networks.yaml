@@ -64,6 +64,8 @@ spec:
                   properties:
                     id:
                       format: int32
+                      maximum: 16777215
+                      minimum: 1
                       type: integer
                     prefixes:
                       items:
@@ -80,6 +82,8 @@ spec:
             required:
             - id
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true

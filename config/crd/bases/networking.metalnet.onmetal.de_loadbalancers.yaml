@@ -100,8 +100,12 @@ spec:
               type:
                 description: Type defines whether the loadbalancer is using an internal
                   or public ip
+                enum:
+                - Internal
+                - Public
                 type: string
             required:
+            - ip
             - ipFamily
             - networkRef
             - ports

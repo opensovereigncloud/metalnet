@@ -25,13 +25,19 @@ import (
 // NetworkInterfaceSpec defines the desired state of NetworkInterface
 type NetworkInterfaceSpec struct {
 	// NetworkRef is the Network this NetworkInterface is connected to
+	// +kubebuilder:validation:Required
 	NetworkRef corev1.LocalObjectReference `json:"networkRef"`
 	// IPFamilies defines which IPFamilies this NetworkInterface is supporting
+	// Only one IP supported at the moment.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=1
 	IPFamilies []corev1.IPFamily `json:"ipFamilies"`
 	// IPs are the provided IPs or EphemeralIPs which should be assigned to this NetworkInterface
 	// Only one IP supported at the moment.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=1
 	IPs []IP `json:"ips"`
 	// Virtual IP
 	VirtualIP *IP `json:"virtualIP,omitempty"`
@@ -89,32 +95,55 @@ const (
 
 // FirewallRule defines the desired state of FirewallRule
 type FirewallRule struct {
-	FirewallRuleID    types.UID             `json:"firewallRuleID"`
-	Direction         FirewallRuleDirection `json:"direction"`
-	Action            FirewallRuleAction    `json:"action"`
-	Priority          *int32                `json:"priority,omitempty"`
-	IpFamily          corev1.IPFamily       `json:"ipFamily"`
-	SourcePrefix      *IPPrefix             `json:"sourcePrefix,omitempty"`
-	DestinationPrefix *IPPrefix             `json:"destinationPrefix,omitempty"`
-	ProtocolMatch     *ProtocolMatch        `json:"protocolMatch,omitempty"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Type=string
+	FirewallRuleID types.UID `json:"firewallRuleID"`
+	// +kubebuilder:validation:Required
+	Direction FirewallRuleDirection `json:"direction"`
+	// +kubebuilder:validation:Required
+	Action FirewallRuleAction `json:"action"`
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=65535
+	// +kubebuilder:default=1000
+	Priority          *int32          `json:"priority,omitempty"`
+	IpFamily          corev1.IPFamily `json:"ipFamily"`
+	SourcePrefix      *IPPrefix       `json:"sourcePrefix,omitempty"`
+	DestinationPrefix *IPPrefix       `json:"destinationPrefix,omitempty"`
+	ProtocolMatch     *ProtocolMatch  `json:"protocolMatch,omitempty"`
 }
 
 type ProtocolMatch struct {
-	ProtocolType *ProtocolType `json:"protocolType,omitempty"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum=TCP;tcp;UDP;udp;ICMP;icmp
+	ProtocolType *ProtocolType `json:"protocolType"`
 	ICMP         *ICMPMatch    `json:"icmp,omitempty"`
 	PortRange    *PortMatch    `json:"portRange,omitempty"`
 }
 
 type ICMPMatch struct {
-	IcmpType *int32 `json:"icmpType,omitempty"`
-	IcmpCode *int32 `json:"icmpCode,omitempty"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=-1
+	// +kubebuilder:validation:Maximum=255
+	IcmpType *int32 `json:"icmpType"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=-1
+	// +kubebuilder:validation:Maximum=255
+	IcmpCode *int32 `json:"icmpCode"`
 }
 
 type PortMatch struct {
-	SrcPort    *int32 `json:"srcPort,omitempty"`
-	EndSrcPort int32  `json:"endSrcPort,omitempty"`
-	DstPort    *int32 `json:"dstPort,omitempty"`
-	EndDstPort int32  `json:"endDstPort,omitempty"`
+	// +kubebuilder:validation:Minimum=-1
+	// +kubebuilder:validation:Maximum=65535
+	SrcPort *int32 `json:"srcPort,omitempty"`
+	// +kubebuilder:validation:Minimum=-1
+	// +kubebuilder:validation:Maximum=65535
+	EndSrcPort int32 `json:"endSrcPort,omitempty"`
+	// +kubebuilder:validation:Minimum=-1
+	// +kubebuilder:validation:Maximum=65535
+	DstPort *int32 `json:"dstPort,omitempty"`
+	// +kubebuilder:validation:Minimum=-1
+	// +kubebuilder:validation:Maximum=65535
+	EndDstPort int32 `json:"endDstPort,omitempty"`
 }
 
 // ProtocolType is the type for the network protocol
@@ -167,7 +196,8 @@ type NetworkInterface struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	// Spec defines the desired state of NetworkInterface.
-	Spec NetworkInterfaceSpec `json:"spec,omitempty"`
+	// +kubebuilder:validation:Required
+	Spec NetworkInterfaceSpec `json:"spec"`
 	// Status defines the observed state of NetworkInterface.
 	Status NetworkInterfaceStatus `json:"status,omitempty"`
 }

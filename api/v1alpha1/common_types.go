@@ -34,7 +34,9 @@ type LocalUIDReference struct {
 
 // LBPort consists of port and protocol
 type LBPort struct {
+	// +kubebuilder:validation:Required
 	Protocol string `json:"protocol"`
+	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=65535
 	Port int32 `json:"port"`
@@ -42,6 +44,7 @@ type LBPort struct {
 
 // LBPort consists of port and protocol
 type NATDetails struct {
+	// +kubebuilder:validation:Required
 	IP *IP `json:"ip"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Minimum=0

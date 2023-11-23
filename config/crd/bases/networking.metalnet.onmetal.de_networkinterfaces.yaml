@@ -95,7 +95,10 @@ spec:
                         by a type (e.g. service.spec.ipFamilies).
                       type: string
                     priority:
+                      default: 1000
                       format: int32
+                      maximum: 65535
+                      minimum: 0
                       type: integer
                     protocolMatch:
                       properties:
@@ -103,29 +106,53 @@ spec:
                           properties:
                             icmpCode:
                               format: int32
+                              maximum: 255
+                              minimum: -1
                               type: integer
                             icmpType:
                               format: int32
+                              maximum: 255
+                              minimum: -1
                               type: integer
+                          required:
+                          - icmpCode
+                          - icmpType
                           type: object
                         portRange:
                           properties:
                             dstPort:
                               format: int32
+                              maximum: 65535
+                              minimum: -1
                               type: integer
                             endDstPort:
                               format: int32
+                              maximum: 65535
+                              minimum: -1
                               type: integer
                             endSrcPort:
                               format: int32
+                              maximum: 65535
+                              minimum: -1
                               type: integer
                             srcPort:
                               format: int32
+                              maximum: 65535
+                              minimum: -1
                               type: integer
                           type: object
                         protocolType:
                           description: ProtocolType is the type for the network protocol
+                          enum:
+                          - TCP
+                          - tcp
+                          - UDP
+                          - udp
+                          - ICMP
+                          - icmp
                           type: string
+                      required:
+                      - protocolType
                       type: object
                     sourcePrefix:
                       type: string
@@ -138,12 +165,14 @@ spec:
                 type: array
               ipFamilies:
                 description: IPFamilies defines which IPFamilies this NetworkInterface
-                  is supporting
+                  is supporting Only one IP supported at the moment.
                 items:
                   description: IPFamily represents the IP Family (IPv4 or IPv6). This
                     type is used to express the family of an IP expressed by a type
                     (e.g. service.spec.ipFamilies).
                   type: string
+                maxItems: 1
+                minItems: 1
                 type: array
               ips:
                 description: IPs are the provided IPs or EphemeralIPs which should
@@ -151,6 +180,7 @@ spec:
                   moment.
                 items:
                   type: string
+                maxItems: 1
                 minItems: 1
                 type: array
               loadBalancerTargets:
@@ -259,6 +289,8 @@ spec:
                 description: VirtualIP is any virtual ip assigned to the NetworkInterface.
                 type: string
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true

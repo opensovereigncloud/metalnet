@@ -24,13 +24,17 @@ import (
 // LoadBalancerSpec defines the desired state of LoadBalancer
 type LoadBalancerSpec struct {
 	// NetworkRef is the Network this LoadBalancer is connected to
+	// +kubebuilder:validation:Required
 	NetworkRef corev1.LocalObjectReference `json:"networkRef"`
 	// Type defines whether the loadbalancer is using an internal or public ip
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum=Internal;Public
 	LBtype LoadBalancerType `json:"type"`
 	// IPFamily defines which IPFamily this LoadBalancer is supporting
 	IPFamily corev1.IPFamily `json:"ipFamily"`
 	// IP is the provided IP which should be loadbalanced by this LoadBalancer
-	IP IP `json:"ip,omitempty"`
+	// +kubebuilder:validation:Required
+	IP IP `json:"ip"`
 	// Ports are the provided ports
 	// +kubebuilder:validation:MinItems=1
 	Ports []LBPort `json:"ports"`

@@ -44,6 +44,8 @@ type NetworkSpec struct {
 
 // PeeredPrefix contains information of the peered networks and their allowed CIDRs.
 type PeeredPrefix struct {
+	// +kubebuilder:validation:Maximum=16777215
+	// +kubebuilder:validation:Minimum=1
 	ID       int32      `json:"id"`
 	Prefixes []IPPrefix `json:"prefixes"`
 }
@@ -58,7 +60,8 @@ type Network struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec NetworkSpec `json:"spec,omitempty"`
+	// +kubebuilder:validation:Required
+	Spec NetworkSpec `json:"spec"`
 }
 
 //+kubebuilder:object:root=true

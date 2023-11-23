@@ -28,6 +28,7 @@ type NetworkInterfaceSpec struct {
 	// +kubebuilder:validation:Required
 	NetworkRef corev1.LocalObjectReference `json:"networkRef"`
 	// IPFamilies defines which IPFamilies this NetworkInterface is supporting
+	// Only one IP supported at the moment.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=1
@@ -96,7 +97,6 @@ const (
 type FirewallRule struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Type=string
-	// +kubebuilder:validation:MinLength=1
 	FirewallRuleID types.UID `json:"firewallRuleID"`
 	// +kubebuilder:validation:Required
 	Direction FirewallRuleDirection `json:"direction"`
@@ -132,17 +132,15 @@ type ICMPMatch struct {
 }
 
 type PortMatch struct {
-	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Minimum=-1
 	// +kubebuilder:validation:Maximum=65535
-	SrcPort *int32 `json:"srcPort"`
+	SrcPort *int32 `json:"srcPort,omitempty"`
 	// +kubebuilder:validation:Minimum=-1
 	// +kubebuilder:validation:Maximum=65535
 	EndSrcPort int32 `json:"endSrcPort,omitempty"`
-	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Minimum=-1
 	// +kubebuilder:validation:Maximum=65535
-	DstPort *int32 `json:"dstPort"`
+	DstPort *int32 `json:"dstPort,omitempty"`
 	// +kubebuilder:validation:Minimum=-1
 	// +kubebuilder:validation:Maximum=65535
 	EndDstPort int32 `json:"endDstPort,omitempty"`

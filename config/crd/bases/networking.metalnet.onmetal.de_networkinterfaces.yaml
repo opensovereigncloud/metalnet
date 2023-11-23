@@ -3,8 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.9.0
-  creationTimestamp: null
+    controller-gen.kubebuilder.io/version: v0.13.0
   name: networkinterfaces.networking.metalnet.onmetal.de
 spec:
   group: networking.metalnet.onmetal.de
@@ -89,7 +88,6 @@ spec:
                         UUIDs.  Because we don't ONLY use UUIDs, this is an alias
                         to string.  Being a type captures intent and helps make sure
                         that UIDs and names do not get conflated.
-                      minLength: 1
                       type: string
                     ipFamily:
                       description: IPFamily represents the IP Family (IPv4 or IPv6).
@@ -142,9 +140,6 @@ spec:
                               maximum: 65535
                               minimum: -1
                               type: integer
-                          required:
-                          - dstPort
-                          - srcPort
                           type: object
                         protocolType:
                           description: ProtocolType is the type for the network protocol
@@ -170,7 +165,7 @@ spec:
                 type: array
               ipFamilies:
                 description: IPFamilies defines which IPFamilies this NetworkInterface
-                  is supporting
+                  is supporting Only one IP supported at the moment.
                 items:
                   description: IPFamily represents the IP Family (IPv4 or IPv6). This
                     type is used to express the family of an IP expressed by a type
@@ -223,6 +218,7 @@ spec:
                       TODO: Add other useful fields. apiVersion, kind, uid?'
                     type: string
                 type: object
+                x-kubernetes-map-type: atomic
               nodeName:
                 description: NodeName is the name of the node on which the interface
                   should be created.

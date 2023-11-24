@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,21 +22,21 @@ import (
 	"github.com/onmetal/metalbond/pb"
 )
 
-type Client interface {
-	AddRoute(ctx context.Context, vni VNI, destination Destination, nextHop NextHop) error
-	RemoveRoute(ctx context.Context, vni VNI, destination Destination, nextHop NextHop) error
+type RouteUtil interface {
+	AnnounceRoute(ctx context.Context, vni VNI, destination Destination, nextHop NextHop) error
+	WithdrawRoute(ctx context.Context, vni VNI, destination Destination, nextHop NextHop) error
 	Subscribe(ctx context.Context, vni VNI) error
 	Unsubscribe(ctx context.Context, vni VNI) error
 	IsSubscribed(ctx context.Context, vni VNI) bool
 	GetRoutesForVni(ctx context.Context, vni VNI) error
 }
 
-type client struct {
+type MBRouteUtil struct {
 	metalbond *metalbond.MetalBond
 }
 
-func NewClient(mb *metalbond.MetalBond) Client {
-	return &client{mb}
+func NewMBRouteUtil(mb *metalbond.MetalBond) *MBRouteUtil {
+	return &MBRouteUtil{mb}
 }
 
 type VNI = metalbond.VNI
@@ -64,7 +64,7 @@ type NextHop struct {
 	TargetNATMaxPort uint16
 }
 
-func (c *client) AddRoute(_ context.Context, vni VNI, destination Destination, nextHop NextHop) error {
+func (c *MBRouteUtil) AnnounceRoute(_ context.Context, vni VNI, destination Destination, nextHop NextHop) error {
 	return c.metalbond.AnnounceRoute(vni, metalbond.Destination{
 		IPVersion: netIPAddrIPVersion(destination.Prefix.Addr()),
 		Prefix:    destination.Prefix,
@@ -77,7 +77,7 @@ func (c *client) AddRoute(_ context.Context, vni VNI, destination Destination, n
 	})
 }
 
-func (c *client) RemoveRoute(_ context.Context, vni VNI, destination Destination, nextHop NextHop) error {
+func (c *MBRouteUtil) WithdrawRoute(_ context.Context, vni VNI, destination Destination, nextHop NextHop) error {
 	return c.metalbond.WithdrawRoute(vni, metalbond.Destination{
 		IPVersion: netIPAddrIPVersion(destination.Prefix.Addr()),
 		Prefix:    destination.Prefix,
@@ -90,18 +90,18 @@ func (c *client) RemoveRoute(_ context.Context, vni VNI, destination Destination
 	})
 }
 
-func (c *client) Subscribe(_ context.Context, vni VNI) error {
+func (c *MBRouteUtil) Subscribe(_ context.Context, vni VNI) error {
 	return c.metalbond.Subscribe(vni)
 }
 
-func (c *client) Unsubscribe(_ context.Context, vni VNI) error {
+func (c *MBRouteUtil) Unsubscribe(_ context.Context, vni VNI) error {
 	return c.metalbond.Unsubscribe(vni)
 }
 
-func (c *client) IsSubscribed(_ context.Context, vni VNI) bool {
+func (c *MBRouteUtil) IsSubscribed(_ context.Context, vni VNI) bool {
 	return c.metalbond.IsSubscribed(vni)
 }
 
-func (c *client) GetRoutesForVni(_ context.Context, vni VNI) error {
+func (c *MBRouteUtil) GetRoutesForVni(_ context.Context, vni VNI) error {
 	return c.metalbond.GetRoutesForVni(vni)
 }

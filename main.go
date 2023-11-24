@@ -31,6 +31,7 @@ import (
 	flag "github.com/spf13/pflag"
 
 	metalnetclient "github.com/onmetal/metalnet/client"
+	"github.com/onmetal/metalnet/internal"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -39,7 +40,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	"github.com/onmetal/metalnet/dpdkmetalbond"
 	"github.com/onmetal/metalnet/metalbond"
 	"github.com/onmetal/metalnet/netfns"
 	"github.com/onmetal/metalnet/sysfs"
@@ -197,29 +197,18 @@ func main() {
 	dpdkProtoClient := dpdkproto.NewDPDKonmetalClient(conn)
 	dpdkClient := dpdkclient.NewClient(dpdkProtoClient)
 
-	var mbClient dpdkmetalbond.MbInternalAccess
+	metalnetCache := internal.NewMetalnetCache(&logger)
+	metalnetMBClient := metalbond.NewMetalnetClient(&logger, dpdkClient, metalbond.ClientOptions{
+		IPv4Only:         true,
+		PreferredNetwork: preferredNetwork,
+	}, metalnetCache)
+
 	config := mb.Config{
 		KeepaliveInterval: 3,
 	}
 
-	mbClient, err = dpdkmetalbond.NewClient(&logger, dpdkClient, dpdkmetalbond.ClientOptions{
-		IPv4Only:         true,
-		PreferredNetwork: preferredNetwork,
-	})
-	if err != nil {
-		setupLog.Error(err, "unable to initialize metalbond client")
-		os.Exit(1)
-	}
-
-	mbInstance := mb.NewMetalBond(config, mbClient)
-	metalbondClient := metalbond.NewClient(mbInstance)
-
-	for _, metalbondPeer := range metalbondPeers {
-		if err := mbInstance.AddPeer(metalbondPeer, ""); err != nil {
-			setupLog.Error(err, "failed to add metalbond peer", "MetalbondPeer", metalbondPeer)
-			os.Exit(1)
-		}
-	}
+	mbInstance := mb.NewMetalBond(config, metalnetMBClient)
+	metalbondRouteUtil := metalbond.NewMBRouteUtil(mbInstance)
 
 	dpdkUUID, err := dpdkProtoClient.CheckInitialized(context.Background(), &dpdkproto.CheckInitializedRequest{})
 	if err != nil {
@@ -264,13 +253,14 @@ func main() {
 	}
 
 	if err = (&controllers.NetworkReconciler{
-		Client:        mgr.GetClient(),
-		Scheme:        mgr.GetScheme(),
-		DPDK:          dpdkClient,
-		Metalbond:     metalbondClient,
-		MBInternal:    mbClient,
-		RouterAddress: netip.MustParseAddr(routerAddress.String()),
-		NodeName:      nodeName,
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		DPDK:             dpdkClient,
+		RouteUtil:        metalbondRouteUtil,
+		MetalnetCache:    metalnetCache,
+		MetalnetMBClient: metalnetMBClient,
+		RouterAddress:    netip.MustParseAddr(routerAddress.String()),
+		NodeName:         nodeName,
 	}).SetupWithManager(mgr, mgr.GetCache()); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Network")
 		os.Exit(1)
@@ -280,7 +270,7 @@ func main() {
 		EventRecorder: mgr.GetEventRecorderFor("networkinterface"),
 		Scheme:        mgr.GetScheme(),
 		DPDK:          dpdkclient.NewClient(dpdkProtoClient),
-		Metalbond:     metalbond.NewClient(mbInstance),
+		RouteUtil:     metalbondRouteUtil,
 		NetFnsManager: netFnsManager,
 		SysFS:         sysFS,
 		NodeName:      nodeName,
@@ -295,10 +285,10 @@ func main() {
 		Scheme:        mgr.GetScheme(),
 		EventRecorder: mgr.GetEventRecorderFor("loadbalancer"),
 		DPDK:          dpdkclient.NewClient(dpdkProtoClient),
-		Metalbond:     metalbond.NewClient(mbInstance),
+		RouteUtil:     metalbondRouteUtil,
+		MetalnetCache: metalnetCache,
 		NodeName:      nodeName,
 		PublicVNI:     publicVNI,
-		MBInternal:    mbClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LoadBalancer")
 		os.Exit(1)

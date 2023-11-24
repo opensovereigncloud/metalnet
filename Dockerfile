@@ -28,7 +28,7 @@ COPY main.go main.go
 COPY api/ api/
 COPY client/ client/
 COPY controllers/ controllers/
-COPY dpdkmetalbond/ dpdkmetalbond/
+COPY internal/ internal/
 COPY encoding/ encoding/
 COPY metalbond/ metalbond/
 COPY netfns/ netfns/

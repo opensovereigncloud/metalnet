@@ -33,6 +33,8 @@ COPY encoding/ encoding/
 COPY metalbond/ metalbond/
 COPY netfns/ netfns/
 COPY sysfs/ sysfs/
+# Needed for version extraction by go build
+COPY .git/ .git/
 
 ARG TARGETOS TARGETARCH
 

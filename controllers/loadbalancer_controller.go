@@ -26,12 +26,16 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/go-logr/logr"
 	"github.com/onmetal/controller-utils/clientutils"
 	metalnetv1alpha1 "github.com/onmetal/metalnet/api/v1alpha1"
+	metalnetclient "github.com/onmetal/metalnet/client"
 	"github.com/onmetal/metalnet/internal"
 	"github.com/onmetal/metalnet/metalbond"
 	dpdk "github.com/onmetal/net-dpservice-go/api"
@@ -336,8 +340,35 @@ func (r *LoadBalancerReconciler) applyLoadBalancer(ctx context.Context, log logr
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *LoadBalancerReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *LoadBalancerReconciler) SetupWithManager(mgr ctrl.Manager, metalnetCache cache.Cache) error {
+	log := ctrl.Log.WithName("loadbalancer").WithName("setup")
+	ctx := ctrl.LoggerInto(context.TODO(), log)
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&metalnetv1alpha1.LoadBalancer{}).
+		WatchesRawSource(
+			source.Kind(metalnetCache, &metalnetv1alpha1.Network{}),
+			r.enqueueLoadBalancersReferencingNetwork(ctx, log),
+		).
 		Complete(r)
+}
+
+func (r *LoadBalancerReconciler) enqueueLoadBalancersReferencingNetwork(ctx context.Context, log logr.Logger) handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []ctrl.Request {
+		network := obj.(*metalnetv1alpha1.Network)
+		lbList := &metalnetv1alpha1.LoadBalancerList{}
+		if err := r.List(ctx, lbList,
+			client.InNamespace(network.Namespace),
+			client.MatchingFields{metalnetclient.LoadBalancerNetworkRefNameField: network.Name},
+		); err != nil {
+			log.Error(err, "Error listing loadbalancers referencing network", "NetworkKey", client.ObjectKeyFromObject(network))
+			return nil
+		}
+
+		reqs := make([]ctrl.Request, len(lbList.Items))
+		for i, lb := range lbList.Items {
+			reqs[i] = ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&lb)}
+		}
+		return reqs
+	})
 }

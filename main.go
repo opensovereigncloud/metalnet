@@ -296,7 +296,7 @@ func main() {
 		MetalnetCache: metalnetCache,
 		NodeName:      nodeName,
 		PublicVNI:     publicVNI,
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManager(mgr, mgr.GetCache()); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LoadBalancer")
 		os.Exit(1)
 	}

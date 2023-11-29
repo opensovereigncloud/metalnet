@@ -1,0 +1,16 @@
+apiVersion: networking.metalnet.onmetal.de/v1alpha1
+kind: LoadBalancer
+metadata:
+  name: loadbalancer-sample-fra4-lenovo-1
+spec:
+  ipFamily: IPv4
+  ip: 194.11.242.122
+  type: Public
+  ports:
+  - protocol: TCP
+    port : 80
+  - protocol: UDP
+    port : 80
+  nodeName: fra4-lab-lenovo-1
+  networkRef:
+    name: network-sample

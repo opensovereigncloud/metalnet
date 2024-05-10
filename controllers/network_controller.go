@@ -17,6 +17,7 @@ import (
 	metalnetv1alpha1 "github.com/ironcore-dev/metalnet/api/v1alpha1"
 	"github.com/ironcore-dev/metalnet/internal"
 	"github.com/ironcore-dev/metalnet/metalbond"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -155,11 +156,19 @@ func (r *NetworkReconciler) reconcile(ctx context.Context, log logr.Logger, netw
 	}
 	log.V(1).Info("Checked existence of the VNI")
 
-	log.V(1).Info("Creating dpdk default route if not exists")
-	if err := r.createDefaultRoutesIfNotExist(ctx, vni); err != nil {
-		return ctrl.Result{}, err
+	if network.Spec.InternetGateway {
+		log.V(1).Info("Deleting default route if exists")
+		if err := r.deleteDefaultRouteIfExists(ctx, vni); err != nil {
+			return ctrl.Result{}, err
+		}
+		log.V(1).Info("Deleted default route if existed")
+	} else {
+		log.V(1).Info("Creating dpdk default route if not exists")
+		if err := r.createDefaultRoutesIfNotExist(ctx, vni); err != nil {
+			return ctrl.Result{}, err
+		}
+		log.V(1).Info("Created dpdk default route if not existed")
 	}
-	log.V(1).Info("Created dpdk default route if not existed")
 
 	log.V(1).Info("Reconciling peered VNIs")
 	if err := r.reconcilePeeredVNIs(ctx, log, network, vni, vniAvail.Spec.InUse); err != nil {

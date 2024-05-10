@@ -18,6 +18,8 @@ import (
 	mb "github.com/ironcore-dev/metalbond"
 	mbproto "github.com/ironcore-dev/metalbond/pb"
 	"github.com/ironcore-dev/metalnet/internal"
+
+	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 type ClientOptions struct {
@@ -171,7 +173,7 @@ func (c *MetalnetClient) removeLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.De
 		ctx,
 		uint32(vni),
 		&dest.Prefix,
-		dpdkerrors.Ignore(dpdkerrors.NO_VNI, dpdkerrors.ROUTE_NOT_FOUND),
+		dpdkerrors.Ignore(dpdkerrors.NO_VNI, dpdkerrors.ROUTE_NOT_FOUND, dpdkerrors.ROUTE_BAD_PORT),
 	); err != nil {
 		return fmt.Errorf("error deleting route: %w", err)
 	}
@@ -195,15 +197,24 @@ func (c *MetalnetClient) AddRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHo
 
 	if hop.Type == mbproto.NextHopType_STANDARD {
 		// the ok flag is ignored because an empty set is returned if the VNI doesn't exist, and the loop below is skipped
-		mbPeerVnis, _ := c.metalnetCache.GetPeerVnis(uint32(vni))
-		peeredPrefixes, ok := c.metalnetCache.GetPeeredPrefixes(uint32(vni))
-		c.log.V(1).Info("GetPeerVnis", "VNI", vni, "mbPeerVnis", mbPeerVnis, "peeredPrefixes", peeredPrefixes)
+
+		// loop over all peered VNI's and build a list of VNI's that peer with the destination VNI
+		mbPeerVnis := sets.New[uint32]()
+		for srcVNI, dstVNISet := range c.metalnetCache.GetAllPeerVnis() {
+			if dstVNISet.Has(uint32(vni)) {
+				mbPeerVnis.Insert(srcVNI)
+			}
+		}
+		c.log.V(1).Info("GetPeerVnis", "VNI", vni, "mbPeerVnis", mbPeerVnis)
 
 		for _, peeredVNI := range mbPeerVnis.UnsortedList() {
+			peeredPrefixes, ok := c.metalnetCache.GetPeeredPrefixes(peeredVNI)
+			c.log.V(1).Info("PeeredPrefixes", "VNI", vni, "peeredVNI", peeredVNI, "peeredPrefixes", peeredPrefixes, "ok", ok)
 			// by default, we add the route if no peered prefixes are set
 			addRoute := true
 			if ok {
-				allowedPeeredPrefixes, exists := peeredPrefixes[peeredVNI]
+				allowedPeeredPrefixes, exists := peeredPrefixes[uint32(vni)]
+				c.log.V(1).Info("AllowedPeeredPrefixes", "VNI", vni, "peeredVNI", peeredVNI, "allowedPeeredPrefixes", allowedPeeredPrefixes, "exists", exists)
 				// if we have set peered prefixes for this VNI, we need to check if the destination is in the list
 				if exists {
 					// if the destination is not in the list of peered prefixes, we don't add the route
@@ -272,6 +283,7 @@ func (c *MetalnetClient) CleanupNotPeeredRoutes(vni uint32) error {
 	}
 
 	set, ok := c.metalnetCache.GetPeerVnis(uint32(vni))
+	c.log.V(1).Info("CleanupNotPeeredRoutes", "VNI", vni, "routes", routes, "peeredVnis", set, "ok", ok)
 
 	// loop over all routes and delete the ones that are not peered
 	for _, route := range routes.Items {

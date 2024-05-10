@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
+
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
@@ -67,6 +68,19 @@ func (c *MetalnetCache) GetPeerVnis(vni uint32) (sets.Set[uint32], bool) {
 		return sets.New[uint32](), false
 	}
 	return vnis, true
+}
+
+func (c *MetalnetCache) GetAllPeerVnis() map[uint32]sets.Set[uint32] {
+	c.mtxPeeredVnis.RLock()
+	defer c.mtxPeeredVnis.RUnlock()
+
+	vnis := c.peeredVnis
+	copiedVnis := make(map[uint32]sets.Set[uint32])
+	for k, v := range vnis {
+		copiedVnis[k] = v
+	}
+
+	return copiedVnis
 }
 
 func (c *MetalnetCache) AddVniToPeerVnis(vni, peeredVNI uint32) error {

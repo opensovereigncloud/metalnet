@@ -10,13 +10,15 @@ import (
 	"net/netip"
 
 	"github.com/go-logr/logr"
+
+	metalnetv1alpha1 "github.com/ironcore-dev/metalnet/api/v1alpha1"
+	"github.com/ironcore-dev/metalnet/internal"
+	"github.com/ironcore-dev/metalnet/metalbond"
+
 	"github.com/ironcore-dev/controller-utils/clientutils"
 	dpdk "github.com/ironcore-dev/dpservice/go/dpservice-go/api"
 	dpdkclient "github.com/ironcore-dev/dpservice/go/dpservice-go/client"
 	dpdkerrors "github.com/ironcore-dev/dpservice/go/dpservice-go/errors"
-	metalnetv1alpha1 "github.com/ironcore-dev/metalnet/api/v1alpha1"
-	"github.com/ironcore-dev/metalnet/internal"
-	"github.com/ironcore-dev/metalnet/metalbond"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -152,11 +154,19 @@ func (r *NetworkReconciler) reconcile(ctx context.Context, log logr.Logger, netw
 	}
 	log.V(1).Info("Checked existence of the VNI")
 
-	log.V(1).Info("Creating dpdk default route if not exists")
-	if err := r.createDefaultRoutesIfNotExist(ctx, vni); err != nil {
-		return ctrl.Result{}, err
+	if network.Spec.InternetGateway {
+		log.V(1).Info("Deleting default route if exists")
+		if err := r.deleteDefaultRouteIfExists(ctx, vni); err != nil {
+			return ctrl.Result{}, err
+		}
+		log.V(1).Info("Deleted default route if existed")
+	} else {
+		log.V(1).Info("Creating dpdk default route if not exists")
+		if err := r.createDefaultRoutesIfNotExist(ctx, vni); err != nil {
+			return ctrl.Result{}, err
+		}
+		log.V(1).Info("Created dpdk default route if not existed")
 	}
-	log.V(1).Info("Created dpdk default route if not existed")
 
 	log.V(1).Info("Reconciling peered VNIs")
 	if err := r.reconcilePeeredVNIs(ctx, log, network, vni, vniAvail.Spec.InUse); err != nil {
@@ -263,10 +273,9 @@ func (r *NetworkReconciler) setDifference(s1, s2 sets.Set[uint32]) sets.Set[uint
 }
 
 func (r *NetworkReconciler) reconcilePeeredVNIs(ctx context.Context, log logr.Logger, network *metalnetv1alpha1.Network, vni uint32, ownVniAvail bool) error {
-	log.V(1).Info("reconcilePeeredVNIs", "vni", vni, "ownVniAvail", ownVniAvail)
-
 	// the ok flag is ignored because the existence of the VNI is already checked before this function is called
 	mbPeerVnis, _ := r.MetalnetCache.GetPeerVnis(vni)
+	log.V(1).Info("reconcilePeeredVNIs", "vni", vni, "ownVniAvail", ownVniAvail, "mbPeerVnis", mbPeerVnis)
 
 	// prepare peered prefixes
 	peeredPrefixes := map[uint32][]netip.Prefix{}
@@ -280,6 +289,8 @@ func (r *NetworkReconciler) reconcilePeeredVNIs(ctx context.Context, log logr.Lo
 			}
 		}
 	}
+
+	log.V(1).Info("SetPeeredPrefixes", "vni", vni, "peeredPrefixes", peeredPrefixes)
 	r.MetalnetCache.SetPeeredPrefixes(vni, peeredPrefixes)
 
 	specPeerVnis := sets.New[uint32]()
@@ -298,6 +309,7 @@ func (r *NetworkReconciler) reconcilePeeredVNIs(ctx context.Context, log logr.Lo
 
 	var errs []error
 
+	log.V(1).Info("compute missing and added lists1", "missing", missing, "added", added)
 	if missing.Len() == 0 && added.Len() == 0 {
 		if mbPeerVnis.Len() == 0 {
 			return nil
@@ -318,6 +330,7 @@ func (r *NetworkReconciler) reconcilePeeredVNIs(ctx context.Context, log logr.Lo
 		}
 	}
 
+	log.V(1).Info("compute missing and added lists2", "missing", missing, "added", added)
 	if missing.Len() != 0 || added.Len() != 0 {
 		for _, peeredVNI := range missing.UnsortedList() {
 			log.V(1).Info("Checking the existence of the peeredVNI in dp-service (missing)", "peeredVNI", peeredVNI)
@@ -334,6 +347,11 @@ func (r *NetworkReconciler) reconcilePeeredVNIs(ctx context.Context, log logr.Lo
 			}
 			if !peeredVniAvail.Spec.InUse {
 				if err := r.unsubscribeIfSubscribed(ctx, peeredVNI); err != nil {
+					errs = append(errs, err)
+					continue
+				}
+
+				if err := r.MetalnetMBClient.CleanupNotPeeredRoutes(vni); err != nil {
 					errs = append(errs, err)
 					continue
 				}
@@ -404,7 +422,6 @@ func (r *NetworkReconciler) reconcilePeeredVNIs(ctx context.Context, log logr.Lo
 			ID:    int32(peeredId),
 			State: status,
 		})
-
 	}
 	log.V(1).Info("Updating network status peerings", "", newStatusPeerings)
 	if err := r.patchStatus(ctx, network, func() {
@@ -431,7 +448,6 @@ func (r *NetworkReconciler) patchStatus(ctx context.Context, network *metalnetv1
 }
 
 func (r *NetworkReconciler) deletePeeredVNIs(ctx context.Context, log logr.Logger, vni uint32) error {
-
 	// the ok flag is ignored because an empty set is returned if the VNI doesn't exist, and the loop below is skipped
 	mbPeerVnis, _ := r.MetalnetCache.GetPeerVnis(vni)
 

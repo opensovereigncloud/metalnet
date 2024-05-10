@@ -8,7 +8,7 @@ require (
 	github.com/ironcore-dev/controller-utils v0.9.3
 	github.com/ironcore-dev/dpservice/go/dpservice-go v0.3.16
 	github.com/ironcore-dev/ironcore v0.1.2
-	github.com/ironcore-dev/metalbond v0.3.5
+	github.com/ironcore-dev/metalbond v0.3.6-0.20241028124613-750d55487c6c
 	github.com/jaypipes/ghw v0.12.0
 	github.com/onsi/ginkgo/v2 v2.20.2
 	github.com/onsi/gomega v1.34.2
@@ -69,8 +69,8 @@ require (
 	github.com/prometheus/common v0.45.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
 	github.com/stoewer/go-strcase v1.2.0 // indirect
-	github.com/vishvananda/netlink v1.2.1-beta.2.0.20240123184739-8d48f50f5575 // indirect
-	github.com/vishvananda/netns v0.0.0-20211101163701-50045581ed74 // indirect
+	github.com/vishvananda/netlink v1.3.0 // indirect
+	github.com/vishvananda/netns v0.0.4 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.44.0 // indirect
 	go.opentelemetry.io/otel v1.21.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.21.0 // indirect

@@ -275,10 +275,9 @@ func (r *NetworkReconciler) setDifference(s1, s2 sets.Set[uint32]) sets.Set[uint
 }
 
 func (r *NetworkReconciler) reconcilePeeredVNIs(ctx context.Context, log logr.Logger, network *metalnetv1alpha1.Network, vni uint32, ownVniAvail bool) error {
-	log.V(1).Info("reconcilePeeredVNIs", "vni", vni, "ownVniAvail", ownVniAvail)
-
 	// the ok flag is ignored because the existence of the VNI is already checked before this function is called
 	mbPeerVnis, _ := r.MetalnetCache.GetPeerVnis(vni)
+	log.V(1).Info("reconcilePeeredVNIs", "vni", vni, "ownVniAvail", ownVniAvail, "mbPeerVnis", mbPeerVnis)
 
 	// prepare peered prefixes
 	peeredPrefixes := map[uint32][]netip.Prefix{}
@@ -292,6 +291,8 @@ func (r *NetworkReconciler) reconcilePeeredVNIs(ctx context.Context, log logr.Lo
 			}
 		}
 	}
+
+	log.V(1).Info("SetPeeredPrefixes", "vni", vni, "peeredPrefixes", peeredPrefixes)
 	r.MetalnetCache.SetPeeredPrefixes(vni, peeredPrefixes)
 
 	specPeerVnis := sets.New[uint32]()
@@ -310,6 +311,7 @@ func (r *NetworkReconciler) reconcilePeeredVNIs(ctx context.Context, log logr.Lo
 
 	var errs []error
 
+	log.V(1).Info("compute missing and added lists1", "missing", missing, "added", added)
 	if missing.Len() == 0 && added.Len() == 0 {
 		if mbPeerVnis.Len() == 0 {
 			return nil
@@ -330,6 +332,7 @@ func (r *NetworkReconciler) reconcilePeeredVNIs(ctx context.Context, log logr.Lo
 		}
 	}
 
+	log.V(1).Info("compute missing and added lists2", "missing", missing, "added", added)
 	if missing.Len() != 0 || added.Len() != 0 {
 		for _, peeredVNI := range missing.UnsortedList() {
 			log.V(1).Info("Checking the existence of the peeredVNI in dp-service (missing)", "peeredVNI", peeredVNI)
@@ -346,6 +349,11 @@ func (r *NetworkReconciler) reconcilePeeredVNIs(ctx context.Context, log logr.Lo
 			}
 			if !peeredVniAvail.Spec.InUse {
 				if err := r.unsubscribeIfSubscribed(ctx, peeredVNI); err != nil {
+					errs = append(errs, err)
+					continue
+				}
+
+				if err := r.MetalnetMBClient.CleanupNotPeeredRoutes(vni); err != nil {
 					errs = append(errs, err)
 					continue
 				}

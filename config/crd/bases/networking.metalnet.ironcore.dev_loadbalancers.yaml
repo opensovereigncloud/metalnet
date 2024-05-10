@@ -75,7 +75,6 @@ spec:
                   to
                 properties:
                   name:
-                    default: ""
                     description: |-
                       Name of the referent.
                       This field is effectively required, but due to backwards compatibility is

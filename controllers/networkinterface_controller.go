@@ -118,6 +118,7 @@ type NetworkInterfaceReconciler struct {
 
 	NodeName  string
 	PublicVNI int
+	MultiportEswitchMode bool
 }
 
 //+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networkinterfaces,verbs=get;list;watch;create;update;patch;delete
@@ -1226,7 +1227,11 @@ func (r *NetworkInterfaceReconciler) convertToDPDKDevice(addr ghw.PCIAddress) (s
 	}
 
 	pciFunction = pciDevice*8 + pciFunction
-	return fmt.Sprintf("%s:%s:%s.0_representor_vf%d", physFnAddr.Domain, physFnAddr.Bus, physFnAddr.Device, pciFunction-sriov.Offset), nil
+	if r.MultiportEswitchMode {
+		return fmt.Sprintf("%s:%s:%s.0_representor_c0pf0vf%d", physFnAddr.Domain, physFnAddr.Bus, physFnAddr.Device, pciFunction-sriov.Offset), nil
+	} else {
+		return fmt.Sprintf("%s:%s:%s.0_representor_vf%d", physFnAddr.Domain, physFnAddr.Bus, physFnAddr.Device, pciFunction-sriov.Offset), nil
+	}
 }
 
 func (r *NetworkInterfaceReconciler) patchStatus(

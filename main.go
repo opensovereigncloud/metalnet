@@ -86,6 +86,7 @@ func main() {
 	var publicVNI int
 	var metalnetDir string
 	var preferNetwork string
+	var multiportEswitch bool
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -100,6 +101,7 @@ func main() {
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&metalnetDir, "metalnet-dir", "/var/lib/metalnet", "Directory to store metalnet data at.")
 	flag.StringVar(&preferNetwork, "prefer-network", "", "Prefer network routes (e.g. 2001:db8::1/52)")
+	flag.BoolVar(&multiportEswitch, "multiport-eswitch", false, "Enable multiport eswitch support")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -271,6 +273,7 @@ func main() {
 		SysFS:         sysFS,
 		NodeName:      nodeName,
 		PublicVNI:     publicVNI,
+		MultiportEswitchMode: multiportEswitch,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkInterface")
 		os.Exit(1)

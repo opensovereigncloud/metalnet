@@ -275,15 +275,25 @@ func (c *Client) AddRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error
 	}
 
 	if hop.Type == mbproto.NextHopType_STANDARD {
-		mbPeerVnis := c.GetPeerVnis(uint32(vni))
-		peeredPrefixes, ok := c.peeredPrefixes[uint32(vni)]
-		c.log.V(1).Info("GetPeerVnis", "VNI", vni, "mbPeerVnis", mbPeerVnis, "peeredPrefixes", peeredPrefixes)
+		// loop over all peered VNI's and build a list of VNI's that peer with the destination VNI
+		c.mtxPeeredVnis.RLock()
+		mbPeerVnis := sets.New[uint32]()
+		for srcVNI, dstVNISet := range c.peeredVnis {
+			if dstVNISet.Has(uint32(vni)) {
+				mbPeerVnis.Insert(srcVNI)
+			}
+		}
+		c.mtxPeeredVnis.RUnlock()
+		c.log.V(1).Info("GetPeerVnis", "VNI", vni, "mbPeerVnis", mbPeerVnis)
 
 		for _, peeredVNI := range mbPeerVnis.UnsortedList() {
+			peeredPrefixes, ok := c.peeredPrefixes[peeredVNI]
+			c.log.V(1).Info("PeeredPrefixes", "VNI", vni, "peeredVNI", peeredVNI, "peeredPrefixes", peeredPrefixes, "ok", ok)
 			// by default, we add the route if no peered prefixes are set
 			addRoute := true
 			if ok {
-				allowedPeeredPrefixes, exists := peeredPrefixes[peeredVNI]
+				allowedPeeredPrefixes, exists := peeredPrefixes[uint32(vni)]
+				c.log.V(1).Info("AllowedPeeredPrefixes", "VNI", vni, "peeredVNI", peeredVNI, "allowedPeeredPrefixes", allowedPeeredPrefixes, "exists", exists)
 				// if we have set peered prefixes for this VNI, we need to check if the destination is in the list
 				if exists {
 					// if the destination is not in the list of peered prefixes, we don't add the route
@@ -297,6 +307,7 @@ func (c *Client) AddRoute(vni mb.VNI, dest mb.Destination, hop mb.NextHop) error
 				}
 			}
 
+			// vni is 207 and peeredVNI is 215
 			if addRoute {
 				if err := c.addLocalRoute(vni, mb.VNI(peeredVNI), dest, hop); err != nil {
 					errStrs = append(errStrs, err.Error())
@@ -344,7 +355,7 @@ func (c *Client) CleanupNotPeeredRoutes(vni uint32) error {
 	}
 
 	set, ok := c.peeredVnis[vni]
-
+	c.log.V(1).Info("CleanupNotPeeredRoutes", "VNI", vni, "routes", routes, "peeredVnis", set, "ok", ok)
 	// loop over all routes and delete the ones that are not peered
 	for _, route := range routes.Items {
 		// only delete route if it is not the local vni and not peered

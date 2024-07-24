@@ -236,8 +236,8 @@ func (r *NetworkReconciler) setDifference(s1, s2 sets.Set[uint32]) sets.Set[uint
 }
 
 func (r *NetworkReconciler) reconcilePeeredVNIs(ctx context.Context, log logr.Logger, network *metalnetv1alpha1.Network, vni uint32, ownVniAvail bool) error {
-	log.V(1).Info("reconcilePeeredVNIs", "vni", vni, "ownVniAvail", ownVniAvail)
 	mbPeerVnis := r.MBInternal.GetPeerVnis(vni)
+	log.V(1).Info("reconcilePeeredVNIs", "vni", vni, "ownVniAvail", ownVniAvail, "mbPeerVnis", mbPeerVnis)
 
 	// prepare peered prefixes
 	peeredPrefixes := map[uint32][]netip.Prefix{}
@@ -251,6 +251,8 @@ func (r *NetworkReconciler) reconcilePeeredVNIs(ctx context.Context, log logr.Lo
 			}
 		}
 	}
+
+	log.V(1).Info("SetPeeredPrefixes", "vni", vni, "peeredPrefixes", peeredPrefixes)
 	r.MBInternal.SetPeeredPrefixes(vni, peeredPrefixes)
 
 	specPeerVnis := sets.New[uint32]()
@@ -262,6 +264,7 @@ func (r *NetworkReconciler) reconcilePeeredVNIs(ctx context.Context, log logr.Lo
 	missing := r.setDifference(mbPeerVnis, specPeerVnis)
 	added := r.setDifference(specPeerVnis, mbPeerVnis)
 
+	log.V(1).Info("compute missing and added lists1", "missing", missing, "added", added)
 	if missing.Len() == 0 && added.Len() == 0 {
 		if mbPeerVnis.Len() == 0 {
 			return nil
@@ -276,6 +279,7 @@ func (r *NetworkReconciler) reconcilePeeredVNIs(ctx context.Context, log logr.Lo
 		}
 	}
 
+	log.V(1).Info("compute missing and added lists2", "missing", missing, "added", added)
 	if missing.Len() != 0 || added.Len() != 0 {
 		for _, peeredVNI := range missing.UnsortedList() {
 			log.V(1).Info("Checking the existence of the peeredVNI in dp-service (missing)", "peeredVNI", peeredVNI)
@@ -290,6 +294,9 @@ func (r *NetworkReconciler) reconcilePeeredVNIs(ctx context.Context, log logr.Lo
 			}
 			if !peeredVniAvail.Spec.InUse {
 				if err := r.unsubscribeIfSubscribed(ctx, peeredVNI); err != nil {
+					return err
+				}
+				if err := r.MBInternal.CleanupNotPeeredRoutes(vni); err != nil {
 					return err
 				}
 			} else if peeredVniAvail.Spec.InUse && ownVniAvail {

@@ -17,14 +17,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/go-logr/logr"
 	"github.com/ironcore-dev/controller-utils/clientutils"
-	dpdk "github.com/ironcore-dev/dpservice-go/api"
-	dpdkclient "github.com/ironcore-dev/dpservice-go/client"
-	dpdkerrors "github.com/ironcore-dev/dpservice-go/errors"
-	dpdkproto "github.com/ironcore-dev/dpservice-go/proto"
+	dpdk "github.com/ironcore-dev/dpservice/go/dpservice-go/api"
+	dpdkclient "github.com/ironcore-dev/dpservice/go/dpservice-go/client"
+	dpdkerrors "github.com/ironcore-dev/dpservice/go/dpservice-go/errors"
+	dpdkproto "github.com/ironcore-dev/dpservice/go/dpservice-go/proto"
 	metalnetv1alpha1 "github.com/ironcore-dev/metalnet/api/v1alpha1"
 	metalnetclient "github.com/ironcore-dev/metalnet/client"
 	"github.com/ironcore-dev/metalnet/internal"
@@ -345,8 +344,8 @@ func (r *LoadBalancerReconciler) SetupWithManager(mgr ctrl.Manager, metalnetCach
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&metalnetv1alpha1.LoadBalancer{}).
-		WatchesRawSource(
-			source.Kind(metalnetCache, &metalnetv1alpha1.Network{}),
+		Watches(
+			&metalnetv1alpha1.Network{},
 			r.enqueueLoadBalancersReferencingNetwork(ctx, log),
 		).
 		Complete(r)

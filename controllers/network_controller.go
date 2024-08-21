@@ -10,14 +10,15 @@ import (
 	"net/netip"
 
 	"github.com/go-logr/logr"
-	"github.com/ironcore-dev/controller-utils/clientutils"
-	dpdk "github.com/ironcore-dev/dpservice/go/dpservice-go/api"
-	dpdkclient "github.com/ironcore-dev/dpservice/go/dpservice-go/client"
-	dpdkerrors "github.com/ironcore-dev/dpservice/go/dpservice-go/errors"
+
 	metalnetv1alpha1 "github.com/ironcore-dev/metalnet/api/v1alpha1"
 	"github.com/ironcore-dev/metalnet/internal"
 	"github.com/ironcore-dev/metalnet/metalbond"
 
+	"github.com/ironcore-dev/controller-utils/clientutils"
+	dpdk "github.com/ironcore-dev/dpservice/go/dpservice-go/api"
+	dpdkclient "github.com/ironcore-dev/dpservice/go/dpservice-go/client"
+	dpdkerrors "github.com/ironcore-dev/dpservice/go/dpservice-go/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -29,7 +30,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const (
@@ -424,7 +424,6 @@ func (r *NetworkReconciler) reconcilePeeredVNIs(ctx context.Context, log logr.Lo
 			ID:    int32(peeredId),
 			State: status,
 		})
-
 	}
 	log.V(1).Info("Updating network status peerings", "", newStatusPeerings)
 	if err := r.patchStatus(ctx, network, func() {
@@ -451,7 +450,6 @@ func (r *NetworkReconciler) patchStatus(ctx context.Context, network *metalnetv1
 }
 
 func (r *NetworkReconciler) deletePeeredVNIs(ctx context.Context, log logr.Logger, vni uint32) error {
-
 	// the ok flag is ignored because an empty set is returned if the VNI doesn't exist, and the loop below is skipped
 	mbPeerVnis, _ := r.MetalnetCache.GetPeerVnis(vni)
 

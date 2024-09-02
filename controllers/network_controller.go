@@ -23,12 +23,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -323,8 +321,8 @@ func (r *NetworkReconciler) reconcilePeeredVNIs(ctx context.Context, log logr.Lo
 					errs = append(errs, err)
 					continue
 				}
+				delete(networkPeeringState, peeredVNI)
 			}
-			delete(networkPeeringState, peeredVNI)
 		}
 
 		if err := errors.Join(errs...); err != nil {
@@ -493,16 +491,13 @@ func (r *NetworkReconciler) unsubscribeIfSubscribed(ctx context.Context, vni uin
 func (r *NetworkReconciler) SetupWithManager(mgr ctrl.Manager, metalnetCache cache.Cache) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&metalnetv1alpha1.Network{}).
-		WithEventFilter(predicate.ResourceVersionChangedPredicate{}).
 		Watches(
 			&metalnetv1alpha1.NetworkInterface{},
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForNetworkInterface),
-			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
 		).
 		Watches(
 			&metalnetv1alpha1.LoadBalancer{},
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForLoadBalancer),
-			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
 		).
 		Complete(r)
 }

@@ -101,7 +101,6 @@ func main() {
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&metalnetDir, "metalnet-dir", "/var/lib/metalnet", "Directory to store metalnet data at.")
 	flag.StringVar(&preferNetwork, "prefer-network", "", "Prefer network routes (e.g. 2001:db8::1/52)")
-	flag.BoolVar(&multiportEswitch, "multiport-eswitch", false, "Enable multiport eswitch support")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -116,6 +115,18 @@ func main() {
 	if metalbondDebug {
 		log.SetLevel(log.DebugLevel)
 	}
+
+	// Check if /var/lib/metalnet/mode exists and its content is "eswitch"
+	modeFilePath := filepath.Join(metalnetDir, "mode")
+	content, err := os.ReadFile(modeFilePath)
+	if err == nil && string(content) == "eswitch" {
+		multiportEswitch = true
+	} else {
+		multiportEswitch = false
+	}
+
+	// Log result for debugging
+	log.Infof("Multiport Eswitch mode set to: %v", multiportEswitch)
 
 	if routerAddress.Equal(net.IP{}) {
 		setupLog.Error(fmt.Errorf("must specify --router-address"), "invalid flags")
@@ -264,15 +275,15 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.NetworkInterfaceReconciler{
-		Client:        mgr.GetClient(),
-		EventRecorder: mgr.GetEventRecorderFor("networkinterface"),
-		Scheme:        mgr.GetScheme(),
-		DPDK:          dpdkclient.NewClient(dpdkProtoClient),
-		Metalbond:     metalbond.NewClient(mbInstance),
-		NetFnsManager: netFnsManager,
-		SysFS:         sysFS,
-		NodeName:      nodeName,
-		PublicVNI:     publicVNI,
+		Client:               mgr.GetClient(),
+		EventRecorder:        mgr.GetEventRecorderFor("networkinterface"),
+		Scheme:               mgr.GetScheme(),
+		DPDK:                 dpdkclient.NewClient(dpdkProtoClient),
+		Metalbond:            metalbond.NewClient(mbInstance),
+		NetFnsManager:        netFnsManager,
+		SysFS:                sysFS,
+		NodeName:             nodeName,
+		PublicVNI:            publicVNI,
 		MultiportEswitchMode: multiportEswitch,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkInterface")

@@ -20,18 +20,18 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/ironcore-dev/controller-utils/clientutils"
-	dpdk "github.com/ironcore-dev/dpservice/go/dpservice-go/api"
-	dpdkclient "github.com/ironcore-dev/dpservice/go/dpservice-go/client"
-	dpdkerrors "github.com/ironcore-dev/dpservice/go/dpservice-go/errors"
-	dpdkproto "github.com/ironcore-dev/dpservice/go/dpservice-go/proto"
 	metalnetv1alpha1 "github.com/ironcore-dev/metalnet/api/v1alpha1"
 	metalnetclient "github.com/ironcore-dev/metalnet/client"
 	"github.com/ironcore-dev/metalnet/internal"
 	"github.com/ironcore-dev/metalnet/metalbond"
+	dpdk "github.com/onmetal/net-dpservice-go/api"
+	dpdkclient "github.com/onmetal/net-dpservice-go/client"
+	dpdkerrors "github.com/onmetal/net-dpservice-go/errors"
+	dpdkproto "github.com/onmetal/net-dpservice-go/proto"
 )
 
 const (
-	loadBalancerFinalizer = "networking.metalnet.ironcore.dev/loadBalancer"
+	loadBalancerFinalizer = "networking.metalnet.onmetal.de/loadBalancer"
 )
 
 // LoadBalancerReconciler reconciles a LoadBalancer object
@@ -49,9 +49,9 @@ type LoadBalancerReconciler struct {
 	EnableIPv6Support bool
 }
 
-//+kubebuilder:rbac:groups=networking.metalnet.ironcore.dev,resources=loadbalancers,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=networking.metalnet.ironcore.dev,resources=loadbalancers/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=networking.metalnet.ironcore.dev,resources=loadbalancers/finalizers,verbs=update
+//+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=loadbalancers,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=loadbalancers/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=loadbalancers/finalizers,verbs=update
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 func (r *LoadBalancerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

@@ -1,5 +1,16 @@
-// SPDX-FileCopyrightText: 2022 SAP SE or an SAP affiliate company and IronCore contributors
-// SPDX-License-Identifier: Apache-2.0
+// Copyright 2022 OnMetal authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package v1alpha1
 
@@ -23,25 +34,14 @@ type LocalUIDReference struct {
 
 // LBPort consists of port and protocol
 type LBPort struct {
-	// +kubebuilder:validation:Required
 	Protocol string `json:"protocol"`
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Minimum=0
-	// +kubebuilder:validation:Maximum=65535
-	Port int32 `json:"port"`
+	Port     int32  `json:"port"`
 }
 
 // LBPort consists of port and protocol
 type NATDetails struct {
-	// +kubebuilder:validation:Required
-	IP *IP `json:"ip"`
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Minimum=0
-	// +kubebuilder:validation:Maximum=65535
-	Port int32 `json:"port"`
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Minimum=0
-	// +kubebuilder:validation:Maximum=65535
+	IP      *IP   `json:"ip"`
+	Port    int32 `json:"port"`
 	EndPort int32 `json:"endPort"`
 }
 
@@ -118,9 +118,9 @@ func (i IP) Family() corev1.IPFamily {
 	}
 }
 
-func (i IP) OpenAPISchemaType() []string { return []string{"string"} }
+func (_ IP) OpenAPISchemaType() []string { return []string{"string"} }
 
-func (i IP) OpenAPISchemaFormat() string { return "ip" }
+func (_ IP) OpenAPISchemaFormat() string { return "ip" }
 
 func NewIP(ip netip.Addr) IP {
 	return IP{ip}
@@ -231,9 +231,9 @@ func (in *IPPrefix) IsZero() bool {
 	return in == nil || !in.Prefix.IsValid()
 }
 
-func (i IPPrefix) OpenAPISchemaType() []string { return []string{"string"} }
+func (_ IPPrefix) OpenAPISchemaType() []string { return []string{"string"} }
 
-func (i IPPrefix) OpenAPISchemaFormat() string { return "ip-prefix" }
+func (_ IPPrefix) OpenAPISchemaFormat() string { return "ip-prefix" }
 
 func NewIPPrefix(prefix netip.Prefix) *IPPrefix {
 	return &IPPrefix{Prefix: prefix}

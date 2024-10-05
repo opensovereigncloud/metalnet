@@ -1,5 +1,18 @@
-// SPDX-FileCopyrightText: 2022 SAP SE or an SAP affiliate company and IronCore contributors
-// SPDX-License-Identifier: Apache-2.0
+/*
+Copyright 2022 The Metal Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package v1alpha1
 
@@ -12,19 +25,12 @@ import (
 // NetworkInterfaceSpec defines the desired state of NetworkInterface
 type NetworkInterfaceSpec struct {
 	// NetworkRef is the Network this NetworkInterface is connected to
-	// +kubebuilder:validation:Required
 	NetworkRef corev1.LocalObjectReference `json:"networkRef"`
 	// IPFamilies defines which IPFamilies this NetworkInterface is supporting
-	// Only one IP supported at the moment.
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:MaxItems=2
 	IPFamilies []corev1.IPFamily `json:"ipFamilies"`
 	// IPs are the provided IPs or EphemeralIPs which should be assigned to this NetworkInterface
 	// Only one IP supported at the moment.
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:MaxItems=2
 	IPs []IP `json:"ips"`
 	// Virtual IP
 	VirtualIP *IP `json:"virtualIP,omitempty"`
@@ -37,9 +43,7 @@ type NetworkInterfaceSpec struct {
 	// NodeName is the name of the node on which the interface should be created.
 	NodeName *string `json:"nodeName,omitempty"`
 	// FirewallRules are the firewall rules to be applied to this interface.
-	FirewallRules []FirewallRule `json:"firewallRules,omitempty"`
-	// MeteringRate are the metering parameters to be applied to this interface.
-	MeteringRate *MeteringParameters `json:"meteringRate,omitempty"`
+	FirewallRules []FirewallRuleSpec `json:"firewallRules,omitempty"`
 }
 
 // NetworkInterfaceStatus defines the observed state of NetworkInterface
@@ -82,18 +86,11 @@ const (
 	NetworkInterfaceStateError NetworkInterfaceState = "Error"
 )
 
-// FirewallRule defines the desired state of FirewallRule
-type FirewallRule struct {
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Type=string
-	FirewallRuleID types.UID `json:"firewallRuleID"`
-	// +kubebuilder:validation:Required
-	Direction FirewallRuleDirection `json:"direction"`
-	// +kubebuilder:validation:Required
-	Action FirewallRuleAction `json:"action"`
-	// +kubebuilder:validation:Minimum=0
-	// +kubebuilder:validation:Maximum=65535
-	// +kubebuilder:default=1000
+// FirewallRuleSpec defines the desired state of FirewallRule
+type FirewallRuleSpec struct {
+	FirewallRuleID    types.UID       `json:"firewallRuleID"`
+	Direction         string          `json:"direction"`
+	Action            string          `json:"action"`
 	Priority          *int32          `json:"priority,omitempty"`
 	IpFamily          corev1.IPFamily `json:"ipFamily"`
 	SourcePrefix      *IPPrefix       `json:"sourcePrefix,omitempty"`
@@ -102,37 +99,21 @@ type FirewallRule struct {
 }
 
 type ProtocolMatch struct {
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=TCP;tcp;UDP;udp;ICMP;icmp
-	ProtocolType *ProtocolType `json:"protocolType"`
+	ProtocolType *ProtocolType `json:"protocolType,omitempty"`
 	ICMP         *ICMPMatch    `json:"icmp,omitempty"`
 	PortRange    *PortMatch    `json:"portRange,omitempty"`
 }
 
 type ICMPMatch struct {
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Minimum=-1
-	// +kubebuilder:validation:Maximum=255
-	IcmpType *int32 `json:"icmpType"`
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Minimum=-1
-	// +kubebuilder:validation:Maximum=255
-	IcmpCode *int32 `json:"icmpCode"`
+	IcmpType *int32 `json:"icmpType,omitempty"`
+	IcmpCode *int32 `json:"icmpCode,omitempty"`
 }
 
 type PortMatch struct {
-	// +kubebuilder:validation:Minimum=-1
-	// +kubebuilder:validation:Maximum=65535
-	SrcPort *int32 `json:"srcPort,omitempty"`
-	// +kubebuilder:validation:Minimum=-1
-	// +kubebuilder:validation:Maximum=65535
-	EndSrcPort int32 `json:"endSrcPort,omitempty"`
-	// +kubebuilder:validation:Minimum=-1
-	// +kubebuilder:validation:Maximum=65535
-	DstPort *int32 `json:"dstPort,omitempty"`
-	// +kubebuilder:validation:Minimum=-1
-	// +kubebuilder:validation:Maximum=65535
-	EndDstPort int32 `json:"endDstPort,omitempty"`
+	SrcPort    *int32 `json:"srcPort,omitempty"`
+	EndSrcPort int32  `json:"endSrcPort,omitempty"`
+	DstPort    *int32 `json:"dstPort,omitempty"`
+	EndDstPort int32  `json:"endDstPort,omitempty"`
 }
 
 // ProtocolType is the type for the network protocol
@@ -152,26 +133,21 @@ type FirewallRuleAction string
 
 // Currently only Accept rules can be used.
 const (
-	// FirewallRuleActionAccept is used to accept traffic.
-	FirewallRuleActionAccept FirewallRuleAction = "Accept"
-	// FirewallRuleActionDeny is used to deny traffic.
-	FirewallRuleActionDeny FirewallRuleAction = "Deny"
+	// FirewallRuleAccept is used to accept traffic.
+	FirewallRuleAccept FirewallRuleAction = "ACCEPT"
+	// FirewallRuleDeny is used to deny traffic.
+	FirewallRuleDeny FirewallRuleAction = "DENY"
 )
 
 // FirewallRuleDirection is the direction of the rule.
 type FirewallRuleDirection string
 
 const (
-	// FirewallRuleDirectionIngress is used to define rules for incoming traffic.
-	FirewallRuleDirectionIngress FirewallRuleDirection = "Ingress"
-	// FirewallRuleDirectionEgress is used to define rules for outgoing traffic.
-	FirewallRuleDirectionEgress FirewallRuleDirection = "Egress"
+	// FirewallRuleIngress is used to define rules for incoming traffic.
+	FirewallRuleIngress FirewallRuleDirection = "INGRESS"
+	// FirewallRuleEgress is used to define rules for outgoing traffic.
+	FirewallRuleEgress FirewallRuleDirection = "EGRESS"
 )
-
-type MeteringParameters struct {
-	TotalRate  *uint64 `json:"totalRate,omitempty"`
-	PublicRate *uint64 `json:"publicRate,omitempty"`
-}
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
@@ -190,8 +166,7 @@ type NetworkInterface struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	// Spec defines the desired state of NetworkInterface.
-	// +kubebuilder:validation:Required
-	Spec NetworkInterfaceSpec `json:"spec"`
+	Spec NetworkInterfaceSpec `json:"spec,omitempty"`
 	// Status defines the observed state of NetworkInterface.
 	Status NetworkInterfaceStatus `json:"status,omitempty"`
 }

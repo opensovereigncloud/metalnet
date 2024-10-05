@@ -1,4 +1,4 @@
-domain: metalnet.ironcore.dev
+domain: metalnet.onmetal.de
 layout:
 - go.kubebuilder.io/v3
 projectName: metalnet
@@ -8,7 +8,7 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: metalnet.ironcore.dev
+  domain: metalnet.onmetal.de
   group: networking
   kind: NetworkFunction
   path: github.com/ironcore-dev/metalnet/api/v1alpha1
@@ -17,7 +17,7 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: metalnet.ironcore.dev
+  domain: metalnet.onmetal.de
   group: networking
   kind: Network
   path: github.com/ironcore-dev/metalnet/api/v1alpha1
@@ -26,7 +26,7 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: metalnet.ironcore.dev
+  domain: metalnet.onmetal.de
   group: networking
   kind: NetworkInterface
   path: github.com/ironcore-dev/metalnet/api/v1alpha1
@@ -35,7 +35,7 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: metalnet.ironcore.dev
+  domain: metalnet.onmetal.de
   group: networking
   kind: VirtualIP
   path: github.com/ironcore-dev/metalnet/api/v1alpha1
@@ -44,7 +44,7 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: metalnet.ironcore.dev
+  domain: metalnet.onmetal.de
   group: networking
   kind: LoadBalancer
   path: github.com/ironcore-dev/metalnet/api/v1alpha1

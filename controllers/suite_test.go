@@ -24,13 +24,13 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	dpdkclient "github.com/ironcore-dev/dpservice/go/dpservice-go/client"
-	dpdkproto "github.com/ironcore-dev/dpservice/go/dpservice-go/proto"
 	mb "github.com/ironcore-dev/metalbond"
 	networkingv1alpha1 "github.com/ironcore-dev/metalnet/api/v1alpha1"
 	"github.com/ironcore-dev/metalnet/internal"
 	"github.com/ironcore-dev/metalnet/metalbond"
 	"github.com/ironcore-dev/metalnet/netfns"
+	dpdkclient "github.com/onmetal/net-dpservice-go/client"
+	dpdkproto "github.com/onmetal/net-dpservice-go/proto"
 	//+kubebuilder:scaffold:imports
 )
 

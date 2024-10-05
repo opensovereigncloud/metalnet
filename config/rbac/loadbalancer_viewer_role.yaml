@@ -5,7 +5,7 @@ metadata:
   name: loadbalancer-viewer-role
 rules:
 - apiGroups:
-  - networking.metalnet.ironcore.dev
+  - networking.metalnet.onmetal.de
   resources:
   - loadbalancers
   verbs:
@@ -13,7 +13,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - networking.metalnet.ironcore.dev
+  - networking.metalnet.onmetal.de
   resources:
   - loadbalancers/status
   verbs:

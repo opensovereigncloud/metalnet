@@ -14,10 +14,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/ironcore-dev/controller-utils/clientutils"
-	dpdk "github.com/ironcore-dev/dpservice/go/dpservice-go/api"
-	dpdkclient "github.com/ironcore-dev/dpservice/go/dpservice-go/client"
-	dpdkerrors "github.com/ironcore-dev/dpservice/go/dpservice-go/errors"
-	dpdkproto "github.com/ironcore-dev/dpservice/go/dpservice-go/proto"
 	"github.com/ironcore-dev/metalbond/pb"
 	metalnetv1alpha1 "github.com/ironcore-dev/metalnet/api/v1alpha1"
 	metalnetclient "github.com/ironcore-dev/metalnet/client"
@@ -25,6 +21,9 @@ import (
 	"github.com/ironcore-dev/metalnet/netfns"
 	"github.com/ironcore-dev/metalnet/sysfs"
 	"github.com/jaypipes/ghw"
+	dpdk "github.com/onmetal/net-dpservice-go/api"
+	dpdkclient "github.com/onmetal/net-dpservice-go/client"
+	dpdkerrors "github.com/onmetal/net-dpservice-go/errors"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -39,7 +38,7 @@ import (
 )
 
 const (
-	networkInterfaceFinalizer = "networking.metalnet.ironcore.dev/networkInterface"
+	networkInterfaceFinalizer = "networking.metalnet.onmetal.de/networkInterface"
 	defaultFirewallRulePrio   = 100
 	defaultFirewallRulePrefix = "0.0.0.0/0"
 )
@@ -94,11 +93,11 @@ type NetworkInterfaceReconciler struct {
 	MultiportEswitchMode        bool
 }
 
-//+kubebuilder:rbac:groups=networking.metalnet.ironcore.dev,resources=networkinterfaces,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=networking.metalnet.ironcore.dev,resources=networkinterfaces/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=networking.metalnet.ironcore.dev,resources=networkinterfaces/finalizers,verbs=update
-//+kubebuilder:rbac:groups=networking.metalnet.ironcore.dev,resources=networks,verbs=get;list;watch
-//+kubebuilder:rbac:groups=networking.metalnet.ironcore.dev,resources=loadbalancers,verbs=get;list;watch
+//+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networkinterfaces,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networkinterfaces/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networkinterfaces/finalizers,verbs=update
+//+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networks,verbs=get;list;watch
+//+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=loadbalancers,verbs=get;list;watch
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -168,10 +167,10 @@ func (r *NetworkInterfaceReconciler) isValidInterfaceSpec(spec *metalnetv1alpha1
 		return false, err
 	}
 
-	isValid, err = r.isValidMeteringParams(spec.MeteringRate)
-	if !isValid {
-		return false, err
-	}
+	//isValid, err = r.isValidMeteringParams(spec.MeteringRate)
+	//if !isValid {
+	//	return false, err
+	//}
 
 	return true, nil
 }
@@ -328,122 +327,122 @@ func (r *NetworkInterfaceReconciler) removeLBTargetRouteIfExists(ctx context.Con
 	return nil
 }
 
-func (r *NetworkInterfaceReconciler) fillTCPUDPFilter(ctx context.Context, specFirewallRule *metalnetv1alpha1.FirewallRule, protocolFilter *dpdkproto.ProtocolFilter) error {
-	var SrcPortLower, DstPortLower, SrcPortUpper, DstPortUpper int32
-	if specFirewallRule.ProtocolMatch.PortRange != nil {
-		if specFirewallRule.ProtocolMatch.PortRange.SrcPort != nil {
-			SrcPortLower = *specFirewallRule.ProtocolMatch.PortRange.SrcPort
-			SrcPortUpper = specFirewallRule.ProtocolMatch.PortRange.EndSrcPort
-		} else {
-			SrcPortLower = -1
-			SrcPortUpper = -1
-		}
-		if specFirewallRule.ProtocolMatch.PortRange.DstPort != nil {
-			DstPortLower = *specFirewallRule.ProtocolMatch.PortRange.DstPort
-			DstPortUpper = specFirewallRule.ProtocolMatch.PortRange.EndDstPort
-		} else {
-			DstPortLower = -1
-			DstPortUpper = -1
-		}
-	} else {
-		SrcPortLower = -1
-		SrcPortUpper = -1
-		DstPortLower = -1
-		DstPortUpper = -1
-	}
-	switch *specFirewallRule.ProtocolMatch.ProtocolType {
-	case metalnetv1alpha1.FirewallRuleProtocolTypeTCP:
-		protocolFilter.Filter = &dpdkproto.ProtocolFilter_Tcp{Tcp: &dpdkproto.TcpFilter{
-			SrcPortLower: SrcPortLower,
-			SrcPortUpper: SrcPortUpper,
-			DstPortLower: DstPortLower,
-			DstPortUpper: DstPortUpper,
-		}}
-	case metalnetv1alpha1.FirewallRuleProtocolTypeUDP:
-		protocolFilter.Filter = &dpdkproto.ProtocolFilter_Udp{Udp: &dpdkproto.UdpFilter{
-			SrcPortLower: SrcPortLower,
-			SrcPortUpper: SrcPortUpper,
-			DstPortLower: DstPortLower,
-			DstPortUpper: DstPortUpper,
-		}}
-	}
-	return nil
-}
+//func (r *NetworkInterfaceReconciler) fillTCPUDPFilter(ctx context.Context, specFirewallRule *metalnetv1alpha1.FirewallRule, protocolFilter *dpdkproto.ProtocolFilter) error {
+//	var SrcPortLower, DstPortLower, SrcPortUpper, DstPortUpper int32
+//	if specFirewallRule.ProtocolMatch.PortRange != nil {
+//		if specFirewallRule.ProtocolMatch.PortRange.SrcPort != nil {
+//			SrcPortLower = *specFirewallRule.ProtocolMatch.PortRange.SrcPort
+//			SrcPortUpper = specFirewallRule.ProtocolMatch.PortRange.EndSrcPort
+//		} else {
+//			SrcPortLower = -1
+//			SrcPortUpper = -1
+//		}
+//		if specFirewallRule.ProtocolMatch.PortRange.DstPort != nil {
+//			DstPortLower = *specFirewallRule.ProtocolMatch.PortRange.DstPort
+//			DstPortUpper = specFirewallRule.ProtocolMatch.PortRange.EndDstPort
+//		} else {
+//			DstPortLower = -1
+//			DstPortUpper = -1
+//		}
+//	} else {
+//		SrcPortLower = -1
+//		SrcPortUpper = -1
+//		DstPortLower = -1
+//		DstPortUpper = -1
+//	}
+//	switch *specFirewallRule.ProtocolMatch.ProtocolType {
+//	case metalnetv1alpha1.FirewallRuleProtocolTypeTCP:
+//		protocolFilter.Filter = &dpdkproto.ProtocolFilter_Tcp{Tcp: &dpdkproto.TcpFilter{
+//			SrcPortLower: SrcPortLower,
+//			SrcPortUpper: SrcPortUpper,
+//			DstPortLower: DstPortLower,
+//			DstPortUpper: DstPortUpper,
+//		}}
+//	case metalnetv1alpha1.FirewallRuleProtocolTypeUDP:
+//		protocolFilter.Filter = &dpdkproto.ProtocolFilter_Udp{Udp: &dpdkproto.UdpFilter{
+//			SrcPortLower: SrcPortLower,
+//			SrcPortUpper: SrcPortUpper,
+//			DstPortLower: DstPortLower,
+//			DstPortUpper: DstPortUpper,
+//		}}
+//	}
+//	return nil
+//}
 
-func (r *NetworkInterfaceReconciler) createDPDKFwRule(ctx context.Context, nic *metalnetv1alpha1.NetworkInterface, specFirewallRule *metalnetv1alpha1.FirewallRule) error {
-	var (
-		protocolFilter dpdkproto.ProtocolFilter
-		priority       uint32 = defaultFirewallRulePrio
-		sourcePrefix   metalnetv1alpha1.IPPrefix
-		destPrefix     metalnetv1alpha1.IPPrefix
-	)
-
-	switch *specFirewallRule.ProtocolMatch.ProtocolType {
-	case metalnetv1alpha1.FirewallRuleProtocolTypeICMP:
-		var icmpType, icmpCode int32
-		if specFirewallRule.ProtocolMatch.ICMP != nil {
-			if specFirewallRule.ProtocolMatch.ICMP.IcmpType != nil {
-				icmpType = *specFirewallRule.ProtocolMatch.ICMP.IcmpType
-			} else {
-				icmpType = -1
-			}
-			if specFirewallRule.ProtocolMatch.ICMP.IcmpCode != nil {
-				icmpCode = *specFirewallRule.ProtocolMatch.ICMP.IcmpCode
-			} else {
-				icmpCode = -1
-			}
-		} else {
-			icmpCode = -1
-			icmpType = -1
-		}
-		protocolFilter.Filter = &dpdkproto.ProtocolFilter_Icmp{Icmp: &dpdkproto.IcmpFilter{
-			IcmpType: icmpType,
-			IcmpCode: icmpCode}}
-	case metalnetv1alpha1.FirewallRuleProtocolTypeUDP, metalnetv1alpha1.FirewallRuleProtocolTypeTCP:
-		if err := r.fillTCPUDPFilter(ctx, specFirewallRule, &protocolFilter); err != nil {
-			return fmt.Errorf("error filling TCP/UDP filter: %w", err)
-		}
-	default:
-		protocolFilter.Filter = nil
-	}
-
-	if specFirewallRule.Priority != nil {
-		priority = uint32(*specFirewallRule.Priority)
-	}
-
-	if specFirewallRule.SourcePrefix == nil {
-		sourcePrefix.Prefix = netip.MustParsePrefix(defaultFirewallRulePrefix)
-	} else {
-		sourcePrefix.Prefix = specFirewallRule.SourcePrefix.Prefix
-	}
-
-	if specFirewallRule.DestinationPrefix == nil {
-		destPrefix.Prefix = netip.MustParsePrefix(defaultFirewallRulePrefix)
-	} else {
-		destPrefix.Prefix = specFirewallRule.DestinationPrefix.Prefix
-	}
-
-	fwrule, err := r.DPDK.CreateFirewallRule(ctx, &dpdk.FirewallRule{
-		TypeMeta: dpdk.TypeMeta{Kind: dpdk.FirewallRuleKind},
-		FirewallRuleMeta: dpdk.FirewallRuleMeta{
-			InterfaceID: string(nic.UID),
-		},
-		Spec: dpdk.FirewallRuleSpec{
-			RuleID:            string(specFirewallRule.FirewallRuleID),
-			TrafficDirection:  string(specFirewallRule.Direction),
-			FirewallAction:    string(specFirewallRule.Action),
-			Priority:          priority,
-			SourcePrefix:      &sourcePrefix.Prefix,
-			DestinationPrefix: &destPrefix.Prefix,
-			ProtocolFilter: &dpdkproto.ProtocolFilter{
-				Filter: protocolFilter.Filter},
-		},
-	})
-	if err != nil && fwrule.Status.Code == 0 {
-		return fmt.Errorf("error adding firewall rule: %w", err)
-	}
-	return nil
-}
+//func (r *NetworkInterfaceReconciler) createDPDKFwRule(ctx context.Context, nic *metalnetv1alpha1.NetworkInterface, specFirewallRule *metalnetv1alpha1.FirewallRule) error {
+//	var (
+//		protocolFilter dpdkproto.ProtocolFilter
+//		priority       uint32 = defaultFirewallRulePrio
+//		sourcePrefix   metalnetv1alpha1.IPPrefix
+//		destPrefix     metalnetv1alpha1.IPPrefix
+//	)
+//
+//	switch *specFirewallRule.ProtocolMatch.ProtocolType {
+//	case metalnetv1alpha1.FirewallRuleProtocolTypeICMP:
+//		var icmpType, icmpCode int32
+//		if specFirewallRule.ProtocolMatch.ICMP != nil {
+//			if specFirewallRule.ProtocolMatch.ICMP.IcmpType != nil {
+//				icmpType = *specFirewallRule.ProtocolMatch.ICMP.IcmpType
+//			} else {
+//				icmpType = -1
+//			}
+//			if specFirewallRule.ProtocolMatch.ICMP.IcmpCode != nil {
+//				icmpCode = *specFirewallRule.ProtocolMatch.ICMP.IcmpCode
+//			} else {
+//				icmpCode = -1
+//			}
+//		} else {
+//			icmpCode = -1
+//			icmpType = -1
+//		}
+//		protocolFilter.Filter = &dpdkproto.ProtocolFilter_Icmp{Icmp: &dpdkproto.IcmpFilter{
+//			IcmpType: icmpType,
+//			IcmpCode: icmpCode}}
+//	case metalnetv1alpha1.FirewallRuleProtocolTypeUDP, metalnetv1alpha1.FirewallRuleProtocolTypeTCP:
+//		if err := r.fillTCPUDPFilter(ctx, specFirewallRule, &protocolFilter); err != nil {
+//			return fmt.Errorf("error filling TCP/UDP filter: %w", err)
+//		}
+//	default:
+//		protocolFilter.Filter = nil
+//	}
+//
+//	if specFirewallRule.Priority != nil {
+//		priority = uint32(*specFirewallRule.Priority)
+//	}
+//
+//	if specFirewallRule.SourcePrefix == nil {
+//		sourcePrefix.Prefix = netip.MustParsePrefix(defaultFirewallRulePrefix)
+//	} else {
+//		sourcePrefix.Prefix = specFirewallRule.SourcePrefix.Prefix
+//	}
+//
+//	if specFirewallRule.DestinationPrefix == nil {
+//		destPrefix.Prefix = netip.MustParsePrefix(defaultFirewallRulePrefix)
+//	} else {
+//		destPrefix.Prefix = specFirewallRule.DestinationPrefix.Prefix
+//	}
+//
+//	fwrule, err := r.DPDK.CreateFirewallRule(ctx, &dpdk.FirewallRule{
+//		TypeMeta: dpdk.TypeMeta{Kind: dpdk.FirewallRuleKind},
+//		FirewallRuleMeta: dpdk.FirewallRuleMeta{
+//			InterfaceID: string(nic.UID),
+//		},
+//		Spec: dpdk.FirewallRuleSpec{
+//			RuleID:            string(specFirewallRule.FirewallRuleID),
+//			TrafficDirection:  string(specFirewallRule.Direction),
+//			FirewallAction:    string(specFirewallRule.Action),
+//			Priority:          priority,
+//			SourcePrefix:      &sourcePrefix.Prefix,
+//			DestinationPrefix: &destPrefix.Prefix,
+//			ProtocolFilter: &dpdkproto.ProtocolFilter{
+//				Filter: protocolFilter.Filter},
+//		},
+//	})
+//	if err != nil && fwrule.Status.Code == 0 {
+//		return fmt.Errorf("error adding firewall rule: %w", err)
+//	}
+//	return nil
+//}
 
 func (r *NetworkInterfaceReconciler) deleteDPDKfwRuleIDIfExists(ctx context.Context, nicUID string, ruleUID string) error {
 	if _, err := r.DPDK.DeleteFirewallRule(
@@ -876,15 +875,15 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 		log.V(1).Info("Reconciled prefixes")
 	}
 
-	log.V(1).Info("Reconciling firewall rules")
-	fwruleErr := r.reconcileFirewallRules(ctx, log, nic)
-	if fwruleErr != nil {
-		errs = append(errs, fmt.Errorf("error reconciling firewall rules: %w", fwruleErr))
-		log.Error(fwruleErr, "Error reconciling firewall rules")
-		r.Eventf(nic, corev1.EventTypeWarning, "ErrorReconcilingFirewallRules", "Error reconciling firewall rules: %v", err)
-	} else {
-		log.V(1).Info("Reconciled firewall rules")
-	}
+	//log.V(1).Info("Reconciling firewall rules")
+	//fwruleErr := r.reconcileFirewallRules(ctx, log, nic)
+	//if fwruleErr != nil {
+	//	errs = append(errs, fmt.Errorf("error reconciling firewall rules: %w", fwruleErr))
+	//	log.Error(fwruleErr, "Error reconciling firewall rules")
+	//	r.Eventf(nic, corev1.EventTypeWarning, "ErrorReconcilingFirewallRules", "Error reconciling firewall rules: %v", err)
+	//} else {
+	//	log.V(1).Info("Reconciled firewall rules")
+	//}
 
 	log.V(1).Info("Patching status")
 	if err := r.patchStatus(ctx, nic, func() {
@@ -1132,110 +1131,110 @@ func (r *NetworkInterfaceReconciler) reconcileLBTargets(ctx context.Context, log
 	return nil
 }
 
-func (r *NetworkInterfaceReconciler) reconcileFirewallRules(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface) error {
-	log.V(1).Info("Listing firewall rules")
-	fwList, err := r.DPDK.ListFirewallRules(ctx, string(nic.UID))
-	if err != nil {
-		return fmt.Errorf("error listing firewall rule: %w", err)
-	}
-	list := fwList.Items
+//func (r *NetworkInterfaceReconciler) reconcileFirewallRules(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface) error {
+//	log.V(1).Info("Listing firewall rules")
+//	fwList, err := r.DPDK.ListFirewallRules(ctx, string(nic.UID))
+//	if err != nil {
+//		return fmt.Errorf("error listing firewall rule: %w", err)
+//	}
+//	list := fwList.Items
+//
+//	dpdkFirewallRules := sets.New[string]()
+//	for _, dpdkFirewallRule := range list {
+//		dpdkFirewallRules.Insert(dpdkFirewallRule.Spec.RuleID)
+//	}
+//
+//	specFirewallRules := sets.New[string]()
+//	for _, specFirewallRule := range nic.Spec.FirewallRules {
+//		specFirewallRules.Insert(string(specFirewallRule.FirewallRuleID))
+//	}
+//
+//	// Sort FirewallRules to have deterministic error event output
+//	allFirewallRules := dpdkFirewallRules.UnsortedList()
+//	sort.Slice(allFirewallRules, func(i, j int) bool {
+//		return allFirewallRules[i] < allFirewallRules[j]
+//	})
+//
+//	if dpdkFirewallRules.Len() < specFirewallRules.Len() {
+//		allFirewallRules = specFirewallRules.UnsortedList()
+//		sort.Slice(allFirewallRules, func(i, j int) bool {
+//			return allFirewallRules[i] < allFirewallRules[j]
+//		})
+//	}
+//	var errs []error
+//	var specFirewallRule metalnetv1alpha1.FirewallRule
+//	for _, fwRuleID := range allFirewallRules {
+//		if err := func() error {
+//			log := log.WithValues("FirewallRuleID", fwRuleID)
+//			switch {
+//			case dpdkFirewallRules.Has(fwRuleID) && !specFirewallRules.Has(fwRuleID):
+//				log.V(1).Info("Ensuring dpdk fwRuleID does not exist")
+//				if err := r.deleteDPDKfwRuleIDIfExists(ctx, string(nic.UID), fwRuleID); err != nil {
+//					return err
+//				}
+//				log.V(1).Info("Ensured dpdk fwRuleID does not exist")
+//				return nil
+//			case specFirewallRules.Has(fwRuleID) && !dpdkFirewallRules.Has(fwRuleID):
+//				for _, specFirewallRule = range nic.Spec.FirewallRules {
+//					if specFirewallRule.FirewallRuleID == types.UID(fwRuleID) {
+//						break
+//					}
+//				}
+//				log.V(1).Info("Creating dpdk fwRuleID")
+//				if err := r.createDPDKFwRule(ctx, nic, &specFirewallRule); err != nil {
+//					return err
+//				}
+//				log.V(1).Info("Ensured dpdk fwRuleID exists")
+//				return nil
+//			default:
+//				return nil
+//			}
+//		}(); err != nil {
+//			errs = append(errs, fmt.Errorf("[fwRuleID %s] %w", fwRuleID, err))
+//		}
+//	}
+//
+//	if len(errs) > 0 {
+//		return fmt.Errorf("error(s) reconciling fwRuleID(es): %v", errs)
+//	}
+//	return nil
+//}
+//
+//func (r *NetworkInterfaceReconciler) isValidMeteringParams(meteringParams *metalnetv1alpha1.MeteringParameters) (bool, error) {
+//	if meteringParams == nil {
+//		return true, nil
+//	}
+//
+//	if meteringParams.TotalRate != nil && meteringParams.PublicRate != nil {
+//		if *meteringParams.TotalRate < *meteringParams.PublicRate {
+//			return false, fmt.Errorf("total rate cannot be less than public rate")
+//		}
+//	}
+//
+//	return true, nil
+//}
 
-	dpdkFirewallRules := sets.New[string]()
-	for _, dpdkFirewallRule := range list {
-		dpdkFirewallRules.Insert(dpdkFirewallRule.Spec.RuleID)
-	}
-
-	specFirewallRules := sets.New[string]()
-	for _, specFirewallRule := range nic.Spec.FirewallRules {
-		specFirewallRules.Insert(string(specFirewallRule.FirewallRuleID))
-	}
-
-	// Sort FirewallRules to have deterministic error event output
-	allFirewallRules := dpdkFirewallRules.UnsortedList()
-	sort.Slice(allFirewallRules, func(i, j int) bool {
-		return allFirewallRules[i] < allFirewallRules[j]
-	})
-
-	if dpdkFirewallRules.Len() < specFirewallRules.Len() {
-		allFirewallRules = specFirewallRules.UnsortedList()
-		sort.Slice(allFirewallRules, func(i, j int) bool {
-			return allFirewallRules[i] < allFirewallRules[j]
-		})
-	}
-	var errs []error
-	var specFirewallRule metalnetv1alpha1.FirewallRule
-	for _, fwRuleID := range allFirewallRules {
-		if err := func() error {
-			log := log.WithValues("FirewallRuleID", fwRuleID)
-			switch {
-			case dpdkFirewallRules.Has(fwRuleID) && !specFirewallRules.Has(fwRuleID):
-				log.V(1).Info("Ensuring dpdk fwRuleID does not exist")
-				if err := r.deleteDPDKfwRuleIDIfExists(ctx, string(nic.UID), fwRuleID); err != nil {
-					return err
-				}
-				log.V(1).Info("Ensured dpdk fwRuleID does not exist")
-				return nil
-			case specFirewallRules.Has(fwRuleID) && !dpdkFirewallRules.Has(fwRuleID):
-				for _, specFirewallRule = range nic.Spec.FirewallRules {
-					if specFirewallRule.FirewallRuleID == types.UID(fwRuleID) {
-						break
-					}
-				}
-				log.V(1).Info("Creating dpdk fwRuleID")
-				if err := r.createDPDKFwRule(ctx, nic, &specFirewallRule); err != nil {
-					return err
-				}
-				log.V(1).Info("Ensured dpdk fwRuleID exists")
-				return nil
-			default:
-				return nil
-			}
-		}(); err != nil {
-			errs = append(errs, fmt.Errorf("[fwRuleID %s] %w", fwRuleID, err))
-		}
-	}
-
-	if len(errs) > 0 {
-		return fmt.Errorf("error(s) reconciling fwRuleID(es): %v", errs)
-	}
-	return nil
-}
-
-func (r *NetworkInterfaceReconciler) isValidMeteringParams(meteringParams *metalnetv1alpha1.MeteringParameters) (bool, error) {
-	if meteringParams == nil {
-		return true, nil
-	}
-
-	if meteringParams.TotalRate != nil && meteringParams.PublicRate != nil {
-		if *meteringParams.TotalRate < *meteringParams.PublicRate {
-			return false, fmt.Errorf("total rate cannot be less than public rate")
-		}
-	}
-
-	return true, nil
-}
-
-func (r *NetworkInterfaceReconciler) getInterfaceMeteringParams(nic *metalnetv1alpha1.NetworkInterface) (*dpdk.MeteringParams, error) {
-
-	meterParams := &dpdk.MeteringParams{
-		TotalRate:  0,
-		PublicRate: 0,
-	}
-
-	if nic.Spec.MeteringRate == nil {
-		return meterParams, nil
-	}
-
-	if nic.Spec.MeteringRate.TotalRate != nil {
-		meterParams.TotalRate = *nic.Spec.MeteringRate.TotalRate
-	}
-
-	if nic.Spec.MeteringRate.PublicRate != nil {
-		meterParams.PublicRate = *nic.Spec.MeteringRate.PublicRate
-	}
-
-	return meterParams, nil
-}
+//func (r *NetworkInterfaceReconciler) getInterfaceMeteringParams(nic *metalnetv1alpha1.NetworkInterface) (*dpdk.MeteringParams, error) {
+//
+//	meterParams := &dpdk.MeteringParams{
+//		TotalRate:  0,
+//		PublicRate: 0,
+//	}
+//
+//	if nic.Spec.MeteringRate == nil {
+//		return meterParams, nil
+//	}
+//
+//	if nic.Spec.MeteringRate.TotalRate != nil {
+//		meterParams.TotalRate = *nic.Spec.MeteringRate.TotalRate
+//	}
+//
+//	if nic.Spec.MeteringRate.PublicRate != nil {
+//		meterParams.PublicRate = *nic.Spec.MeteringRate.PublicRate
+//	}
+//
+//	return meterParams, nil
+//}
 
 func (r *NetworkInterfaceReconciler) applyInterface(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, vni uint32) (*ghw.PCIAddress, netip.Addr, bool, error) {
 	log.V(1).Info("Getting dpdk interface")
@@ -1266,19 +1265,19 @@ func (r *NetworkInterfaceReconciler) applyInterface(ctx context.Context, log log
 		primaryIpv4 := getNetworkInterfaceIP(corev1.IPv4Protocol, nic)
 		primaryIpv6 := getNetworkInterfaceIP(corev1.IPv6Protocol, nic)
 
-		meteringParams, err := r.getInterfaceMeteringParams(nic)
-		if err != nil {
-			return nil, netip.Addr{}, false, fmt.Errorf("error getting metering params: %w", err)
-		}
+		//meteringParams, err := r.getInterfaceMeteringParams(nic)
+		//if err != nil {
+		//	return nil, netip.Addr{}, false, fmt.Errorf("error getting metering params: %w", err)
+		//}
 
 		iface, err := r.DPDK.CreateInterface(ctx, &dpdk.Interface{
 			InterfaceMeta: dpdk.InterfaceMeta{ID: string(nic.UID)},
 			Spec: dpdk.InterfaceSpec{
-				VNI:      vni,
-				Device:   dpdkDevice,
-				IPv4:     &primaryIpv4,
-				IPv6:     &primaryIpv6,
-				Metering: meteringParams,
+				VNI:    vni,
+				Device: dpdkDevice,
+				IPv4:   &primaryIpv4,
+				IPv6:   &primaryIpv6,
+				//Metering: meteringParams,
 			},
 		})
 		if err != nil {

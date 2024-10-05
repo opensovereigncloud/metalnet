@@ -12,12 +12,12 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
-	dpdk "github.com/ironcore-dev/dpservice/go/dpservice-go/api"
-	dpdkclient "github.com/ironcore-dev/dpservice/go/dpservice-go/client"
-	dpdkerrors "github.com/ironcore-dev/dpservice/go/dpservice-go/errors"
 	mb "github.com/ironcore-dev/metalbond"
 	mbproto "github.com/ironcore-dev/metalbond/pb"
 	"github.com/ironcore-dev/metalnet/internal"
+	dpdk "github.com/onmetal/net-dpservice-go/api"
+	dpdkclient "github.com/onmetal/net-dpservice-go/client"
+	dpdkerrors "github.com/onmetal/net-dpservice-go/errors"
 )
 
 type ClientOptions struct {

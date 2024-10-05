@@ -108,11 +108,11 @@ run-base: generate fmt lint ## Run the binary
 
 .PHONY: docker-build
 docker-build: ## Build docker image with partitionlet.
-	docker build $(BUILDARGS) -t ${IMG} $(GITHUB_PAT_MOUNT) .
+	podman build $(BUILDARGS) -t ${IMG} $(GITHUB_PAT_MOUNT) .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
-	docker push ${IMG}
+	podman push ${IMG}
 
 .PHONY: install
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.

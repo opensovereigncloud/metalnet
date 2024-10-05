@@ -5,7 +5,7 @@ metadata:
   name: network-editor-role
 rules:
 - apiGroups:
-  - networking.metalnet.ironcore.dev
+  - networking.metalnet.onmetal.de
   resources:
   - networks
   verbs:
@@ -17,7 +17,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - networking.metalnet.ironcore.dev
+  - networking.metalnet.onmetal.de
   resources:
   - networks/status
   verbs:

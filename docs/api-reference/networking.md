@@ -1,19 +1,19 @@
 <p>Packages:</p>
 <ul>
 <li>
-<a href="#networking.metalnet.ironcore.dev%2fv1alpha1">networking.metalnet.ironcore.dev/v1alpha1</a>
+<a href="#networking.metalnet.onmetal.de%2fv1alpha1">networking.metalnet.onmetal.de/v1alpha1</a>
 </li>
 </ul>
-<h2 id="networking.metalnet.ironcore.dev/v1alpha1">networking.metalnet.ironcore.dev/v1alpha1</h2>
+<h2 id="networking.metalnet.onmetal.de/v1alpha1">networking.metalnet.onmetal.de/v1alpha1</h2>
 <div>
 <p>Package v1alpha1 is the v1alpha1 version of the API.</p>
 </div>
 Resource Types:
 <ul></ul>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.FirewallRule">FirewallRule
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.FirewallRule">FirewallRule
 </h3>
 <p>
-(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkInterfaceSpec">NetworkInterfaceSpec</a>)
+(<em>Appears on:</em><a href="#networking.metalnet.onmetal.de/v1alpha1.NetworkInterfaceSpec">NetworkInterfaceSpec</a>)
 </p>
 <div>
 <p>FirewallRule defines the desired state of FirewallRule</p>
@@ -42,7 +42,7 @@ k8s.io/apimachinery/pkg/types.UID
 <td>
 <code>direction</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.FirewallRuleDirection">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.FirewallRuleDirection">
 FirewallRuleDirection
 </a>
 </em>
@@ -54,7 +54,7 @@ FirewallRuleDirection
 <td>
 <code>action</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.FirewallRuleAction">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.FirewallRuleAction">
 FirewallRuleAction
 </a>
 </em>
@@ -88,7 +88,7 @@ Kubernetes core/v1.IPFamily
 <td>
 <code>sourcePrefix</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.IPPrefix">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.IPPrefix">
 IPPrefix
 </a>
 </em>
@@ -100,7 +100,7 @@ IPPrefix
 <td>
 <code>destinationPrefix</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.IPPrefix">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.IPPrefix">
 IPPrefix
 </a>
 </em>
@@ -112,7 +112,7 @@ IPPrefix
 <td>
 <code>protocolMatch</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.ProtocolMatch">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.ProtocolMatch">
 ProtocolMatch
 </a>
 </em>
@@ -122,10 +122,10 @@ ProtocolMatch
 </tr>
 </tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.FirewallRuleAction">FirewallRuleAction
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.FirewallRuleAction">FirewallRuleAction
 (<code>string</code> alias)</h3>
 <p>
-(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.FirewallRule">FirewallRule</a>)
+(<em>Appears on:</em><a href="#networking.metalnet.onmetal.de/v1alpha1.FirewallRule">FirewallRule</a>)
 </p>
 <div>
 <p>FirewallRuleAction is the action of the rule.</p>
@@ -145,10 +145,10 @@ ProtocolMatch
 </td>
 </tr></tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.FirewallRuleDirection">FirewallRuleDirection
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.FirewallRuleDirection">FirewallRuleDirection
 (<code>string</code> alias)</h3>
 <p>
-(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.FirewallRule">FirewallRule</a>)
+(<em>Appears on:</em><a href="#networking.metalnet.onmetal.de/v1alpha1.FirewallRule">FirewallRule</a>)
 </p>
 <div>
 <p>FirewallRuleDirection is the direction of the rule.</p>
@@ -168,10 +168,10 @@ ProtocolMatch
 </td>
 </tr></tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.ICMPMatch">ICMPMatch
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.ICMPMatch">ICMPMatch
 </h3>
 <p>
-(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.ProtocolMatch">ProtocolMatch</a>)
+(<em>Appears on:</em><a href="#networking.metalnet.onmetal.de/v1alpha1.ProtocolMatch">ProtocolMatch</a>)
 </p>
 <div>
 </div>
@@ -205,10 +205,10 @@ int32
 </tr>
 </tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.IP">IP
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.IP">IP
 </h3>
 <p>
-(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.LoadBalancerSpec">LoadBalancerSpec</a>, <a href="#networking.metalnet.ironcore.dev/v1alpha1.NATDetails">NATDetails</a>, <a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkInterfaceSpec">NetworkInterfaceSpec</a>, <a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkInterfaceStatus">NetworkInterfaceStatus</a>)
+(<em>Appears on:</em><a href="#networking.metalnet.onmetal.de/v1alpha1.LoadBalancerSpec">LoadBalancerSpec</a>, <a href="#networking.metalnet.onmetal.de/v1alpha1.NATDetails">NATDetails</a>, <a href="#networking.metalnet.onmetal.de/v1alpha1.NetworkInterfaceSpec">NetworkInterfaceSpec</a>, <a href="#networking.metalnet.onmetal.de/v1alpha1.NetworkInterfaceStatus">NetworkInterfaceStatus</a>)
 </p>
 <div>
 <p>IP is an IP address.</p>
@@ -235,10 +235,10 @@ net/netip.Addr
 </tr>
 </tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.IPPrefix">IPPrefix
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.IPPrefix">IPPrefix
 </h3>
 <p>
-(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.FirewallRule">FirewallRule</a>, <a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkInterfaceSpec">NetworkInterfaceSpec</a>, <a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkInterfaceStatus">NetworkInterfaceStatus</a>, <a href="#networking.metalnet.ironcore.dev/v1alpha1.PeeredPrefix">PeeredPrefix</a>)
+(<em>Appears on:</em><a href="#networking.metalnet.onmetal.de/v1alpha1.FirewallRule">FirewallRule</a>, <a href="#networking.metalnet.onmetal.de/v1alpha1.NetworkInterfaceSpec">NetworkInterfaceSpec</a>, <a href="#networking.metalnet.onmetal.de/v1alpha1.NetworkInterfaceStatus">NetworkInterfaceStatus</a>, <a href="#networking.metalnet.onmetal.de/v1alpha1.PeeredPrefix">PeeredPrefix</a>)
 </p>
 <div>
 <p>IPPrefix represents a network prefix.</p>
@@ -265,10 +265,10 @@ net/netip.Prefix
 </tr>
 </tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.LBPort">LBPort
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.LBPort">LBPort
 </h3>
 <p>
-(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.LoadBalancerSpec">LoadBalancerSpec</a>)
+(<em>Appears on:</em><a href="#networking.metalnet.onmetal.de/v1alpha1.LoadBalancerSpec">LoadBalancerSpec</a>)
 </p>
 <div>
 <p>LBPort consists of port and protocol</p>
@@ -303,7 +303,7 @@ int32
 </tr>
 </tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.LoadBalancer">LoadBalancer
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.LoadBalancer">LoadBalancer
 </h3>
 <div>
 <p>LoadBalancer is the Schema for the loadbalancers API</p>
@@ -334,7 +334,7 @@ Refer to the Kubernetes API documentation for the fields of the
 <td>
 <code>spec</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.LoadBalancerSpec">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.LoadBalancerSpec">
 LoadBalancerSpec
 </a>
 </em>
@@ -360,7 +360,7 @@ Kubernetes core/v1.LocalObjectReference
 <td>
 <code>type</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.LoadBalancerType">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.LoadBalancerType">
 LoadBalancerType
 </a>
 </em>
@@ -386,7 +386,7 @@ Kubernetes core/v1.IPFamily
 <td>
 <code>ip</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.IP">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.IP">
 IP
 </a>
 </em>
@@ -399,7 +399,7 @@ IP
 <td>
 <code>ports</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.LBPort">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.LBPort">
 []LBPort
 </a>
 </em>
@@ -426,7 +426,7 @@ string
 <td>
 <code>status</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.LoadBalancerStatus">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.LoadBalancerStatus">
 LoadBalancerStatus
 </a>
 </em>
@@ -436,10 +436,10 @@ LoadBalancerStatus
 </tr>
 </tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.LoadBalancerSpec">LoadBalancerSpec
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.LoadBalancerSpec">LoadBalancerSpec
 </h3>
 <p>
-(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.LoadBalancer">LoadBalancer</a>)
+(<em>Appears on:</em><a href="#networking.metalnet.onmetal.de/v1alpha1.LoadBalancer">LoadBalancer</a>)
 </p>
 <div>
 <p>LoadBalancerSpec defines the desired state of LoadBalancer</p>
@@ -469,7 +469,7 @@ Kubernetes core/v1.LocalObjectReference
 <td>
 <code>type</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.LoadBalancerType">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.LoadBalancerType">
 LoadBalancerType
 </a>
 </em>
@@ -495,7 +495,7 @@ Kubernetes core/v1.IPFamily
 <td>
 <code>ip</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.IP">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.IP">
 IP
 </a>
 </em>
@@ -508,7 +508,7 @@ IP
 <td>
 <code>ports</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.LBPort">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.LBPort">
 []LBPort
 </a>
 </em>
@@ -530,10 +530,10 @@ string
 </tr>
 </tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.LoadBalancerState">LoadBalancerState
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.LoadBalancerState">LoadBalancerState
 (<code>string</code> alias)</h3>
 <p>
-(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.LoadBalancerStatus">LoadBalancerStatus</a>)
+(<em>Appears on:</em><a href="#networking.metalnet.onmetal.de/v1alpha1.LoadBalancerStatus">LoadBalancerStatus</a>)
 </p>
 <div>
 <p>LoadBalancerState is the binding state of a LoadBalancer.</p>
@@ -556,10 +556,10 @@ string
 </td>
 </tr></tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.LoadBalancerStatus">LoadBalancerStatus
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.LoadBalancerStatus">LoadBalancerStatus
 </h3>
 <p>
-(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.LoadBalancer">LoadBalancer</a>)
+(<em>Appears on:</em><a href="#networking.metalnet.onmetal.de/v1alpha1.LoadBalancer">LoadBalancer</a>)
 </p>
 <div>
 <p>LoadBalancerStatus defines the observed state of LoadBalancer</p>
@@ -576,7 +576,7 @@ string
 <td>
 <code>state</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.LoadBalancerState">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.LoadBalancerState">
 LoadBalancerState
 </a>
 </em>
@@ -587,10 +587,10 @@ LoadBalancerState
 </tr>
 </tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.LoadBalancerType">LoadBalancerType
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.LoadBalancerType">LoadBalancerType
 (<code>string</code> alias)</h3>
 <p>
-(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.LoadBalancerSpec">LoadBalancerSpec</a>)
+(<em>Appears on:</em><a href="#networking.metalnet.onmetal.de/v1alpha1.LoadBalancerSpec">LoadBalancerSpec</a>)
 </p>
 <div>
 <p>LoadBalancerType is the type of a LoadBalancer.</p>
@@ -610,7 +610,7 @@ LoadBalancerState
 </td>
 </tr></tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.LocalUIDReference">LocalUIDReference
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.LocalUIDReference">LocalUIDReference
 </h3>
 <div>
 <p>LocalUIDReference is a reference to another entity including its UID</p>
@@ -650,10 +650,10 @@ k8s.io/apimachinery/pkg/types.UID
 </tr>
 </tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.MeteringParameters">MeteringParameters
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.MeteringParameters">MeteringParameters
 </h3>
 <p>
-(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkInterfaceSpec">NetworkInterfaceSpec</a>)
+(<em>Appears on:</em><a href="#networking.metalnet.onmetal.de/v1alpha1.NetworkInterfaceSpec">NetworkInterfaceSpec</a>)
 </p>
 <div>
 </div>
@@ -687,10 +687,10 @@ uint64
 </tr>
 </tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.NATDetails">NATDetails
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.NATDetails">NATDetails
 </h3>
 <p>
-(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkInterfaceSpec">NetworkInterfaceSpec</a>, <a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkInterfaceStatus">NetworkInterfaceStatus</a>)
+(<em>Appears on:</em><a href="#networking.metalnet.onmetal.de/v1alpha1.NetworkInterfaceSpec">NetworkInterfaceSpec</a>, <a href="#networking.metalnet.onmetal.de/v1alpha1.NetworkInterfaceStatus">NetworkInterfaceStatus</a>)
 </p>
 <div>
 <p>LBPort consists of port and protocol</p>
@@ -707,7 +707,7 @@ uint64
 <td>
 <code>ip</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.IP">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.IP">
 IP
 </a>
 </em>
@@ -737,7 +737,7 @@ int32
 </tr>
 </tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.Network">Network
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.Network">Network
 </h3>
 <div>
 <p>Network is the Schema for the networks API</p>
@@ -768,7 +768,7 @@ Refer to the Kubernetes API documentation for the fields of the
 <td>
 <code>spec</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkSpec">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.NetworkSpec">
 NetworkSpec
 </a>
 </em>
@@ -803,7 +803,7 @@ int32
 <td>
 <code>peeredPrefixes</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.PeeredPrefix">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.PeeredPrefix">
 []PeeredPrefix
 </a>
 </em>
@@ -820,7 +820,7 @@ int32
 <td>
 <code>status</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkStatus">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.NetworkStatus">
 NetworkStatus
 </a>
 </em>
@@ -830,7 +830,7 @@ NetworkStatus
 </tr>
 </tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.NetworkInterface">NetworkInterface
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.NetworkInterface">NetworkInterface
 </h3>
 <div>
 <p>NetworkInterface is the Schema for the networkinterfaces API</p>
@@ -861,7 +861,7 @@ Refer to the Kubernetes API documentation for the fields of the
 <td>
 <code>spec</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkInterfaceSpec">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.NetworkInterfaceSpec">
 NetworkInterfaceSpec
 </a>
 </em>
@@ -902,7 +902,7 @@ Only one IP supported at the moment.</p>
 <td>
 <code>ips</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.IP">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.IP">
 []IP
 </a>
 </em>
@@ -916,7 +916,7 @@ Only one IP supported at the moment.</p>
 <td>
 <code>virtualIP</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.IP">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.IP">
 IP
 </a>
 </em>
@@ -929,7 +929,7 @@ IP
 <td>
 <code>prefixes</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.IPPrefix">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.IPPrefix">
 []IPPrefix
 </a>
 </em>
@@ -942,7 +942,7 @@ IP
 <td>
 <code>loadBalancerTargets</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.IPPrefix">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.IPPrefix">
 []IPPrefix
 </a>
 </em>
@@ -955,7 +955,7 @@ IP
 <td>
 <code>nat</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.NATDetails">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.NATDetails">
 NATDetails
 </a>
 </em>
@@ -979,7 +979,7 @@ string
 <td>
 <code>firewallRules</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.FirewallRule">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.FirewallRule">
 []FirewallRule
 </a>
 </em>
@@ -992,7 +992,7 @@ string
 <td>
 <code>meteringRate</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.MeteringParameters">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.MeteringParameters">
 MeteringParameters
 </a>
 </em>
@@ -1008,7 +1008,7 @@ MeteringParameters
 <td>
 <code>status</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkInterfaceStatus">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.NetworkInterfaceStatus">
 NetworkInterfaceStatus
 </a>
 </em>
@@ -1019,10 +1019,10 @@ NetworkInterfaceStatus
 </tr>
 </tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.NetworkInterfaceSpec">NetworkInterfaceSpec
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.NetworkInterfaceSpec">NetworkInterfaceSpec
 </h3>
 <p>
-(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkInterface">NetworkInterface</a>)
+(<em>Appears on:</em><a href="#networking.metalnet.onmetal.de/v1alpha1.NetworkInterface">NetworkInterface</a>)
 </p>
 <div>
 <p>NetworkInterfaceSpec defines the desired state of NetworkInterface</p>
@@ -1066,7 +1066,7 @@ Only one IP supported at the moment.</p>
 <td>
 <code>ips</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.IP">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.IP">
 []IP
 </a>
 </em>
@@ -1080,7 +1080,7 @@ Only one IP supported at the moment.</p>
 <td>
 <code>virtualIP</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.IP">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.IP">
 IP
 </a>
 </em>
@@ -1093,7 +1093,7 @@ IP
 <td>
 <code>prefixes</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.IPPrefix">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.IPPrefix">
 []IPPrefix
 </a>
 </em>
@@ -1106,7 +1106,7 @@ IP
 <td>
 <code>loadBalancerTargets</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.IPPrefix">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.IPPrefix">
 []IPPrefix
 </a>
 </em>
@@ -1119,7 +1119,7 @@ IP
 <td>
 <code>nat</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.NATDetails">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.NATDetails">
 NATDetails
 </a>
 </em>
@@ -1143,7 +1143,7 @@ string
 <td>
 <code>firewallRules</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.FirewallRule">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.FirewallRule">
 []FirewallRule
 </a>
 </em>
@@ -1156,7 +1156,7 @@ string
 <td>
 <code>meteringRate</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.MeteringParameters">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.MeteringParameters">
 MeteringParameters
 </a>
 </em>
@@ -1167,10 +1167,10 @@ MeteringParameters
 </tr>
 </tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.NetworkInterfaceState">NetworkInterfaceState
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.NetworkInterfaceState">NetworkInterfaceState
 (<code>string</code> alias)</h3>
 <p>
-(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkInterfaceStatus">NetworkInterfaceStatus</a>)
+(<em>Appears on:</em><a href="#networking.metalnet.onmetal.de/v1alpha1.NetworkInterfaceStatus">NetworkInterfaceStatus</a>)
 </p>
 <div>
 <p>NetworkInterfaceState is the binding state of a NetworkInterface.</p>
@@ -1193,10 +1193,10 @@ MeteringParameters
 </td>
 </tr></tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.NetworkInterfaceStatus">NetworkInterfaceStatus
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.NetworkInterfaceStatus">NetworkInterfaceStatus
 </h3>
 <p>
-(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkInterface">NetworkInterface</a>)
+(<em>Appears on:</em><a href="#networking.metalnet.onmetal.de/v1alpha1.NetworkInterface">NetworkInterface</a>)
 </p>
 <div>
 <p>NetworkInterfaceStatus defines the observed state of NetworkInterface</p>
@@ -1213,7 +1213,7 @@ MeteringParameters
 <td>
 <code>pciAddress</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.PCIAddress">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.PCIAddress">
 PCIAddress
 </a>
 </em>
@@ -1225,7 +1225,7 @@ PCIAddress
 <td>
 <code>virtualIP</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.IP">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.IP">
 IP
 </a>
 </em>
@@ -1238,7 +1238,7 @@ IP
 <td>
 <code>natIP</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.NATDetails">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.NATDetails">
 NATDetails
 </a>
 </em>
@@ -1251,7 +1251,7 @@ NATDetails
 <td>
 <code>prefixes</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.IPPrefix">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.IPPrefix">
 []IPPrefix
 </a>
 </em>
@@ -1264,7 +1264,7 @@ NATDetails
 <td>
 <code>loadBalancerTargets</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.IPPrefix">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.IPPrefix">
 []IPPrefix
 </a>
 </em>
@@ -1277,7 +1277,7 @@ NATDetails
 <td>
 <code>state</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkInterfaceState">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.NetworkInterfaceState">
 NetworkInterfaceState
 </a>
 </em>
@@ -1288,10 +1288,10 @@ NetworkInterfaceState
 </tr>
 </tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.NetworkPeeringState">NetworkPeeringState
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.NetworkPeeringState">NetworkPeeringState
 (<code>string</code> alias)</h3>
 <p>
-(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkPeeringStatus">NetworkPeeringStatus</a>)
+(<em>Appears on:</em><a href="#networking.metalnet.onmetal.de/v1alpha1.NetworkPeeringStatus">NetworkPeeringStatus</a>)
 </p>
 <div>
 <p>NetworkPeeringState is the state a NetworkPeering</p>
@@ -1314,10 +1314,10 @@ NetworkInterfaceState
 </td>
 </tr></tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.NetworkPeeringStatus">NetworkPeeringStatus
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.NetworkPeeringStatus">NetworkPeeringStatus
 </h3>
 <p>
-(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkStatus">NetworkStatus</a>)
+(<em>Appears on:</em><a href="#networking.metalnet.onmetal.de/v1alpha1.NetworkStatus">NetworkStatus</a>)
 </p>
 <div>
 <p>NetworkPeeringStatus is the status of a network peering.</p>
@@ -1345,7 +1345,7 @@ int32
 <td>
 <code>state</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkPeeringState">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.NetworkPeeringState">
 NetworkPeeringState
 </a>
 </em>
@@ -1356,10 +1356,10 @@ NetworkPeeringState
 </tr>
 </tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.NetworkSpec">NetworkSpec
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.NetworkSpec">NetworkSpec
 </h3>
 <p>
-(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.Network">Network</a>)
+(<em>Appears on:</em><a href="#networking.metalnet.onmetal.de/v1alpha1.Network">Network</a>)
 </p>
 <div>
 <p>NetworkSpec defines the desired state of Network</p>
@@ -1398,7 +1398,7 @@ int32
 <td>
 <code>peeredPrefixes</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.PeeredPrefix">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.PeeredPrefix">
 []PeeredPrefix
 </a>
 </em>
@@ -1410,10 +1410,10 @@ int32
 </tr>
 </tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.NetworkStatus">NetworkStatus
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.NetworkStatus">NetworkStatus
 </h3>
 <p>
-(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.Network">Network</a>)
+(<em>Appears on:</em><a href="#networking.metalnet.onmetal.de/v1alpha1.Network">Network</a>)
 </p>
 <div>
 </div>
@@ -1429,7 +1429,7 @@ int32
 <td>
 <code>peerings</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkPeeringStatus">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.NetworkPeeringStatus">
 []NetworkPeeringStatus
 </a>
 </em>
@@ -1440,10 +1440,10 @@ int32
 </tr>
 </tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.PCIAddress">PCIAddress
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.PCIAddress">PCIAddress
 </h3>
 <p>
-(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkInterfaceStatus">NetworkInterfaceStatus</a>)
+(<em>Appears on:</em><a href="#networking.metalnet.onmetal.de/v1alpha1.NetworkInterfaceStatus">NetworkInterfaceStatus</a>)
 </p>
 <div>
 <p>PCIAddress is a PCI address.</p>
@@ -1498,10 +1498,10 @@ string
 </tr>
 </tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.PeeredPrefix">PeeredPrefix
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.PeeredPrefix">PeeredPrefix
 </h3>
 <p>
-(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkSpec">NetworkSpec</a>)
+(<em>Appears on:</em><a href="#networking.metalnet.onmetal.de/v1alpha1.NetworkSpec">NetworkSpec</a>)
 </p>
 <div>
 <p>PeeredPrefix contains information of the peered networks and their allowed CIDRs.</p>
@@ -1528,7 +1528,7 @@ int32
 <td>
 <code>prefixes</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.IPPrefix">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.IPPrefix">
 []IPPrefix
 </a>
 </em>
@@ -1538,10 +1538,10 @@ int32
 </tr>
 </tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.PortMatch">PortMatch
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.PortMatch">PortMatch
 </h3>
 <p>
-(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.ProtocolMatch">ProtocolMatch</a>)
+(<em>Appears on:</em><a href="#networking.metalnet.onmetal.de/v1alpha1.ProtocolMatch">ProtocolMatch</a>)
 </p>
 <div>
 </div>
@@ -1595,10 +1595,10 @@ int32
 </tr>
 </tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.ProtocolMatch">ProtocolMatch
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.ProtocolMatch">ProtocolMatch
 </h3>
 <p>
-(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.FirewallRule">FirewallRule</a>)
+(<em>Appears on:</em><a href="#networking.metalnet.onmetal.de/v1alpha1.FirewallRule">FirewallRule</a>)
 </p>
 <div>
 </div>
@@ -1614,7 +1614,7 @@ int32
 <td>
 <code>protocolType</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.ProtocolType">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.ProtocolType">
 ProtocolType
 </a>
 </em>
@@ -1626,7 +1626,7 @@ ProtocolType
 <td>
 <code>icmp</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.ICMPMatch">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.ICMPMatch">
 ICMPMatch
 </a>
 </em>
@@ -1638,7 +1638,7 @@ ICMPMatch
 <td>
 <code>portRange</code><br/>
 <em>
-<a href="#networking.metalnet.ironcore.dev/v1alpha1.PortMatch">
+<a href="#networking.metalnet.onmetal.de/v1alpha1.PortMatch">
 PortMatch
 </a>
 </em>
@@ -1648,10 +1648,10 @@ PortMatch
 </tr>
 </tbody>
 </table>
-<h3 id="networking.metalnet.ironcore.dev/v1alpha1.ProtocolType">ProtocolType
+<h3 id="networking.metalnet.onmetal.de/v1alpha1.ProtocolType">ProtocolType
 (<code>string</code> alias)</h3>
 <p>
-(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.ProtocolMatch">ProtocolMatch</a>)
+(<em>Appears on:</em><a href="#networking.metalnet.onmetal.de/v1alpha1.ProtocolMatch">ProtocolMatch</a>)
 </p>
 <div>
 <p>ProtocolType is the type for the network protocol</p>

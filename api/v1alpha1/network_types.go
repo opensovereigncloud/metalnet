@@ -1,5 +1,18 @@
-// SPDX-FileCopyrightText: 2022 SAP SE or an SAP affiliate company and IronCore contributors
-// SPDX-License-Identifier: Apache-2.0
+/*
+Copyright 2022 The Metal Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package v1alpha1
 
@@ -27,41 +40,15 @@ type NetworkSpec struct {
 	// +listType=map
 	// +listMapKey=id
 	PeeredPrefixes []PeeredPrefix `json:"peeredPrefixes,omitempty" patchStrategy:"merge" patchMergeKey:"peeredPrefixes"`
+
+	// InternetGateway is a flag that indicates whether the network has an internet gateway.
+	InternetGateway bool `json:"internetGateway,omitempty"`
 }
 
 // PeeredPrefix contains information of the peered networks and their allowed CIDRs.
 type PeeredPrefix struct {
-	// +kubebuilder:validation:Maximum=16777215
-	// +kubebuilder:validation:Minimum=1
 	ID       int32      `json:"id"`
 	Prefixes []IPPrefix `json:"prefixes"`
-}
-
-type NetworkStatus struct {
-	// Peerings contains the states of the network peerings for the network.
-	Peerings []NetworkPeeringStatus `json:"peerings,omitempty"`
-}
-
-// NetworkPeeringState is the state a NetworkPeering
-type NetworkPeeringState string
-
-const (
-	// NetworkPeeringStateError signals that the there was an error during network peering.
-	NetworkPeeringStateError NetworkPeeringState = "Error"
-	// NetworkPeeringStatePending signals that the network peering is not applied.
-	NetworkPeeringStatePending NetworkPeeringState = "Pending"
-	// NetworkPeeringStateReady signals that the network peering is ready.
-	NetworkPeeringStateReady NetworkPeeringState = "Ready"
-)
-
-// NetworkPeeringStatus is the status of a network peering.
-type NetworkPeeringStatus struct {
-	// +kubebuilder:validation:Maximum=16777215
-	// +kubebuilder:validation:Minimum=1
-	// ID is the ID of the peered network.
-	ID int32 `json:"id"`
-	// State represents the network peering state
-	State NetworkPeeringState `json:"state,omitempty"`
 }
 
 //+kubebuilder:object:root=true
@@ -74,10 +61,7 @@ type Network struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	// +kubebuilder:validation:Required
-	Spec NetworkSpec `json:"spec"`
-
-	Status NetworkStatus `json:"status,omitempty"`
+	Spec NetworkSpec `json:"spec,omitempty"`
 }
 
 //+kubebuilder:object:root=true

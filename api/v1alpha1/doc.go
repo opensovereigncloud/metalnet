@@ -3,7 +3,7 @@
 
 // +k8s:deepcopy-gen=package
 // +k8s:openapi-gen=true
-// +groupName=networking.metalnet.ironcore.dev
+// +groupName=networking.metalnet.onmetal.de
 
 // Package v1alpha1 is the v1alpha1 version of the API.
 package v1alpha1 // import "github.com/ironcore-dev/metalnet/api/v1alpha1"

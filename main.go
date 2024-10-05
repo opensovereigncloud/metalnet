@@ -32,10 +32,10 @@ import (
 	"github.com/ironcore-dev/metalnet/netfns"
 	"github.com/ironcore-dev/metalnet/sysfs"
 
-	dpdk "github.com/ironcore-dev/dpservice/go/dpservice-go/api"
-	dpdkclient "github.com/ironcore-dev/dpservice/go/dpservice-go/client"
-	dpdkproto "github.com/ironcore-dev/dpservice/go/dpservice-go/proto"
 	mb "github.com/ironcore-dev/metalbond"
+	dpdk "github.com/onmetal/net-dpservice-go/api"
+	dpdkclient "github.com/onmetal/net-dpservice-go/client"
+	dpdkproto "github.com/onmetal/net-dpservice-go/proto"
 	log "github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -152,7 +152,7 @@ func main() {
 		},
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       fmt.Sprintf("%s.metalnet.ironcore.dev", nodeName),
+		LeaderElectionID:       fmt.Sprintf("%s.metalnet.onmetal.de", nodeName),
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -215,7 +215,7 @@ func main() {
 		}
 	}()
 
-	dpdkProtoClient := dpdkproto.NewDPDKironcoreClient(conn)
+	dpdkProtoClient := dpdkproto.NewDPDKonmetalClient(conn)
 	dpdkClient := dpdkclient.NewClient(dpdkProtoClient)
 
 	metalnetCache := internal.NewMetalnetCache(&logger)

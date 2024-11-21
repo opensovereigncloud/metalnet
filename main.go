@@ -92,6 +92,9 @@ func main() {
 	var multiportEswitchMode bool
 	var initAvailable []ghw.PCIAddress
 	var defaultRouterAddr metalbond.DefaultRouterAddress
+	var metalbondTxChanCapacity int
+	var metalbondRxChanEventCapacity int
+	var metalbondRxChanDataUpdateCapacity int
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -109,6 +112,15 @@ func main() {
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&metalnetDir, "metalnet-dir", "/var/lib/metalnet", "Directory to store metalnet data at.")
 	flag.StringVar(&preferNetwork, "prefer-network", "", "Prefer network routes (e.g. 2001:db8::1/52)")
+	flag.IntVar(&metalbondTxChanCapacity, "metalbond-tx-chan-capacity", 100,
+		"Specifies the maximum number of outgoing messages that can be queued before blocking; "+
+			"controls the buffer size for outgoing messages.")
+	flag.IntVar(&metalbondRxChanEventCapacity, "metalbond-rx-chan-event-capacity", 10,
+		"Sets the buffer size for receiving HELLO and KEEPALIVE events; limits the number of "+
+			"concurrent event messages that can be processed.")
+	flag.IntVar(&metalbondRxChanDataUpdateCapacity, "metalbond-rx-chan-data-update-capacity", 100,
+		"Defines the capacity for subscription and update messages (e.g., SUBSCRIBE, UNSUBSCRIBE, UPDATE); "+
+			"manages the message queue for data updates and subscriptions.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -234,7 +246,7 @@ func main() {
 	metalbondRouteUtil := metalbond.NewMBRouteUtil(mbInstance)
 
 	for _, metalbondPeer := range metalbondPeers {
-		if err := mbInstance.AddPeer(metalbondPeer, ""); err != nil {
+		if err := mbInstance.AddPeer(metalbondPeer, "", metalbondTxChanCapacity, metalbondRxChanEventCapacity, metalbondRxChanDataUpdateCapacity); err != nil {
 			setupLog.Error(err, "failed to add metalbond peer", "MetalbondPeer", metalbondPeer)
 			os.Exit(1)
 		}

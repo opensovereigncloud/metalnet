@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	goflag "flag"
 	"fmt"
 	"net"
@@ -286,6 +287,27 @@ func main() {
 		"metalnetProtocol", protoVersion.ClientProtocol,
 		"metalnetVersion", protoVersion.ClientVersion)
 
+	// Wait for first metalbond peer to connect
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		connected := false
+		for _, server := range metalbondPeers {
+			state, err := mbInstance.PeerState(server)
+			if err == nil && state == mb.ESTABLISHED {
+				connected = true
+				setupLog.Info("connected to metalbond peer", "MetalbondPeer", server)
+				break
+			}
+		}
+		if connected {
+			break
+		}
+		if time.Now().After(deadline) {
+			panic(errors.New("metalbond timeout waiting to connect"))
+		}
+		time.Sleep(1 * time.Second)
+	}
+
 	if enableIPv6Support {
 		parsedIPv6SupportVersionStr, err := version.NewVersion(strings.TrimPrefix(dpserviceIPv6SupportVersionStr, "v"))
 		if err != nil {
@@ -318,7 +340,6 @@ func main() {
 	err = metalbondRouteUtil.Subscribe(ctx, metalbond.VNI(publicVNI))
 	if err != nil {
 		setupLog.Error(err, "unable to subscribe to metalbond's public VNI")
-		os.Exit(1)
 	}
 
 	// wait using backoff for default router address to be set by subscription

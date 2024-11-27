@@ -72,6 +72,42 @@ func (c *MetalnetClient) addLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.Desti
 			}
 		}
 
+		// Fetch the list of load balancer targets
+		targets, err := c.dpdk.ListLoadBalancerTargets(ctx, string(uid), dpdkerrors.Ignore(dpdkerrors.NO_LB))
+		if err != nil {
+			// trigger reconcile
+			defer func(mbInstance *mb.MetalBond, vni mb.VNI) {
+				_ = mbInstance.GetRoutesForVni(vni)
+			}(c.mbInstance, vni)
+			return fmt.Errorf("error listing dpdk loadbalancer targets for vni %d and lb %s: %w", vni, string(uid), err)
+		}
+
+		// find unknown targets and clean them up
+		hops := c.mbInstance.GetNextHopForVniAndDestination(vni, dest)
+		for _, target := range targets.Items {
+			found := false
+			for _, knownHop := range hops {
+				if knownHop.Type == mbproto.NextHopType_LOADBALANCER_TARGET &&
+					target.Spec.TargetIP.String() == knownHop.TargetAddress.String() {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				c.log.Info(fmt.Sprintf("Cleanup loadbalancer target: %s, prefix: %s, loadbalancer: %s, vni: %d",
+					target.Spec.TargetIP.String(), dest.String(), string(uid), int(vni)))
+				_, err := c.dpdk.DeleteLoadBalancerTarget(ctx, string(uid), target.Spec.TargetIP, dpdkerrors.Ignore(dpdkerrors.NOT_FOUND))
+				if err != nil {
+					// trigger reconcile
+					defer func(mbInstance *mb.MetalBond, vni mb.VNI) {
+						_ = mbInstance.GetRoutesForVni(vni)
+					}(c.mbInstance, vni)
+					return fmt.Errorf("error delete dpdk loadbalancer target for vni %d, lb %s target %s: %w", vni, string(uid), target.Spec.TargetIP.String(), err)
+				}
+			}
+		}
+
 		if _, err := c.dpdk.CreateLoadBalancerTarget(ctx, &dpdk.LoadBalancerTarget{
 			LoadBalancerTargetMeta: dpdk.LoadBalancerTargetMeta{
 				LoadbalancerID: string(uid),

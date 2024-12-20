@@ -461,14 +461,22 @@ func main() {
 func metalbondPeersHealthCheck(mbInstance *mb.MetalBond, metalbondPeers []string, txChanCapacity, rxChanEventCapacity, rxChanDataUpdateCapacity int) func(req *http.Request) error {
 	return func(_ *http.Request) error {
 		var unhealthyPeers []string
+
 		for _, peer := range metalbondPeers {
-			lastKeepalive, err := mbInstance.PeerLastKeepaliveSent(peer)
+			// Check the last keepalive sent
+			lastKeepaliveSent, err := mbInstance.PeerLastKeepaliveSent(peer)
 			if err != nil {
-				return fmt.Errorf("error retrieving last keepalive for peer %s: %w", peer, err)
+				return fmt.Errorf("error retrieving last keepalive sent for peer %s: %w", peer, err)
 			}
 
-			// Check if the last keepalive is older than 1 minute
-			if time.Since(lastKeepalive) > 1*time.Minute {
+			// Check the last keepalive received
+			lastKeepaliveReceived, err := mbInstance.PeerLastKeepaliveReceived(peer)
+			if err != nil {
+				return fmt.Errorf("error retrieving last keepalive received for peer %s: %w", peer, err)
+			}
+
+			// Consider a peer unhealthy if either the sent or received keepalive is older than 1 minute
+			if time.Since(lastKeepaliveSent) > 1*time.Minute || time.Since(lastKeepaliveReceived) > 1*time.Minute {
 				unhealthyPeers = append(unhealthyPeers, peer)
 
 				// Attempt to remove the peer

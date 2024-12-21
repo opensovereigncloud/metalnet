@@ -133,29 +133,31 @@ func (r *NetworkReconciler) reconcile(ctx context.Context, log logr.Logger, netw
 		return ctrl.Result{}, err
 	}
 
-	if !vniAvail.Spec.InUse {
-		if !r.MetalnetCache.IsVniPeered(vni) {
-			log.V(1).Info("VNI doesn't exist in dp-service and no peering, unsubscribe from it")
-			if err := r.unsubscribeIfSubscribed(ctx, vni); err != nil {
-				return ctrl.Result{}, err
-			}
-			log.V(1).Info("VNI doesn't exist in dp-service and no peering, unsubscribed from it")
+	if vniAvail.Spec.InUse {
+		log.V(1).Info("Creating dpdk default route if not exists")
+		if err := r.createDefaultRoutesIfNotExist(ctx, vni); err != nil {
+			return ctrl.Result{}, err
 		}
-
-		//log.V(1).Info("Reconciling peered VNIs")
-		//if err := r.reconcilePeeredVNIs(ctx, log, network, vni, vniAvail.Spec.InUse); err != nil {
-		//	return ctrl.Result{}, err
-		//}
-		//log.V(1).Info("Reconciled peered VNIs")
-		return ctrl.Result{}, nil
+		log.V(1).Info("Created dpdk default route if not existed")
 	}
-	log.V(1).Info("Checked existence of the VNI")
 
-	log.V(1).Info("Creating dpdk default route if not exists")
-	if err := r.createDefaultRoutesIfNotExist(ctx, vni); err != nil {
-		return ctrl.Result{}, err
-	}
-	log.V(1).Info("Created dpdk default route if not existed")
+	//if !vniAvail.Spec.InUse {
+	//if !r.MetalnetCache.IsVniPeered(vni) {
+	//	log.V(1).Info("VNI doesn't exist in dp-service and no peering, unsubscribe from it")
+	//	if err := r.unsubscribeIfSubscribed(ctx, vni); err != nil {
+	//		return ctrl.Result{}, err
+	//	}
+	//	log.V(1).Info("VNI doesn't exist in dp-service and no peering, unsubscribed from it")
+	//}
+
+	//log.V(1).Info("Reconciling peered VNIs")
+	//if err := r.reconcilePeeredVNIs(ctx, log, network, vni, vniAvail.Spec.InUse); err != nil {
+	//	return ctrl.Result{}, err
+	//}
+	//log.V(1).Info("Reconciled peered VNIs")
+	//return ctrl.Result{}, nil
+	//}
+	//log.V(1).Info("Checked existence of the VNI")
 
 	//log.V(1).Info("Reconciling peered VNIs")
 	//if err := r.reconcilePeeredVNIs(ctx, log, network, vni, vniAvail.Spec.InUse); err != nil {

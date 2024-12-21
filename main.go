@@ -246,15 +246,6 @@ func main() {
 	mbInstance := mb.NewMetalBond(config, metalnetMBClient)
 	metalbondRouteUtil := metalbond.NewMBRouteUtil(mbInstance)
 
-	for _, metalbondPeer := range metalbondPeers {
-		if err := mbInstance.AddPeer(metalbondPeer, "", metalbondTxChanCapacity, metalbondRxChanEventCapacity, metalbondRxChanDataUpdateCapacity); err != nil {
-			setupLog.Error(err, "failed to add metalbond peer", "MetalbondPeer", metalbondPeer)
-			os.Exit(1)
-		}
-	}
-
-	metalnetMBClient.SetMetalBond(mbInstance)
-
 	dpdkUUID, err := dpdkProtoClient.CheckInitialized(context.Background(), &dpdkproto.CheckInitializedRequest{})
 	if err != nil {
 		_, err = dpdkProtoClient.Initialize(context.Background(), &dpdkproto.InitializeRequest{})
@@ -286,6 +277,15 @@ func main() {
 		"metalnetName", protoVersion.ClientName,
 		"metalnetProtocol", protoVersion.ClientProtocol,
 		"metalnetVersion", protoVersion.ClientVersion)
+
+	for _, metalbondPeer := range metalbondPeers {
+		if err := mbInstance.AddPeer(metalbondPeer, "", metalbondTxChanCapacity, metalbondRxChanEventCapacity, metalbondRxChanDataUpdateCapacity); err != nil {
+			setupLog.Error(err, "failed to add metalbond peer", "MetalbondPeer", metalbondPeer)
+			os.Exit(1)
+		}
+	}
+
+	metalnetMBClient.SetMetalBond(mbInstance)
 
 	// Wait for first metalbond peer to connect
 	deadline := time.Now().Add(10 * time.Second)

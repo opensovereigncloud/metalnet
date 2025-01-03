@@ -64,6 +64,7 @@ func (c *MetalnetClient) addLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.Desti
 			return fmt.Errorf("no registered LoadBalancer on this client for vni %d and ip %s", vni, ip)
 		}
 
+		// Check if the target address is within the preferred network range
 		if c.config.PreferredNetwork != nil {
 			targetAddress := net.ParseIP(hop.TargetAddress.String())
 			if !c.config.PreferredNetwork.Contains(targetAddress) {
@@ -72,26 +73,32 @@ func (c *MetalnetClient) addLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.Desti
 			}
 		}
 
-		// Fetch the list of load balancer targets
+		// Fetch the list of existing load balancer targets from DPDK
 		targets, err := c.dpdk.ListLoadBalancerTargets(ctx, string(uid), dpdkerrors.Ignore(dpdkerrors.NO_LB))
 		if err != nil {
-			// trigger reconcile
+			// Trigger reconciliation if target listing fails
 			defer func(mbInstance *mb.MetalBond, vni mb.VNI) {
 				_ = mbInstance.GetRoutesForVni(vni)
 			}(c.mbInstance, vni)
 			return fmt.Errorf("error listing dpdk loadbalancer targets for vni %d and lb %s: %w", vni, string(uid), err)
 		}
 
-		// find unknown targets and clean them up
+		// Identify and clean up unknown targets
 		hops := c.mbInstance.GetNextHopForVniAndDestination(vni, dest)
 		for _, target := range targets.Items {
 			found := false
-			for _, knownHop := range hops {
-				if knownHop.Type == mbproto.NextHopType_LOADBALANCER_TARGET &&
-					target.Spec.TargetIP.String() == knownHop.TargetAddress.String() {
-					found = true
-					break
+			if len(hops) > 0 {
+				for _, knownHop := range hops {
+					// Match existing targets with known hops
+					if knownHop.Type == mbproto.NextHopType_LOADBALANCER_TARGET &&
+						target.Spec.TargetIP.String() == knownHop.TargetAddress.String() {
+						found = true
+						break
+					}
 				}
+			} else {
+				// Assume all targets are valid if no hops are registered
+				found = true
 			}
 
 			if !found {
@@ -99,15 +106,17 @@ func (c *MetalnetClient) addLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.Desti
 					target.Spec.TargetIP.String(), dest.String(), string(uid), int(vni)))
 				_, err := c.dpdk.DeleteLoadBalancerTarget(ctx, string(uid), target.Spec.TargetIP, dpdkerrors.Ignore(dpdkerrors.NOT_FOUND))
 				if err != nil {
-					// trigger reconcile
+					// Trigger reconciliation if deletion fails
 					defer func(mbInstance *mb.MetalBond, vni mb.VNI) {
 						_ = mbInstance.GetRoutesForVni(vni)
 					}(c.mbInstance, vni)
-					return fmt.Errorf("error delete dpdk loadbalancer target for vni %d, lb %s target %s: %w", vni, string(uid), target.Spec.TargetIP.String(), err)
+					return fmt.Errorf("error delete dpdk loadbalancer target for vni %d, lb %s target %s: %w",
+						vni, string(uid), target.Spec.TargetIP.String(), err)
 				}
 			}
 		}
 
+		// Create or update the load balancer target
 		if _, err := c.dpdk.CreateLoadBalancerTarget(ctx, &dpdk.LoadBalancerTarget{
 			LoadBalancerTargetMeta: dpdk.LoadBalancerTargetMeta{
 				LoadbalancerID: string(uid),
@@ -124,6 +133,57 @@ func (c *MetalnetClient) addLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.Desti
 
 	if hop.Type == mbproto.NextHopType_NAT {
 		natIP := dest.Prefix.Addr()
+		nats, err := c.dpdk.ListNeighborNats(ctx, &natIP)
+		if err != nil {
+			return fmt.Errorf("error listing neighbor nats for ip %s: %w", natIP.String(), err)
+		}
+
+		hops := c.mbInstance.GetNextHopForVniAndDestination(vni, dest)
+		for _, target := range nats.Items {
+			found := false
+			if len(hops) > 0 {
+				for _, knownHop := range hops {
+					// Check if NAT already exists with matching parameters
+					if knownHop.Type == mbproto.NextHopType_NAT &&
+						target.Spec.MinPort == uint32(knownHop.NATPortRangeFrom) &&
+						target.Spec.MaxPort == uint32(knownHop.NATPortRangeTo) &&
+						target.Spec.UnderlayRoute.String() == knownHop.TargetAddress.String() {
+						found = true
+						break
+					}
+				}
+			} else {
+				// Assume new NAT if no existing hops are present
+				found = true
+			}
+
+			if !found {
+				c.log.Info(fmt.Sprintf("Cleanup nat ip %s (%d-%d), target %s, vni: %d",
+					natIP.String(), target.Spec.MinPort, target.Spec.MaxPort, target.Spec.UnderlayRoute.String(), int(vni)))
+
+				// Delete stale NAT entry if no matching hop is found
+				if _, err := c.dpdk.DeleteNeighborNat(ctx, &dpdk.NeighborNat{
+					NeighborNatMeta: dpdk.NeighborNatMeta{
+						NatIP: &natIP,
+					},
+					Spec: dpdk.NeighborNatSpec{
+						Vni:           uint32(vni),
+						MinPort:       target.Spec.MinPort,
+						MaxPort:       target.Spec.MaxPort,
+						UnderlayRoute: target.Spec.UnderlayRoute,
+					},
+				}, dpdkerrors.Ignore(dpdkerrors.NOT_FOUND),
+				); err != nil {
+					// Trigger reconciliation if NAT deletion fails
+					defer func(mbInstance *mb.MetalBond, vni mb.VNI) {
+						_ = mbInstance.GetRoutesForVni(vni)
+					}(c.mbInstance, vni)
+					return fmt.Errorf("error deleting old nat route for ip %s (%d-%d): %w", natIP.String(), hop.NATPortRangeFrom, hop.NATPortRangeTo, err)
+				}
+			}
+		}
+
+		// Create or update NAT entry
 		if _, err := c.dpdk.CreateNeighborNat(ctx, &dpdk.NeighborNat{
 			NeighborNatMeta: dpdk.NeighborNatMeta{
 				NatIP: &natIP,

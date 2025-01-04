@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jaypipes/ghw"
@@ -65,6 +66,7 @@ var (
 	numOfVFs                    = 126
 	pfToVfOffset                = 3
 	buildVersion                string
+	pendingRemovals             sync.Map
 )
 
 func init() {
@@ -445,6 +447,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Start the background worker for peer removal
+	startPeerRemovalWorker(mbInstance)
+
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
@@ -457,17 +462,62 @@ func main() {
 	}
 }
 
-func metalbondPeersHealthCheck(mbInstance *mb.MetalBond, metalbondPeers []string, txChanCapacity, rxChanEventCapacity, rxChanDataUpdateCapacity int) func(req *http.Request) error {
+// metalbondPeersHealthCheck checks all peers for stale keepalives,
+// flags unhealthy peers as pendingRemovals, and recreates peers that are fully removed.
+func metalbondPeersHealthCheck(
+	mbInstance *mb.MetalBond,
+	metalbondPeers []string,
+	txChanCapacity, rxChanEventCapacity, rxChanDataUpdateCapacity int,
+) func(req *http.Request) error {
 	return func(_ *http.Request) error {
 		var unhealthyPeers []string
+
 		for _, peer := range metalbondPeers {
-			lastKeepalive, err := mbInstance.PeerLastKeepaliveSent(peer)
-			if err != nil {
-				return fmt.Errorf("error retrieving last keepalive for peer %s: %w", peer, err)
+			// 1) If peer is already pending removal, check if it's fully removed -> recreate
+			if _, pending := pendingRemovals.Load(peer); pending {
+				_, err := mbInstance.PeerState(peer)
+				if err != nil && strings.Contains(err.Error(), "does not exist") {
+					// The peer is confirmed gone; let's recreate
+					pendingRemovals.Delete(peer)
+
+					if err := mbInstance.AddPeer(peer, "", txChanCapacity, rxChanEventCapacity, rxChanDataUpdateCapacity); err != nil {
+						log.Printf("failed to recreate peer %s: %v", peer, err)
+						// If AddPeer fails, we do *not* remove it from metalbondPeers,
+						// but you could store it back in pendingRemovals if you want to retry next pass:
+						pendingRemovals.Store(peer, struct{}{})
+						continue
+					}
+					log.Printf("Successfully recreated peer %s", peer)
+				}
+				// If PeerState() doesn’t error or is not “does not exist”,
+				// we assume the removal is still in progress or the peer is in an intermediate state.
+				continue
 			}
 
-			// Check if the last keepalive is older than 1 minute
-			if time.Since(lastKeepalive) > 1*time.Minute {
+			// 2) If not pending removal, check keepalive status
+			lastKeepaliveSent, err := mbInstance.PeerLastKeepaliveSent(peer)
+			if err != nil {
+				// If the code returns “Peer does not exist,” store in pendingRemovals
+				if strings.Contains(err.Error(), "does not exist") {
+					pendingRemovals.Store(peer, struct{}{})
+				} else {
+					log.Printf("error retrieving last keepalive sent for peer %s: %v", peer, err)
+				}
+				continue
+			}
+
+			lastKeepaliveReceived, err := mbInstance.PeerLastKeepaliveReceived(peer)
+			if err != nil {
+				if strings.Contains(err.Error(), "does not exist") {
+					pendingRemovals.Store(peer, struct{}{})
+				} else {
+					log.Printf("error retrieving last keepalive received for peer %s: %v", peer, err)
+				}
+				continue
+			}
+
+			// 3) If keepalives are stale, mark peer as unhealthy & schedule removal
+			if time.Since(lastKeepaliveSent) > 1*time.Minute || time.Since(lastKeepaliveReceived) > 1*time.Minute {
 				unhealthyPeers = append(unhealthyPeers, peer)
 
 				// Attempt to remove the peer
@@ -482,11 +532,43 @@ func metalbondPeersHealthCheck(mbInstance *mb.MetalBond, metalbondPeers []string
 			}
 		}
 
-		// If any peers were unhealthy, log a warning
+		// 4) Log any newly unhealthy peers for visibility
 		if len(unhealthyPeers) > 0 {
-			log.Printf("Recreated unhealthy peers: %v", unhealthyPeers)
+			log.Printf("Detected unhealthy peers: %v. Pending removal.", unhealthyPeers)
 		}
 
+		// Return nil to indicate "healthy" from the controller-runtime perspective
+		// (unless you want to degrade health if too many peers are in pendingRemovals)
 		return nil
 	}
+}
+
+// startPeerRemovalWorker runs in the background, periodically removing peers that are in pendingRemovals.
+func startPeerRemovalWorker(mbInstance *mb.MetalBond) {
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			pendingRemovals.Range(func(key, _ interface{}) bool {
+				peer, ok := key.(string)
+				if !ok {
+					return true
+				}
+
+				// Attempt to remove the peer.
+				// If RemovePeer blocks for 30s, it just means we wait inside this iteration;
+				// the rest of the loop won't be blocked because we do `return true` afterward.
+				if err := mbInstance.RemovePeer(peer); err != nil {
+					log.Printf("failed to remove peer %s: %v", peer, err)
+					// Keep it in pendingRemovals so we can retry later
+					return true
+				}
+
+				log.Printf("Successfully removed peer %s, awaiting recreation", peer)
+
+				return true
+			})
+		}
+	}()
 }

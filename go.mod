@@ -1,15 +1,15 @@
 module github.com/ironcore-dev/metalnet
 
-go 1.22.3
+go 1.23
 
 require (
 	github.com/go-logr/logr v1.4.2
 	github.com/hashicorp/go-version v1.7.0
 	github.com/ironcore-dev/controller-utils v0.9.3
+	github.com/ironcore-dev/dpservice/go/dpservice-go v0.3.14-0.20241217133136-56b4a344715a
 	github.com/ironcore-dev/ironcore v0.1.2
 	github.com/ironcore-dev/metalbond v0.3.6-0.20250102161330-ce7752d30db3
 	github.com/jaypipes/ghw v0.12.0
-	github.com/onmetal/net-dpservice-go v0.1.20
 	github.com/onsi/ginkgo/v2 v2.20.2
 	github.com/onsi/gomega v1.34.2
 	github.com/sirupsen/logrus v1.9.3

@@ -96,11 +96,12 @@ func (r *NetworkReconciler) delete(ctx context.Context, log logr.Logger, network
 	}
 	log.V(1).Info("Deleted default route if existed")
 
-	log.V(1).Info("Deleting peered VNIs")
-	if err := r.deletePeeredVNIs(ctx, log, vni); err != nil {
-		return ctrl.Result{}, err
-	}
-	log.V(1).Info("Deleted peered VNIs")
+	// NOTE: not used in OSC
+	//log.V(1).Info("Deleting peered VNIs")
+	//if err := r.deletePeeredVNIs(ctx, log, vni); err != nil {
+	//	return ctrl.Result{}, err
+	//}
+	//log.V(1).Info("Deleted peered VNIs")
 
 	log.V(1).Info("Cleanup done, removing finalizer")
 	if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, network, r.networkFinalizer()); err != nil {

@@ -13,6 +13,12 @@ metadata:
   labels:
     control-plane: controller-manager
 spec:
+  minReadySeconds: 120
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       control-plane: controller-manager
@@ -22,6 +28,7 @@ spec:
         kubectl.kubernetes.io/default-container: manager
       labels:
         control-plane: controller-manager
+        app: metalnet
     spec:
       containers:
       - command:
@@ -31,9 +38,21 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
+        - name: NODE_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.hostIP
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
         args:
         - --health-probe-bind-address=:8081
         - --node-name=$(NODE_NAME)
+        - --pod-name=$(POD_NAME)
+        - --dp-service-address=[$(NODE_IP)]:1337
         image: controller:latest
         name: manager
         ports: []
@@ -74,6 +93,5 @@ spec:
           path: /var/lib/metalnet
           type: DirectoryOrCreate
         name: metalnet
-      hostNetwork: true
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10

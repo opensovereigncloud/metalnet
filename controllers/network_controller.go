@@ -15,6 +15,7 @@ import (
 	dpdkclient "github.com/ironcore-dev/dpservice/go/dpservice-go/client"
 	dpdkerrors "github.com/ironcore-dev/dpservice/go/dpservice-go/errors"
 	metalnetv1alpha1 "github.com/ironcore-dev/metalnet/api/v1alpha1"
+	"github.com/ironcore-dev/metalnet/control"
 	"github.com/ironcore-dev/metalnet/internal"
 	"github.com/ironcore-dev/metalnet/metalbond"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -46,6 +47,7 @@ type NetworkReconciler struct {
 	DefaultRouterAddr *metalbond.DefaultRouterAddress
 	NodeName          string
 	EnableIPv6Support bool
+	Control           *control.ReconcileControl
 }
 
 //+kubebuilder:rbac:groups=networking.metalnet.ironcore.dev,resources=networks,verbs=get;list;watch;create;update;patch;delete
@@ -57,12 +59,18 @@ type NetworkReconciler struct {
 // move the current state of the cluster closer to the desired state.
 func (r *NetworkReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrl.LoggerFrom(ctx)
-	network := &metalnetv1alpha1.Network{}
-	if err := r.Get(ctx, req.NamespacedName, network); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
 
-	return r.reconcileExists(ctx, log, network)
+	if r.Control.ShouldSkip() {
+		log.V(1).Info("Skipping reconcile")
+		return ctrl.Result{}, nil
+	} else {
+		network := &metalnetv1alpha1.Network{}
+		if err := r.Get(ctx, req.NamespacedName, network); err != nil {
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
+
+		return r.reconcileExists(ctx, log, network)
+	}
 }
 
 func (r *NetworkReconciler) reconcileExists(ctx context.Context, log logr.Logger, network *metalnetv1alpha1.Network) (ctrl.Result, error) {

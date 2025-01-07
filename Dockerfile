@@ -20,6 +20,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 COPY main.go main.go
 COPY api/ api/
 COPY client/ client/
+COPY control/ control/
 COPY controllers/ controllers/
 COPY internal/ internal/
 COPY encoding/ encoding/

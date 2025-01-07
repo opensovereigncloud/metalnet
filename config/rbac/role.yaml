@@ -43,9 +43,10 @@ rules:
   - patch
   - update
 - apiGroups:
-  - networking.metalnet.ironcore.dev
+    - ""
   resources:
-  - networks/finalizers
+    - pods
   verbs:
-  - patch
-  - update
+    - get
+    - list
+    - watch

@@ -26,6 +26,7 @@ import (
 	dpdkproto "github.com/ironcore-dev/dpservice/go/dpservice-go/proto"
 	metalnetv1alpha1 "github.com/ironcore-dev/metalnet/api/v1alpha1"
 	metalnetclient "github.com/ironcore-dev/metalnet/client"
+	"github.com/ironcore-dev/metalnet/control"
 	"github.com/ironcore-dev/metalnet/internal"
 	"github.com/ironcore-dev/metalnet/metalbond"
 )
@@ -47,28 +48,35 @@ type LoadBalancerReconciler struct {
 	NodeName          string
 	PublicVNI         int
 	EnableIPv6Support bool
+	Control           *control.ReconcileControl
 }
 
 //+kubebuilder:rbac:groups=networking.metalnet.ironcore.dev,resources=loadbalancers,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=networking.metalnet.ironcore.dev,resources=loadbalancers/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=networking.metalnet.ironcore.dev,resources=loadbalancers/finalizers,verbs=update
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+//+kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 
 func (r *LoadBalancerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrl.LoggerFrom(ctx)
 
-	lb := &metalnetv1alpha1.LoadBalancer{}
-
-	if err := r.Get(ctx, req.NamespacedName, lb); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
-
-	if nodeName := lb.Spec.NodeName; nodeName == nil || *nodeName != r.NodeName {
-		log.V(1).Info("LoadBalancer is not assigned to this node", "NodeName", lb.Spec.NodeName)
+	if r.Control.ShouldSkip() {
+		log.V(1).Info("Skipping reconcile")
 		return ctrl.Result{}, nil
-	}
+	} else {
+		lb := &metalnetv1alpha1.LoadBalancer{}
 
-	return r.reconcileExists(ctx, log, lb)
+		if err := r.Get(ctx, req.NamespacedName, lb); err != nil {
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
+
+		if nodeName := lb.Spec.NodeName; nodeName == nil || *nodeName != r.NodeName {
+			log.V(1).Info("LoadBalancer is not assigned to this node", "NodeName", lb.Spec.NodeName)
+			return ctrl.Result{}, nil
+		}
+
+		return r.reconcileExists(ctx, log, lb)
+	}
 }
 
 func (r *LoadBalancerReconciler) reconcileExists(ctx context.Context, log logr.Logger, lb *metalnetv1alpha1.LoadBalancer) (ctrl.Result, error) {

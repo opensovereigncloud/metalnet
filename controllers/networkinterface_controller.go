@@ -20,6 +20,7 @@ import (
 	"github.com/ironcore-dev/metalbond/pb"
 	metalnetv1alpha1 "github.com/ironcore-dev/metalnet/api/v1alpha1"
 	metalnetclient "github.com/ironcore-dev/metalnet/client"
+	"github.com/ironcore-dev/metalnet/control"
 	"github.com/ironcore-dev/metalnet/metalbond"
 	"github.com/ironcore-dev/metalnet/netfns"
 	"github.com/ironcore-dev/metalnet/sysfs"
@@ -91,6 +92,7 @@ type NetworkInterfaceReconciler struct {
 	BluefieldDetected           bool
 	BluefieldHostDefaultBusAddr string
 	MultiportEswitchMode        bool
+	Control                     *control.ReconcileControl
 }
 
 //+kubebuilder:rbac:groups=networking.metalnet.onmetal.de,resources=networkinterfaces,verbs=get;list;watch;create;update;patch;delete
@@ -105,18 +107,23 @@ type NetworkInterfaceReconciler struct {
 func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrl.LoggerFrom(ctx)
 
-	nic := &metalnetv1alpha1.NetworkInterface{}
-
-	if err := r.Get(ctx, req.NamespacedName, nic); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
-
-	if nodeName := nic.Spec.NodeName; nodeName == nil || *nodeName != r.NodeName {
-		log.V(1).Info("Network interface is not assigned to this node", "NodeName", nic.Spec.NodeName)
+	if r.Control.ShouldSkip() {
+		log.V(1).Info("Skipping reconcile")
 		return ctrl.Result{}, nil
-	}
+	} else {
+		nic := &metalnetv1alpha1.NetworkInterface{}
 
-	return r.reconcileExists(ctx, log, nic)
+		if err := r.Get(ctx, req.NamespacedName, nic); err != nil {
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
+
+		if nodeName := nic.Spec.NodeName; nodeName == nil || *nodeName != r.NodeName {
+			log.V(1).Info("Network interface is not assigned to this node", "NodeName", nic.Spec.NodeName)
+			return ctrl.Result{}, nil
+		}
+
+		return r.reconcileExists(ctx, log, nic)
+	}
 }
 
 func (r *NetworkInterfaceReconciler) reconcileExists(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface) (ctrl.Result, error) {

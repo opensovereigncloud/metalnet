@@ -26,6 +26,7 @@ RUN --mount=type=ssh --mount=type=secret,id=github_pat \
 COPY main.go main.go
 COPY api/ api/
 COPY client/ client/
+COPY control/ control/
 COPY controllers/ controllers/
 COPY internal/ internal/
 COPY encoding/ encoding/

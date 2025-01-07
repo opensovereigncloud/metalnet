@@ -30,6 +30,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	"github.com/ironcore-dev/metalnet/control"
 	"github.com/ironcore-dev/metalnet/metalbond"
 	"github.com/ironcore-dev/metalnet/netfns"
 	"github.com/ironcore-dev/metalnet/sysfs"
@@ -98,6 +99,8 @@ func main() {
 	var metalbondTxChanCapacity int
 	var metalbondRxChanEventCapacity int
 	var metalbondRxChanDataUpdateCapacity int
+	var controlWebserverBindAddr string
+	var podName, daemonSetName, namespace string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -124,6 +127,11 @@ func main() {
 	flag.IntVar(&metalbondRxChanDataUpdateCapacity, "metalbond-rx-chan-data-update-capacity", 100,
 		"Defines the capacity for subscription and update messages (e.g., SUBSCRIBE, UNSUBSCRIBE, UPDATE); "+
 			"manages the message queue for data updates and subscriptions.")
+	flag.StringVar(&controlWebserverBindAddr, "control-webserver-bind-address", ":8082", "The address the control webserver binds to for reconciliation control.")
+	flag.StringVar(&podName, "pod-name", "", "The name of the current pod.")
+	flag.StringVar(&daemonSetName, "daemonset-name", "metalnet-controller-manager", "The name of the DaemonSet.")
+	flag.StringVar(&namespace, "namespace", "metalnet-system", "The namespace of the DaemonSet.")
+
 	opts := zap.Options{
 		Development: true,
 	}
@@ -131,12 +139,27 @@ func main() {
 	flag.CommandLine.AddGoFlagSet(goflag.CommandLine)
 	flag.Parse()
 
+	if nodeName == "" || podName == "" {
+		setupLog.Error(errors.New("node-name and pod-name are required"), "missing required flags")
+		os.Exit(1)
+	}
+
 	logger := zap.New(zap.UseFlagOptions(&opts))
 	ctrl.SetLogger(logger)
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	if metalbondDebug {
 		log.SetLevel(log.DebugLevel)
+	}
+
+	// Start the control webserver
+	c := &control.ReconcileControl{}
+	go control.StartControlWebserver(c, controlWebserverBindAddr)
+
+	// Notify other DaemonSet-managed pods on this node to skip reconciliation
+	if err := control.SkipReconcileOnOtherPods(nodeName, podName, daemonSetName, namespace); err != nil {
+		setupLog.Error(err, "failed to notify other pods to skip reconciliation")
+		os.Exit(1)
 	}
 
 	// Check if /var/lib/metalnet/mode exists and its content is "eswitch"
@@ -382,6 +405,7 @@ func main() {
 		DefaultRouterAddr: &defaultRouterAddr,
 		NodeName:          nodeName,
 		EnableIPv6Support: enableIPv6Support,
+		Control:           c,
 	}).SetupWithManager(mgr, mgr.GetCache()); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Network")
 		os.Exit(1)
@@ -401,6 +425,7 @@ func main() {
 		BluefieldDetected:           bluefieldDetected,
 		BluefieldHostDefaultBusAddr: bluefieldHostDefaultBusAddr,
 		MultiportEswitchMode:        multiportEswitchMode,
+		Control:                     c,
 	}).SetupWithManager(mgr, mgr.GetCache()); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkInterface")
 		os.Exit(1)
@@ -416,6 +441,7 @@ func main() {
 		NodeName:          nodeName,
 		PublicVNI:         publicVNI,
 		EnableIPv6Support: enableIPv6Support,
+		Control:           c,
 	}).SetupWithManager(mgr, mgr.GetCache()); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LoadBalancer")
 		os.Exit(1)

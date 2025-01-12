@@ -139,15 +139,15 @@ func (c *MetalnetClient) addLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.Desti
 		}
 
 		hops := c.mbInstance.GetNextHopForVniAndDestination(vni, dest)
-		for _, target := range nats.Items {
+		for _, nat := range nats.Items {
 			found := false
 			if len(hops) > 0 {
 				for _, knownHop := range hops {
 					// Check if NAT already exists with matching parameters
 					if knownHop.Type == mbproto.NextHopType_NAT &&
-						target.Spec.MinPort == uint32(knownHop.NATPortRangeFrom) &&
-						target.Spec.MaxPort == uint32(knownHop.NATPortRangeTo) &&
-						target.Spec.UnderlayRoute.String() == knownHop.TargetAddress.String() {
+						nat.Spec.MinPort == uint32(knownHop.NATPortRangeFrom) &&
+						nat.Spec.MaxPort == uint32(knownHop.NATPortRangeTo) &&
+						nat.Spec.UnderlayRoute.String() == knownHop.TargetAddress.String() {
 						found = true
 						break
 					}
@@ -158,8 +158,8 @@ func (c *MetalnetClient) addLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.Desti
 			}
 
 			if !found {
-				c.log.Info(fmt.Sprintf("Cleanup nat ip %s (%d-%d), target %s, vni: %d",
-					natIP.String(), target.Spec.MinPort, target.Spec.MaxPort, target.Spec.UnderlayRoute.String(), int(vni)))
+				c.log.Info(fmt.Sprintf("Cleanup nat ip %s (%d-%d), ul %s, vni: %d",
+					natIP.String(), nat.Spec.MinPort, nat.Spec.MaxPort, nat.Spec.UnderlayRoute.String(), int(vni)))
 
 				// Delete stale NAT entry if no matching hop is found
 				if _, err := c.dpdk.DeleteNeighborNat(ctx, &dpdk.NeighborNat{
@@ -167,10 +167,10 @@ func (c *MetalnetClient) addLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.Desti
 						NatIP: &natIP,
 					},
 					Spec: dpdk.NeighborNatSpec{
-						Vni:           uint32(vni),
-						MinPort:       target.Spec.MinPort,
-						MaxPort:       target.Spec.MaxPort,
-						UnderlayRoute: target.Spec.UnderlayRoute,
+						Vni:           nat.Spec.Vni,
+						MinPort:       nat.Spec.MinPort,
+						MaxPort:       nat.Spec.MaxPort,
+						UnderlayRoute: nat.Spec.UnderlayRoute,
 					},
 				}, dpdkerrors.Ignore(dpdkerrors.NOT_FOUND),
 				); err != nil {
@@ -194,8 +194,99 @@ func (c *MetalnetClient) addLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.Desti
 				MaxPort:       uint32(hop.NATPortRangeTo),
 				UnderlayRoute: &hop.TargetAddress,
 			},
-		}, dpdkerrors.Ignore(dpdkerrors.ALREADY_EXISTS),
+		},
 		); err != nil {
+			if dpdkerrors.IsStatusErrorCode(err, dpdkerrors.ALREADY_EXISTS) {
+				for _, nat := range nats.Items {
+					if nat.Spec.Vni == uint32(vni) &&
+						nat.Spec.MinPort == uint32(hop.NATPortRangeFrom) &&
+						nat.Spec.MaxPort == uint32(hop.NATPortRangeTo) &&
+						nat.Spec.UnderlayRoute.String() == hop.TargetAddress.String() {
+
+						// exact match found, all good
+						return nil
+					}
+				}
+
+				fixApplied := false
+				// check for wrong vni
+				for _, nat := range nats.Items {
+					if nat.Spec.Vni != uint32(vni) {
+
+						fixApplied = true
+						c.log.Info(fmt.Sprintf("Cleanup from wrong vni for nat ip %s (%d-%d), ul %s, vni: %d",
+							natIP.String(), nat.Spec.MinPort, nat.Spec.MaxPort, nat.Spec.UnderlayRoute.String(), nat.Spec.Vni))
+
+						if _, err := c.dpdk.DeleteNeighborNat(ctx, &dpdk.NeighborNat{
+							NeighborNatMeta: dpdk.NeighborNatMeta{
+								NatIP: &natIP,
+							},
+							Spec: dpdk.NeighborNatSpec{
+								Vni:           nat.Spec.Vni,
+								MinPort:       nat.Spec.MinPort,
+								MaxPort:       nat.Spec.MaxPort,
+								UnderlayRoute: nat.Spec.UnderlayRoute,
+							},
+						}, dpdkerrors.Ignore(dpdkerrors.NOT_FOUND),
+						); err != nil {
+							// Trigger reconciliation if NAT deletion fails
+							defer func(mbInstance *mb.MetalBond, vni mb.VNI) {
+								_ = mbInstance.GetRoutesForVni(vni)
+							}(c.mbInstance, vni)
+							return fmt.Errorf("error deleting wrong nat route for ip %s (%d-%d): %w", natIP.String(), hop.NATPortRangeFrom, hop.NATPortRangeTo, err)
+						}
+					}
+				}
+
+				// check for wrong ul vni
+				for _, nat := range nats.Items {
+					if nat.Spec.Vni == uint32(vni) &&
+						nat.Spec.MinPort == uint32(hop.NATPortRangeFrom) &&
+						nat.Spec.MaxPort == uint32(hop.NATPortRangeTo) &&
+						nat.Spec.UnderlayRoute.String() != hop.TargetAddress.String() {
+
+						fixApplied = true
+						c.log.Info(fmt.Sprintf("Cleanup from wrong ul for nat ip %s (%d-%d), ul %s, vni: %d",
+							natIP.String(), nat.Spec.MinPort, nat.Spec.MaxPort, nat.Spec.UnderlayRoute.String(), int(vni)))
+
+						if _, err := c.dpdk.DeleteNeighborNat(ctx, &dpdk.NeighborNat{
+							NeighborNatMeta: dpdk.NeighborNatMeta{
+								NatIP: &natIP,
+							},
+							Spec: dpdk.NeighborNatSpec{
+								Vni:           nat.Spec.Vni,
+								MinPort:       nat.Spec.MinPort,
+								MaxPort:       nat.Spec.MaxPort,
+								UnderlayRoute: nat.Spec.UnderlayRoute,
+							},
+						}, dpdkerrors.Ignore(dpdkerrors.NOT_FOUND),
+						); err != nil {
+							// Trigger reconciliation if NAT deletion fails
+							defer func(mbInstance *mb.MetalBond, vni mb.VNI) {
+								_ = mbInstance.GetRoutesForVni(vni)
+							}(c.mbInstance, vni)
+							return fmt.Errorf("error deleting wrong nat route for ip %s (%d-%d): %w", natIP.String(), hop.NATPortRangeFrom, hop.NATPortRangeTo, err)
+						}
+					}
+				}
+
+				if fixApplied {
+					if _, err := c.dpdk.CreateNeighborNat(ctx, &dpdk.NeighborNat{
+						NeighborNatMeta: dpdk.NeighborNatMeta{
+							NatIP: &natIP,
+						},
+						Spec: dpdk.NeighborNatSpec{
+							Vni:           uint32(vni),
+							MinPort:       uint32(hop.NATPortRangeFrom),
+							MaxPort:       uint32(hop.NATPortRangeTo),
+							UnderlayRoute: &hop.TargetAddress,
+						},
+					},
+					); err != nil {
+						return fmt.Errorf("error creating nat route for ip %s (%d-%d): %w", natIP.String(), hop.NATPortRangeFrom, hop.NATPortRangeTo, err)
+					}
+				}
+			}
 			return fmt.Errorf("error nat route: %w", err)
 		}
 		return nil

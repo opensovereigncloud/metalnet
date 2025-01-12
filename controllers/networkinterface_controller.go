@@ -717,8 +717,38 @@ func (r *NetworkInterfaceReconciler) createVirtualIP(ctx context.Context, log lo
 		Spec:          dpdk.VirtualIPSpec{IP: &virtualIP},
 	})
 	if err != nil {
+		if dpdkerrors.IsStatusErrorCode(err, dpdkerrors.DNAT_EXISTS) {
+			natIP := virtualIP
+			nats, err := r.DPDK.ListNeighborNats(ctx, &natIP)
+			if err != nil {
+				return fmt.Errorf("error listing neighbor nats for ip %s: %w", natIP.String(), err)
+			}
+
+			if len(nats.Items) > 0 {
+				log.Info(fmt.Sprintf("Cleanup stale neighbor nats for ip %s", natIP.String()))
+				for _, nat := range nats.Items {
+					// Delete stale NAT entry
+					if _, err := r.DPDK.DeleteNeighborNat(ctx, &dpdk.NeighborNat{
+						NeighborNatMeta: dpdk.NeighborNatMeta{
+							NatIP: &natIP,
+						},
+						Spec: dpdk.NeighborNatSpec{
+							Vni:           nat.Spec.Vni,
+							MinPort:       nat.Spec.MinPort,
+							MaxPort:       nat.Spec.MaxPort,
+							UnderlayRoute: nat.Spec.UnderlayRoute,
+						},
+					}, dpdkerrors.Ignore(dpdkerrors.NOT_FOUND),
+					); err != nil {
+						return fmt.Errorf("error deleting old nat route for ip %s (%d-%d): %w", natIP.String(), nat.Spec.MinPort, nat.Spec.MaxPort, err)
+					}
+				}
+			}
+		}
+		// force reconcile
 		return fmt.Errorf("error creating dpdk virtual ip: %w", err)
 	}
+
 	log.V(1).Info("Adding virtual ip route if not exists")
 	if err := r.addVirtualIPRouteIfNotExists(ctx, virtualIP, *dpdkVIP.Spec.UnderlayRoute); err != nil {
 		return err

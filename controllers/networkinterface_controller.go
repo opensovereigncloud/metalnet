@@ -1035,6 +1035,30 @@ func (r *NetworkInterfaceReconciler) reconcilePrefixes(ctx context.Context, log 
 					Spec:       dpdk.PrefixSpec{Prefix: prefix},
 				})
 				if err != nil {
+					if dpdkerrors.IsStatusErrorCode(err, dpdkerrors.ROUTE_EXISTS) {
+						routes, err := r.DPDK.ListRoutes(ctx, vni)
+						if err != nil {
+							return err
+						}
+
+						// Handles the cleanup of an old route that conflicts with the current prefix during route reconciliation.
+						for _, route := range routes.Items {
+							if route.Spec.Prefix.String() == prefix.String() {
+								log.V(1).Info(fmt.Sprintf("Cleanup old route that clashes with prefix: %s, vni: %d", prefix.String(), vni))
+								// Try to delete old route
+								if _, err := r.DPDK.DeleteRoute(
+									ctx,
+									vni,
+									&prefix,
+									dpdkerrors.Ignore(dpdkerrors.NO_VNI, dpdkerrors.ROUTE_NOT_FOUND, dpdkerrors.ROUTE_BAD_PORT),
+								); err != nil {
+									return fmt.Errorf("error deleting old existing route vni: %d, prefix: %s,  %w", vni, prefix.String(), err)
+								}
+
+								return errors.New("cleanup old route, force reconcile")
+							}
+						}
+					}
 					return err
 				}
 				log.V(1).Info("Ensured dpdk prefix exists")

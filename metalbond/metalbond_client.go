@@ -389,7 +389,6 @@ func (c *MetalnetClient) removeLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.De
 	ctx := context.Background()
 
 	if c.config.IPv4Only && dest.IPVersion != mb.IPV4 {
-		// log.Infof("Received non-IPv4 route will not be installed in kernel route table (IPv4-only mode)")
 		return fmt.Errorf("received non-IPv4 route will not be installed in kernel route table (IPv4-only mode)")
 	}
 
@@ -429,6 +428,7 @@ func (c *MetalnetClient) removeLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.De
 		return nil
 	}
 
+	// Delete the existing route
 	if _, err := c.dpdk.DeleteRoute(
 		ctx,
 		uint32(vni),
@@ -437,6 +437,17 @@ func (c *MetalnetClient) removeLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.De
 	); err != nil {
 		return fmt.Errorf("error deleting route: %w", err)
 	}
+
+	// Check if there are remaining next hops for the destination
+	remainingHops := c.mbInstance.GetNextHopForVniAndDestination(vni, dest)
+	if len(remainingHops) > 0 {
+		c.log.Info(fmt.Sprintf("ECMP workaround for ip %s, ul %s, vni: %d", dest.String(), remainingHops[0], vni))
+		// Re-add the route with the first remaining next hop
+		if err := c.addLocalRoute(destVni, vni, dest, remainingHops[0]); err != nil {
+			return fmt.Errorf("error re-adding remaining next hop: %w", err)
+		}
+	}
+
 	return nil
 }
 

@@ -153,18 +153,9 @@ func main() {
 		log.SetLevel(log.DebugLevel)
 	}
 
-	// Start the control webserver
-	c := &control.ReconcileControl{}
-	go control.StartControlWebserver(c, controlWebserverBindAddr)
-
-	// Notify other DaemonSet-managed pods on this node to skip reconciliation
-	if err := control.SkipReconcileOnOtherPods(nodeName, podName, daemonSetName, namespace); err != nil {
-		setupLog.Error(err, "failed to notify other pods to skip reconciliation")
-		os.Exit(1)
-	}
-
 	// detect multiport-eswitch mode automatically (overrides command-line)
 	// Usage example: 'echo "eswitch" > /var/lib/metalnet/mode'
+	// Check if /var/lib/metalnet/mode exists and its content is "eswitch"
 	modeFilePath := filepath.Join(metalnetDir, "mode")
 	content, err := os.ReadFile(modeFilePath)
 	if err == nil {
@@ -268,6 +259,20 @@ func main() {
 
 	mbInstance := mb.NewMetalBond(config, metalnetMBClient)
 	metalbondRouteUtil := metalbond.NewMBRouteUtil(mbInstance)
+
+	// Start the control webserver
+	c := &control.ReconcileControl{
+		MBInstance:      mbInstance,
+		MetalbondPeers:  metalbondPeers,
+		PendingRemovals: &pendingRemovals,
+	}
+	go control.StartControlWebserver(c, controlWebserverBindAddr)
+
+	// Notify other DaemonSet-managed pods on this node to skip reconciliation
+	if err := control.SkipReconcileOnOtherPods(nodeName, podName, daemonSetName, namespace); err != nil {
+		setupLog.Error(err, "failed to notify other pods to skip reconciliation")
+		os.Exit(1)
+	}
 
 	dpdkUUID, err := dpdkProtoClient.CheckInitialized(context.Background(), &dpdkproto.CheckInitializedRequest{})
 	if err != nil {

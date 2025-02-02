@@ -61,7 +61,8 @@ func (c *MetalnetClient) addLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.Desti
 		ip := dest.Prefix.Addr().String()
 		uid, ok := c.metalnetCache.GetLoadBalancerServer(uint32(vni), ip)
 		if !ok {
-			return fmt.Errorf("no registered LoadBalancer on this client for vni %d and ip %s", vni, ip)
+			c.log.Info(fmt.Sprintf("no registered LoadBalancer on this client for vni %d and ip %s", vni, ip))
+			return nil
 		}
 
 		// Check if the target address is within the preferred network range
@@ -396,7 +397,8 @@ func (c *MetalnetClient) removeLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.De
 		ip := dest.Prefix.Addr().String()
 		uid, ok := c.metalnetCache.GetLoadBalancerServer(uint32(vni), ip)
 		if !ok {
-			return fmt.Errorf("no registered LoadBalancer on this client for vni %d and ip %s", vni, ip)
+			c.log.Info(fmt.Sprintf("no registered LoadBalancer on this client for vni %d and ip %s", vni, ip))
+			return nil
 		}
 		if _, err := c.dpdk.DeleteLoadBalancerTarget(
 			ctx,

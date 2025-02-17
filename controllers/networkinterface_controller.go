@@ -896,7 +896,9 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 		}
 		if r.TapDeviceMode {
 			pciAddr.Device = strings.ReplaceAll(strings.ReplaceAll(pciAddr.Device, ":", ""), ".", "")
-			nic.Status.TAPDevice.Name = pciAddr.Device
+			nic.Status.TAPDevice = &metalnetv1alpha1.TAPDevice{
+				Name: pciAddr.Device,
+			}
 		} else {
 			nic.Status.PCIAddress = &metalnetv1alpha1.PCIAddress{
 				Bus:      pciAddr.Bus,

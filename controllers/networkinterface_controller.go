@@ -828,7 +828,7 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 	log.V(1).Info("Reconcile")
 
 	log.V(1).Info("Ensuring finalizer")
-	modified, err := clientutils.PatchEnsureFinalizer(ctx, r.Client, nic, networkInterfaceFinalizer)
+	modified, err := clientutils.PatchEnsureFinalizer(ctx, r.Client, nic, r.finalizer())
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error ensuring finalizer: %w", err)
 	}
@@ -1654,7 +1654,7 @@ func (r *NetworkInterfaceReconciler) patchStatus(
 func (r *NetworkInterfaceReconciler) delete(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface) (ctrl.Result, error) {
 	log.V(1).Info("Delete")
 
-	if !controllerutil.ContainsFinalizer(nic, networkInterfaceFinalizer) {
+	if !controllerutil.ContainsFinalizer(nic, r.finalizer()) {
 		log.V(1).Info("No finalizer present, nothing to do")
 		return ctrl.Result{}, nil
 	}
@@ -1675,6 +1675,10 @@ func (r *NetworkInterfaceReconciler) delete(ctx context.Context, log logr.Logger
 		log.V(1).Info("Released device if existed")
 
 		log.V(1).Info("No dpdk interface, removing finalizer")
+		if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, nic, r.finalizer()); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
+		}
+		// keep backward compatibility
 		if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, nic, networkInterfaceFinalizer); err != nil {
 			return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
 		}
@@ -1723,6 +1727,10 @@ func (r *NetworkInterfaceReconciler) delete(ctx context.Context, log logr.Logger
 	log.V(1).Info("Deleted interface")
 
 	log.V(1).Info("Removing finalizer")
+	if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, nic, r.finalizer()); err != nil {
+		return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
+	}
+	// keep backward compatibility
 	if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, nic, networkInterfaceFinalizer); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
 	}
@@ -2202,4 +2210,8 @@ func (r *NetworkInterfaceReconciler) enqueueNetworkInterfacesReferencingLoadBala
 		}
 		return reqs
 	})
+}
+
+func (r *NetworkInterfaceReconciler) finalizer() string {
+	return fmt.Sprintf("%s-%s", networkInterfaceFinalizer, r.ControllerID)
 }

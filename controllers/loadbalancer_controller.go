@@ -99,7 +99,7 @@ func (r *LoadBalancerReconciler) reconcileExists(ctx context.Context, log logr.L
 func (r *LoadBalancerReconciler) delete(ctx context.Context, log logr.Logger, lb *metalnetv1alpha1.LoadBalancer) (ctrl.Result, error) {
 	log.V(1).Info("Delete")
 
-	if !controllerutil.ContainsFinalizer(lb, loadBalancerFinalizer) {
+	if !controllerutil.ContainsFinalizer(lb, r.finalizer()) {
 		log.V(1).Info("No finalizer present, nothing to do")
 		return ctrl.Result{}, nil
 	}
@@ -118,12 +118,18 @@ func (r *LoadBalancerReconciler) delete(ctx context.Context, log logr.Logger, lb
 		}
 
 		// Clean up reservations if they exist
-		if lb.Status.Reservation != nil {
-			log.V(1).Info("Cleaning up existing reservations")
-			//TODO Clean up reservations if they exist
+		if lb.Status.Reservation != nil && lb.Status.Reservation.IP != nil {
+			underlay := lb.Status.Reservation.IP.Underlay
+			log.V(1).Info("Cleaning up existing reservations", "ipv6", underlay)
+			ipv6mgr := ipv6manager.GetInstance()
+			ipv6mgr.WithdrawIP(underlay)
 		}
 
 		log.V(1).Info("No dpdk loadbalancer, removing finalizer")
+		if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, lb, r.finalizer()); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
+		}
+		// keep backward compatibility
 		if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, lb, loadBalancerFinalizer); err != nil {
 			return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
 		}
@@ -148,11 +154,17 @@ func (r *LoadBalancerReconciler) delete(ctx context.Context, log logr.Logger, lb
 
 	// Clean up reservations if they exist
 	if lb.Status.Reservation != nil {
-		log.V(1).Info("Cleaning up existing reservations")
-		//TODO Clean up reservations if they exist
+		underlay := lb.Status.Reservation.IP.Underlay
+		log.V(1).Info("Cleaning up existing reservations", "ipv6", underlay)
+		ipv6mgr := ipv6manager.GetInstance()
+		ipv6mgr.WithdrawIP(underlay)
 	}
 
 	log.V(1).Info("Removing finalizer")
+	if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, lb, r.finalizer()); err != nil {
+		return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
+	}
+	// keep backward compatibility
 	if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, lb, loadBalancerFinalizer); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
 	}
@@ -244,7 +256,7 @@ func (r *LoadBalancerReconciler) reconcile(ctx context.Context, log logr.Logger,
 	log.V(1).Info("Reconcile")
 
 	log.V(1).Info("Ensuring finalizer")
-	modified, err := clientutils.PatchEnsureFinalizer(ctx, r.Client, lb, loadBalancerFinalizer)
+	modified, err := clientutils.PatchEnsureFinalizer(ctx, r.Client, lb, r.finalizer())
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error ensuring finalizer: %w", err)
 	}
@@ -572,4 +584,8 @@ func (r *LoadBalancerReconciler) generateUnderlayIP(overlayIP metalnetv1alpha1.I
 	}
 
 	return "", fmt.Errorf("unsupported IP family")
+}
+
+func (r *LoadBalancerReconciler) finalizer() string {
+	return fmt.Sprintf("%s-%s", loadBalancerFinalizer, r.ControllerID)
 }

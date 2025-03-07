@@ -519,6 +519,7 @@ func main() {
 		NodeName:          nodeName,
 		EnableIPv6Support: enableIPv6Support,
 		Control:           c,
+		ControllerID:      controllerID,
 	}).SetupWithManager(mgr, mgr.GetCache()); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Network")
 		os.Exit(1)

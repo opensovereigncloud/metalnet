@@ -51,6 +51,7 @@ type NetworkReconciler struct {
 	NodeName          string
 	EnableIPv6Support bool
 	Control           *control.ReconcileControl
+	ControllerID      string
 }
 
 //+kubebuilder:rbac:groups=networking.metalnet.ironcore.dev,resources=networks,verbs=get;list;watch;create;update;patch;delete
@@ -531,6 +532,10 @@ func (r *NetworkReconciler) findObjectsForNetworkInterface(ctx context.Context, 
 
 func (r *NetworkReconciler) networkFinalizer() string {
 	return fmt.Sprintf("%s-%s", networkFinalizer, r.NodeName)
+}
+
+func (r *NetworkReconciler) finalizer() string {
+	return fmt.Sprintf("%s-%s-%s", networkFinalizer, r.NodeName, r.ControllerID)
 }
 
 func (r *NetworkReconciler) findObjectsForLoadBalancer(ctx context.Context, obj client.Object) []reconcile.Request {

@@ -123,6 +123,23 @@ spec:
           status:
             description: LoadBalancerStatus defines the observed state of LoadBalancer
             properties:
+              reservation:
+                description: Reservation contains the detailed reservation information
+                properties:
+                  ip:
+                    description: IP is the reserved LoadBalancer IP
+                    properties:
+                      overlay:
+                        description: Overlay is the overlay network IP or prefix
+                        type: string
+                      underlay:
+                        description: Underlay is the underlay network IP or prefix
+                        type: string
+                    required:
+                    - overlay
+                    - underlay
+                    type: object
+                type: object
               state:
                 description: State is the LoadBalancerState of the LoadBalancer.
                 type: string

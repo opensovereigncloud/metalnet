@@ -49,6 +49,8 @@ type NetworkInterfaceStatus struct {
 	PCIAddress *PCIAddress `json:"pciAddress,omitempty"`
 
 	TAPDevice *TAPDevice `json:"tapDevice,omitempty"`
+	// Reservation contains the detailed reservation information
+	Reservation *NetworkInterfaceReservation `json:"reservation,omitempty"`
 
 	// VirtualIP is any virtual ip assigned to the NetworkInterface.
 	VirtualIP *IP `json:"virtualIP,omitempty"`
@@ -180,6 +182,19 @@ const (
 type MeteringParameters struct {
 	TotalRate  *uint64 `json:"totalRate,omitempty"`
 	PublicRate *uint64 `json:"publicRate,omitempty"`
+}
+// NetworkInterfaceReservation defines the network interface reservation details
+type NetworkInterfaceReservation struct {
+	// VirtualIP is the reserved virtual IP
+	VirtualIP *IPReservation `json:"virtualIP,omitempty"`
+	// IPs are the reserved IPs
+	IPs []IPReservation `json:"ips,omitempty"`
+	// LoadBalancerTargets are the reserved load balancer targets
+	LoadBalancerTargets []IPReservation `json:"loadBalancerTargets,omitempty"`
+	// NatIP is the reserved NAT IP
+	NatIP *IPReservation `json:"natIP,omitempty"`
+	// Prefixes are the reserved prefixes
+	Prefixes []IPReservation `json:"prefixes,omitempty"`
 }
 
 //+kubebuilder:object:root=true

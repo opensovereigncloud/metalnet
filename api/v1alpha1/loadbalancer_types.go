@@ -31,6 +31,9 @@ type LoadBalancerSpec struct {
 
 // LoadBalancerStatus defines the observed state of LoadBalancer
 type LoadBalancerStatus struct {
+	// Reservation contains the detailed reservation information
+	Reservation *LoadBalancerReservation `json:"reservation,omitempty"`
+
 	// State is the LoadBalancerState of the LoadBalancer.
 	State LoadBalancerState `json:"state,omitempty"`
 }
@@ -56,6 +59,12 @@ const (
 	// LoadBalancerStateError is used for any LoadBalancer that is some error occurred.
 	LoadBalancerStateError LoadBalancerState = "Error"
 )
+
+// LoadBalancerReservation defines the network interface reservation details
+type LoadBalancerReservation struct {
+	// IP is the reserved LoadBalancer IP
+	IP *IPReservation `json:"ip,omitempty"`
+}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

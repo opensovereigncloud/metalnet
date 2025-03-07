@@ -307,6 +307,88 @@ spec:
                 items:
                   type: string
                 type: array
+              reservation:
+                description: Reservation contains the detailed reservation information
+                properties:
+                  ips:
+                    description: IPs are the reserved IPs
+                    items:
+                      description: IPReservation defines an IP or prefix pair with
+                        overlay and underlay addresses
+                      properties:
+                        overlay:
+                          description: Overlay is the overlay network IP or prefix
+                          type: string
+                        underlay:
+                          description: Underlay is the underlay network IP or prefix
+                          type: string
+                      required:
+                      - overlay
+                      - underlay
+                      type: object
+                    type: array
+                  loadBalancerTargets:
+                    description: LoadBalancerTargets are the reserved load balancer
+                      targets
+                    items:
+                      description: IPReservation defines an IP or prefix pair with
+                        overlay and underlay addresses
+                      properties:
+                        overlay:
+                          description: Overlay is the overlay network IP or prefix
+                          type: string
+                        underlay:
+                          description: Underlay is the underlay network IP or prefix
+                          type: string
+                      required:
+                      - overlay
+                      - underlay
+                      type: object
+                    type: array
+                  natIP:
+                    description: NatIP is the reserved NAT IP
+                    properties:
+                      overlay:
+                        description: Overlay is the overlay network IP or prefix
+                        type: string
+                      underlay:
+                        description: Underlay is the underlay network IP or prefix
+                        type: string
+                    required:
+                    - overlay
+                    - underlay
+                    type: object
+                  prefixes:
+                    description: Prefixes are the reserved prefixes
+                    items:
+                      description: IPReservation defines an IP or prefix pair with
+                        overlay and underlay addresses
+                      properties:
+                        overlay:
+                          description: Overlay is the overlay network IP or prefix
+                          type: string
+                        underlay:
+                          description: Underlay is the underlay network IP or prefix
+                          type: string
+                      required:
+                      - overlay
+                      - underlay
+                      type: object
+                    type: array
+                  virtualIP:
+                    description: VirtualIP is the reserved virtual IP
+                    properties:
+                      overlay:
+                        description: Overlay is the overlay network IP or prefix
+                        type: string
+                      underlay:
+                        description: Underlay is the underlay network IP or prefix
+                        type: string
+                    required:
+                    - overlay
+                    - underlay
+                    type: object
+                type: object
               state:
                 description: State is the NetworkInterfaceState of the NetworkInterface.
                 type: string

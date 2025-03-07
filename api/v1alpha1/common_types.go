@@ -51,6 +51,14 @@ type IP struct {
 	netip.Addr `json:"-"`
 }
 
+// IPReservation defines an IP or prefix pair with overlay and underlay addresses
+type IPReservation struct {
+	// Overlay is the overlay network IP or prefix
+	Overlay string `json:"overlay"`
+	// Underlay is the underlay network IP or prefix
+	Underlay string `json:"underlay"`
+}
+
 func (in *IP) DeepCopyInto(out *IP) {
 	*out = *in
 }

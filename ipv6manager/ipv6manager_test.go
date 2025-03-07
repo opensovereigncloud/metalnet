@@ -210,4 +210,69 @@ var _ = Describe("IPv6Manager", func() {
 			Expect(err).To(HaveOccurred())
 		})
 	})
+
+	Context("Withdrawing IPs", func() {
+		BeforeEach(func() {
+			// Reset for each test
+			ipv6manager.ResetForTest()
+			manager = ipv6manager.GetInstance()
+			err := manager.SetCIDR("2001:db8::/64")
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should remove an existing IP", func() {
+			// Add an IP
+			existingIP := "2001:db8::1234"
+			err := manager.AddExistingIP(existingIP)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify IP is in the list
+			ips := manager.GetExistingIPs()
+			Expect(ips).To(ContainElement(existingIP))
+
+			// Withdraw the IP
+			manager.WithdrawIP(existingIP)
+
+			// Verify IP is no longer in the list
+			ips = manager.GetExistingIPs()
+			Expect(ips).NotTo(ContainElement(existingIP))
+		})
+
+		It("should handle non-existent IPs gracefully", func() {
+			// Withdraw an IP that doesn't exist
+			nonExistentIP := "2001:db8::5678"
+
+			// This should not panic or cause any errors
+			manager.WithdrawIP(nonExistentIP)
+
+			// Verify operation had no effect on existing IPs
+			ips := manager.GetExistingIPs()
+			Expect(len(ips)).To(Equal(0))
+		})
+
+		It("should handle invalid IP formats gracefully", func() {
+			// Withdraw an invalid IP
+			invalidIP := "not-an-ip"
+
+			// This should not panic or cause any errors
+			manager.WithdrawIP(invalidIP)
+		})
+
+		It("should allow reuse of withdrawn IPs", func() {
+			// Generate an IP
+			ip, err := manager.GenerateRandomIPv6()
+			Expect(err).NotTo(HaveOccurred())
+
+			// Withdraw the IP
+			manager.WithdrawIP(ip)
+
+			// Add the same IP manually
+			err = manager.AddExistingIP(ip)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify it's in the list again
+			ips := manager.GetExistingIPs()
+			Expect(ips).To(ContainElement(ip))
+		})
+	})
 })

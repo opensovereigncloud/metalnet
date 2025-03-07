@@ -223,3 +223,26 @@ func (m *IPv6Manager) GetExistingIPs() []string {
 
 	return ips
 }
+
+// WithdrawIP removes an IPv6 address from the manager
+// If the IP doesn't exist, the operation succeeds silently
+func (m *IPv6Manager) WithdrawIP(ipStr string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		// Invalid IP format, just return silently
+		return
+	}
+
+	// Ensure it's an IPv6 address
+	ip = ip.To16()
+	if ip == nil {
+		// Not an IPv6 address, just return silently
+		return
+	}
+
+	// Remove the IP from the tracking map
+	delete(m.existingIPs, ip.String())
+}

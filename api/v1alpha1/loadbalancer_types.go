@@ -73,6 +73,7 @@ type LoadBalancerReservation struct {
 // +kubebuilder:printcolumn:name="IP",type=string,description="IP of the loadbalancer.",JSONPath=`.spec.ip`,priority=10
 // +kubebuilder:printcolumn:name="Type",type=string,description="Type of the loadbalancer.",JSONPath=`.spec.type`,priority=10
 // +kubebuilder:printcolumn:name="Age",type=date,description="Age of the loadbalancer.",JSONPath=`.metadata.creationTimestamp`,priority=0
+
 // LoadBalancer is the Schema for the loadbalancers API
 type LoadBalancer struct {
 	metav1.TypeMeta   `json:",inline"`

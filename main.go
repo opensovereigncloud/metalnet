@@ -9,6 +9,7 @@ import (
 	"errors"
 	goflag "flag"
 	"fmt"
+	"github.com/ironcore-dev/metalnet/ipv6manager"
 	"net"
 	"net/http"
 	"net/netip"
@@ -18,7 +19,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hashicorp/go-version"
 	"github.com/jaypipes/ghw"
 	log "github.com/sirupsen/logrus"
 	flag "github.com/spf13/pflag"
@@ -29,10 +29,8 @@ import (
 	dpdkclient "github.com/ironcore-dev/dpservice/go/dpservice-go/client"
 	dpdkproto "github.com/ironcore-dev/dpservice/go/dpservice-go/proto"
 	mb "github.com/ironcore-dev/metalbond"
-	networkingv1alpha1 "github.com/ironcore-dev/metalnet/api/v1alpha1"
 	metalnetclient "github.com/ironcore-dev/metalnet/client"
 	"github.com/ironcore-dev/metalnet/control"
-	"github.com/ironcore-dev/metalnet/controllers"
 	"github.com/ironcore-dev/metalnet/internal"
 	"github.com/ironcore-dev/metalnet/metalbond"
 	"github.com/ironcore-dev/metalnet/netfns"
@@ -48,7 +46,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"github.com/hashicorp/go-version"
+	networkingv1alpha1 "github.com/ironcore-dev/metalnet/api/v1alpha1"
+	"github.com/ironcore-dev/metalnet/controllers"
+	//+kubebuilder:scaffold:imports
 )
 
 const dpserviceIPv6SupportVersionStr = "v0.3.1"
@@ -112,6 +113,8 @@ func main() {
 	var controlWebserverBindAddr string
 	var podName, daemonSetName, namespace string
 	var libvirtMachineUIDPath string
+	var controllerID string
+	var hostIP string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -153,6 +156,8 @@ func main() {
 	flag.StringVar(&daemonSetName, "daemonset-name", "metalnet-controller-manager", "The name of the DaemonSet.")
 	flag.StringVar(&namespace, "namespace", "metalnet-system", "The namespace of the DaemonSet.")
 	flag.StringVar(&libvirtMachineUIDPath, "libvirt-machine-uid-path", "/var/lib/libvirt-provider/machines", "The path to the libvirt provider machine UID directories.")
+	flag.StringVar(&controllerID, "controller-id", "", "The controller ID.")
+	flag.StringVar(&hostIP, "host-ip", "", "The host IP address.")
 
 	opts := zap.Options{
 		Development: true,
@@ -160,6 +165,16 @@ func main() {
 	opts.BindFlags(goflag.CommandLine)
 	flag.CommandLine.AddGoFlagSet(goflag.CommandLine)
 	flag.Parse()
+
+	if controllerID == "" {
+		setupLog.Error(errors.New("controller-id is required"), "missing required flag")
+		os.Exit(1)
+	}
+
+	if hostIP == "" {
+		setupLog.Error(errors.New("host-ip is required"), "missing required flag")
+		os.Exit(1)
+	}
 
 	if nodeName == "" || podName == "" {
 		setupLog.Error(errors.New("node-name and pod-name are required"), "missing required flags")
@@ -183,6 +198,13 @@ func main() {
 		multiportEswitchMode = strings.TrimSpace(string(content)) == "eswitch"
 	}
 	setupLog.Info(fmt.Sprintf("Multiport Eswitch mode set to: %v", multiportEswitchMode))
+
+	ipv6mgr := ipv6manager.GetInstance()
+	err = ipv6mgr.SetCIDR(fmt.Sprintf("%s/64", hostIP))
+	if err != nil {
+		setupLog.Error(err, "unable to set IPv6 CIDR")
+		os.Exit(1)
+	}
 
 	defaultRouterAddr.PublicVNI = uint32(publicVNI)
 	defaultRouterAddr.SetBySubsciption = false
@@ -277,6 +299,7 @@ func main() {
 		}
 	}
 
+	//TODO make HA!?
 	claimStore, err := netfns.NewFileClaimStore(filepath.Join(metalnetDir, "netfns", "claims"), tapDeviceMod)
 	if err != nil {
 		setupLog.Error(err, "unable to create claim store")
@@ -518,6 +541,7 @@ func main() {
 		TapDeviceMode:               tapDeviceMod,
 		Control:                     c,
 		LibvirtMachineUIDPath:       libvirtMachineUIDPath,
+		ControllerID:                controllerID,
 	}).SetupWithManager(mgr, mgr.GetCache()); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkInterface")
 		os.Exit(1)

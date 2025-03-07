@@ -26,6 +26,7 @@ import (
 	metalnetv1alpha1 "github.com/ironcore-dev/metalnet/api/v1alpha1"
 	metalnetclient "github.com/ironcore-dev/metalnet/client"
 	"github.com/ironcore-dev/metalnet/control"
+	"github.com/ironcore-dev/metalnet/ipv6manager"
 	"github.com/ironcore-dev/metalnet/metalbond"
 	"github.com/ironcore-dev/metalnet/netfns"
 	"github.com/ironcore-dev/metalnet/sysfs"
@@ -106,6 +107,11 @@ type NetworkInterfaceReconciler struct {
 	TapDeviceMode               bool
 	Control                     *control.ReconcileControl
 	LibvirtMachineUIDPath       string
+
+	// IPv6 CIDR for address reservation generation
+	IPv6CIDR     string
+	ControllerID string
+	VirtletMachineUIDPath       string
 }
 
 //+kubebuilder:rbac:groups=networking.metalnet.ironcore.dev,resources=networkinterfaces,verbs=get;list;watch;create;update;patch;delete
@@ -120,6 +126,14 @@ type NetworkInterfaceReconciler struct {
 func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrl.LoggerFrom(ctx)
 
+	// Initialize IPv6Manager if IPv6 is enabled
+	if r.EnableIPv6Support && r.IPv6CIDR != "" {
+		ipv6Manager := ipv6manager.GetInstance()
+		if err := ipv6Manager.SetCIDR(r.IPv6CIDR); err != nil {
+			log.Error(err, "Failed to set IPv6 CIDR for address manager")
+		}
+	}
+
 	if r.Control.ShouldSkip() {
 		log.V(1).Info("Skipping reconcile")
 		return ctrl.Result{}, nil
@@ -133,6 +147,11 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		if !isNetworkInterfaceAssignedToNode(nic, r.NodeName) {
 			log.V(1).Info("Network interface is not assigned to this node", "NodeName", nic.Spec.NodeName)
 			return ctrl.Result{}, nil
+		}
+
+		// Handle IP reservations first
+		if requeue, err := r.reconcileReservations(ctx, log, nic); requeue || err != nil {
+			return ctrl.Result{Requeue: requeue}, err
 		}
 
 		return r.reconcileExists(ctx, log, nic)
@@ -1857,6 +1876,263 @@ func (r *NetworkInterfaceReconciler) enqueueNetworkInterfacesReferencingNetwork(
 		}
 		return reqs
 	})
+}
+
+// reconcileReservations handles the generation and management of IP reservations
+// It returns (requeue, error) where requeue indicates if the reconciliation should be requeued
+func (r *NetworkInterfaceReconciler) reconcileReservations(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface) (bool, error) {
+	log.V(1).Info("Reconciling reservations")
+
+	// Check if reservations need to be updated
+	needsUpdate := false
+	if nic.Status.Reservation == nil {
+		needsUpdate = true
+		log.V(1).Info("No existing reservations found, creating new ones")
+	} else {
+		// Check if spec has changed since last reservation
+		needsUpdate = r.reservationsNeedUpdate(nic)
+		if needsUpdate {
+			log.V(1).Info("Spec has changed, updating reservations")
+		} else {
+			log.V(1).Info("Reservations are up to date")
+			return false, nil
+		}
+	}
+
+	if !needsUpdate {
+		return false, nil
+	}
+
+	// Create a new reservation
+	reservation := &metalnetv1alpha1.NetworkInterfaceReservation{}
+	var processingError error
+
+	// Process all IPs in a single function that builds the entire reservation
+	reservation, processingError = r.buildNetworkInterfaceReservation(nic)
+	if processingError != nil {
+		// If there's an error, update the status to show the error
+		log.Error(processingError, "Failed to build network interface reservations")
+		if updateErr := r.patchStatus(ctx, nic, func() {
+			metalnetv1alpha1.SetNetworkInterfaceControllerStatus(
+				&nic.Status,
+				r.ControllerID,
+				string(metalnetv1alpha1.NetworkInterfaceStateError),
+				fmt.Sprintf("Failed to generate IP reservations: %v", processingError),
+				nic.Generation,
+			)
+		}); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return false, processingError
+	}
+
+	// Update NetworkInterface status with the reservations
+	if err := r.patchStatus(ctx, nic, func() {
+		// Update the reservation in status
+		nic.Status.Reservation = reservation
+
+		// Set controller status to Ready
+		metalnetv1alpha1.SetNetworkInterfaceControllerStatus(
+			&nic.Status,
+			r.ControllerID,
+			string(metalnetv1alpha1.NetworkInterfaceStateReady),
+			"IP reservations successfully generated",
+			nic.Generation,
+		)
+
+		// Update overall status
+		metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status)
+	}); err != nil {
+		log.Error(err, "Failed to update NetworkInterface status with reservations")
+		return false, err
+	}
+
+	log.V(1).Info("Successfully updated reservations, requeuing for main reconciliation")
+	return true, nil
+}
+
+// reservationsNeedUpdate checks if the NetworkInterface spec has changed since the last reservation
+func (r *NetworkInterfaceReconciler) reservationsNeedUpdate(nic *metalnetv1alpha1.NetworkInterface) bool {
+	// If no reservation exists, update is needed
+	if nic.Status.Reservation == nil {
+		return true
+	}
+
+	// Check IP counts
+	if len(nic.Spec.IPs) != len(nic.Status.Reservation.IPs) {
+		return true
+	}
+
+	// Check for Virtual IP changes
+	if (nic.Spec.VirtualIP == nil || nic.Spec.VirtualIP.IsZero()) && nic.Status.Reservation.VirtualIP != nil {
+		return true
+	}
+	if nic.Spec.VirtualIP != nil && !nic.Spec.VirtualIP.IsZero() &&
+		(nic.Status.Reservation.VirtualIP == nil ||
+			nic.Status.Reservation.VirtualIP.Overlay != nic.Spec.VirtualIP.String()) {
+		return true
+	}
+
+	// Check for NAT IP changes
+	natIPInSpec := nic.Spec.NAT != nil && nic.Spec.NAT.IP != nil && !nic.Spec.NAT.IP.IsZero()
+	natIPInStatus := nic.Status.Reservation.NatIP != nil
+
+	if !natIPInSpec && natIPInStatus {
+		return true
+	}
+	if natIPInSpec && !natIPInStatus {
+		return true
+	}
+	if nic.Status.Reservation.NatIP.Overlay != nic.Spec.NAT.IP.String() {
+		return true
+	}
+
+	// Check LoadBalancer targets
+	if len(nic.Spec.LoadBalancerTargets) != len(nic.Status.Reservation.LoadBalancerTargets) {
+		return true
+	}
+
+	// Check for changes in the LoadBalancer targets
+	specTargets := make(map[string]bool)
+	for _, target := range nic.Spec.LoadBalancerTargets {
+		specTargets[target.String()] = true
+	}
+
+	for _, target := range nic.Status.Reservation.LoadBalancerTargets {
+		if !specTargets[target.Overlay] {
+			return true
+		}
+	}
+
+	// Check Prefixes
+	if len(nic.Spec.Prefixes) != len(nic.Status.Reservation.Prefixes) {
+		return true
+	}
+
+	// Check for changes in the Prefixes
+	specPrefixes := make(map[string]bool)
+	for _, prefix := range nic.Spec.Prefixes {
+		specPrefixes[prefix.String()] = true
+	}
+
+	for _, prefix := range nic.Status.Reservation.Prefixes {
+		if !specPrefixes[prefix.Overlay] {
+			return true
+		}
+	}
+
+	return false
+}
+
+// buildNetworkInterfaceReservation builds the complete reservation structure for all IP components
+func (r *NetworkInterfaceReconciler) buildNetworkInterfaceReservation(nic *metalnetv1alpha1.NetworkInterface) (*metalnetv1alpha1.NetworkInterfaceReservation, error) {
+	// Construct NetworkInterfaceReservation from Spec
+	reservation := &metalnetv1alpha1.NetworkInterfaceReservation{
+		IPs: make([]metalnetv1alpha1.IPReservation, 0, len(nic.Spec.IPs)),
+	}
+
+	// Process all spec items at once and collect any errors
+	var allErrors []error
+
+	// Process IPs
+	for _, ip := range nic.Spec.IPs {
+		overlayIP := ip.String()
+		underlayIP, err := r.generateUnderlayIP(ip)
+		if err != nil {
+			allErrors = append(allErrors, fmt.Errorf("failed to generate underlay IP for %s: %w", overlayIP, err))
+			continue
+		}
+
+		reservation.IPs = append(reservation.IPs, metalnetv1alpha1.IPReservation{
+			Overlay:  overlayIP,
+			Underlay: underlayIP,
+		})
+	}
+
+	// Process Virtual IP if specified
+	if nic.Spec.VirtualIP != nil && !nic.Spec.VirtualIP.IsZero() {
+		overlayIP := nic.Spec.VirtualIP.String()
+		underlayIP, err := r.generateUnderlayIP(*nic.Spec.VirtualIP)
+		if err != nil {
+			allErrors = append(allErrors, fmt.Errorf("failed to generate underlay IP for virtual IP %s: %w", overlayIP, err))
+		} else {
+			reservation.VirtualIP = &metalnetv1alpha1.IPReservation{
+				Overlay:  overlayIP,
+				Underlay: underlayIP,
+			}
+		}
+	}
+
+	// Process NAT IPs if specified
+	if nic.Spec.NAT != nil && nic.Spec.NAT.IP != nil && !nic.Spec.NAT.IP.IsZero() {
+		overlayIP := nic.Spec.NAT.IP.String()
+		underlayIP, err := r.generateUnderlayIP(*nic.Spec.NAT.IP)
+		if err != nil {
+			allErrors = append(allErrors, fmt.Errorf("failed to generate underlay IP for NAT IP %s: %w", overlayIP, err))
+		} else {
+			reservation.NatIP = &metalnetv1alpha1.IPReservation{
+				Overlay:  overlayIP,
+				Underlay: underlayIP,
+			}
+		}
+	}
+
+	// Process LoadBalancerTargets
+	if len(nic.Spec.LoadBalancerTargets) > 0 {
+		reservation.LoadBalancerTargets = make([]metalnetv1alpha1.IPReservation, 0, len(nic.Spec.LoadBalancerTargets))
+
+		for _, target := range nic.Spec.LoadBalancerTargets {
+			overlayPrefix := target.String()
+			underlayIP, err := r.generateUnderlayIP(target.IP())
+			if err != nil {
+				allErrors = append(allErrors, fmt.Errorf("failed to generate underlay IP for LoadBalancer target %s: %w", overlayPrefix, err))
+				continue
+			}
+
+			reservation.LoadBalancerTargets = append(reservation.LoadBalancerTargets, metalnetv1alpha1.IPReservation{
+				Overlay:  overlayPrefix,
+				Underlay: underlayIP,
+			})
+		}
+	}
+
+	// Process Prefixes
+	if len(nic.Spec.Prefixes) > 0 {
+		reservation.Prefixes = make([]metalnetv1alpha1.IPReservation, 0, len(nic.Spec.Prefixes))
+
+		for _, prefix := range nic.Spec.Prefixes {
+			overlayPrefix := prefix.String()
+			underlayIP, err := r.generateUnderlayIP(prefix.IP())
+			if err != nil {
+				allErrors = append(allErrors, fmt.Errorf("failed to generate underlay IP for prefix %s: %w", overlayPrefix, err))
+				continue
+			}
+
+			reservation.Prefixes = append(reservation.Prefixes, metalnetv1alpha1.IPReservation{
+				Overlay:  overlayPrefix,
+				Underlay: underlayIP,
+			})
+		}
+	}
+
+	// If there were any errors, combine them and return
+	if len(allErrors) > 0 {
+		combinedError := fmt.Errorf("errors generating IP reservations: %v", allErrors)
+		return nil, combinedError
+	}
+
+	return reservation, nil
+}
+
+// generateUnderlayIP generates an underlay IP for a given overlay IP
+func (r *NetworkInterfaceReconciler) generateUnderlayIP(overlayIP metalnetv1alpha1.IP) (string, error) {
+	if overlayIP.Is6() && r.EnableIPv6Support {
+		// For IPv6, we use the IPv6Manager to generate a unique IPv6 address
+		ipv6Manager := ipv6manager.GetInstance()
+		return ipv6Manager.GenerateRandomIPv6()
+	}
+
+	return "", fmt.Errorf("unsupported IP family")
 }
 
 func (r *NetworkInterfaceReconciler) enqueueNetworkInterfacesReferencingLoadBalancer(ctx context.Context, log logr.Logger) handler.EventHandler {

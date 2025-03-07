@@ -30,6 +30,7 @@ import (
 	metalnetclient "github.com/ironcore-dev/metalnet/client"
 	"github.com/ironcore-dev/metalnet/control"
 	"github.com/ironcore-dev/metalnet/internal"
+	"github.com/ironcore-dev/metalnet/ipv6manager"
 	"github.com/ironcore-dev/metalnet/metalbond"
 )
 
@@ -51,6 +52,7 @@ type LoadBalancerReconciler struct {
 	PublicVNI         int
 	EnableIPv6Support bool
 	Control           *control.ReconcileControl
+	ControllerID      string
 }
 
 //+kubebuilder:rbac:groups=networking.metalnet.ironcore.dev,resources=loadbalancers,verbs=get;list;watch;create;update;patch;delete
@@ -75,6 +77,11 @@ func (r *LoadBalancerReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		if !isLoadBalancerAssignedToNode(lb, r.NodeName) {
 			log.V(1).Info("LoadBalancer is not assigned to this node", "NodeName", lb.Spec.NodeName)
 			return ctrl.Result{}, nil
+		}
+
+		// Handle IP reservations first
+		if requeue, err := r.reconcileReservations(ctx, log, lb); requeue || err != nil {
+			return ctrl.Result{Requeue: requeue}, err
 		}
 
 		return r.reconcileExists(ctx, log, lb)
@@ -109,6 +116,13 @@ func (r *LoadBalancerReconciler) delete(ctx context.Context, log logr.Logger, lb
 		if err := r.MetalnetCache.RemoveLoadBalancerServer(ip, lb.UID); err != nil {
 			return ctrl.Result{}, fmt.Errorf("error deleting dpdk loadbalancer from internal cache: %w", err)
 		}
+
+		// Clean up reservations if they exist
+		if lb.Status.Reservation != nil {
+			log.V(1).Info("Cleaning up existing reservations")
+			//TODO Clean up reservations if they exist
+		}
+
 		log.V(1).Info("No dpdk loadbalancer, removing finalizer")
 		if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, lb, loadBalancerFinalizer); err != nil {
 			return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
@@ -130,6 +144,12 @@ func (r *LoadBalancerReconciler) delete(ctx context.Context, log logr.Logger, lb
 	log.V(1).Info("Remove LoadBalancer server", "vni", vni, "ip", ip)
 	if err := r.MetalnetCache.RemoveLoadBalancerServer(ip, lb.UID); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error deleting dpdk loadbalancer from internal cache: %w", err)
+	}
+
+	// Clean up reservations if they exist
+	if lb.Status.Reservation != nil {
+		log.V(1).Info("Cleaning up existing reservations")
+		//TODO Clean up reservations if they exist
 	}
 
 	log.V(1).Info("Removing finalizer")
@@ -236,13 +256,26 @@ func (r *LoadBalancerReconciler) reconcile(ctx context.Context, log logr.Logger,
 
 	if !r.EnableIPv6Support && lb.Spec.IP.Is6() {
 		if err := r.patchStatus(ctx, lb, func() {
-			lb.Status = metalnetv1alpha1.LoadBalancerStatus{
-				State: metalnetv1alpha1.LoadBalancerStateError,
-			}
+			// Set controller status with error state
+			metalnetv1alpha1.SetLoadBalancerControllerStatus(
+				&lb.Status,
+				r.ControllerID,
+				string(metalnetv1alpha1.LoadBalancerStateError),
+				"IPv6 flag not enabled but IPv6 address set on loadbalancer",
+				lb.Generation,
+			)
+			// Update overall status
+			metalnetv1alpha1.AggregateLoadBalancerStatus(&lb.Status)
 		}); err != nil {
 			log.Error(err, "Error patching loadbalancer status")
 		}
 		return ctrl.Result{}, fmt.Errorf("ipv6 flag not enabled but ipv6 address set on loadbalancer")
+	}
+
+	// Verify that reservations exist if needed
+	if lb.Status.Reservation == nil && lb.Spec.IP.IsValid() {
+		log.V(1).Info("Missing reservations, requeuing to generate them first")
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	network := &metalnetv1alpha1.Network{}
@@ -255,9 +288,16 @@ func (r *LoadBalancerReconciler) reconcile(ctx context.Context, log logr.Logger,
 
 		r.Eventf(lb, corev1.EventTypeWarning, "NetworkNotFound", "Network %s could not be found", networkKey.Name)
 		if err := r.patchStatus(ctx, lb, func() {
-			lb.Status = metalnetv1alpha1.LoadBalancerStatus{
-				State: metalnetv1alpha1.LoadBalancerStatePending,
-			}
+			// Set controller status with pending state
+			metalnetv1alpha1.SetLoadBalancerControllerStatus(
+				&lb.Status,
+				r.ControllerID,
+				string(metalnetv1alpha1.LoadBalancerStatePending),
+				fmt.Sprintf("Network %s could not be found", networkKey.Name),
+				lb.Generation,
+			)
+			// Update overall status
+			metalnetv1alpha1.AggregateLoadBalancerStatus(&lb.Status)
 		}); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -270,12 +310,19 @@ func (r *LoadBalancerReconciler) reconcile(ctx context.Context, log logr.Logger,
 	log.V(1).Info("Applying loadbalancer")
 	underlayRoute, err := r.applyLoadBalancer(ctx, log, lb, vni)
 	if err != nil {
-		if err := r.patchStatus(ctx, lb, func() {
-			lb.Status = metalnetv1alpha1.LoadBalancerStatus{
-				State: metalnetv1alpha1.LoadBalancerStateError,
-			}
-		}); err != nil {
-			log.Error(err, "Error patching loadbalancer status")
+		if patchErr := r.patchStatus(ctx, lb, func() {
+			// Set controller status with error state
+			metalnetv1alpha1.SetLoadBalancerControllerStatus(
+				&lb.Status,
+				r.ControllerID,
+				string(metalnetv1alpha1.LoadBalancerStateError),
+				fmt.Sprintf("Error applying loadBalancer: %v", err),
+				lb.Generation,
+			)
+			// Update overall status
+			metalnetv1alpha1.AggregateLoadBalancerStatus(&lb.Status)
+		}); patchErr != nil {
+			log.Error(patchErr, "Error patching loadbalancer status")
 		}
 		return ctrl.Result{}, fmt.Errorf("error applying loadbalancer: %w", err)
 	}
@@ -283,7 +330,15 @@ func (r *LoadBalancerReconciler) reconcile(ctx context.Context, log logr.Logger,
 
 	log.V(1).Info("Patching status")
 	if err := r.patchStatus(ctx, lb, func() {
-		lb.Status.State = metalnetv1alpha1.LoadBalancerStateReady
+		metalnetv1alpha1.SetLoadBalancerControllerStatus(
+			&lb.Status,
+			r.ControllerID,
+			string(metalnetv1alpha1.LoadBalancerStateReady),
+			"LoadBalancer successfully reconciled",
+			lb.Generation,
+		)
+		// Update overall status
+		metalnetv1alpha1.AggregateLoadBalancerStatus(&lb.Status)
 	}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error patching status: %w", err)
 	}
@@ -389,4 +444,132 @@ func (r *LoadBalancerReconciler) enqueueLoadBalancersReferencingNetwork(ctx cont
 		}
 		return reqs
 	})
+}
+
+// reconcileReservations handles the generation and management of IP reservations
+// It returns (requeue, error) where requeue indicates if the reconciliation should be requeued
+func (r *LoadBalancerReconciler) reconcileReservations(ctx context.Context, log logr.Logger, lb *metalnetv1alpha1.LoadBalancer) (bool, error) {
+	log.V(1).Info("Reconciling reservations")
+
+	// Check if reservations need to be updated
+	needsUpdate := false
+	if lb.Status.Reservation == nil {
+		needsUpdate = true
+		log.V(1).Info("No existing reservations found, creating new ones")
+	} else {
+		// Check if spec has changed since last reservation
+		needsUpdate = r.reservationsNeedUpdate(lb)
+		if needsUpdate {
+			log.V(1).Info("Spec has changed, updating reservations")
+		} else {
+			log.V(1).Info("Reservations are up to date")
+			return false, nil
+		}
+	}
+
+	if !needsUpdate {
+		return false, nil
+	}
+
+	// Create a new reservation
+	reservation := &metalnetv1alpha1.LoadBalancerReservation{}
+	var processingError error
+
+	// Process all IPs in a single function that builds the entire reservation
+	reservation, processingError = r.buildLoadBalancerReservation(lb)
+	if processingError != nil {
+		// If there's an error, update the status to show the error
+		log.Error(processingError, "Failed to build load balancer reservations")
+		if updateErr := r.patchStatus(ctx, lb, func() {
+			metalnetv1alpha1.SetLoadBalancerControllerStatus(
+				&lb.Status,
+				r.ControllerID,
+				string(metalnetv1alpha1.LoadBalancerStateError),
+				fmt.Sprintf("Failed to generate IP reservations: %v", processingError),
+				lb.Generation,
+			)
+			// Update overall status
+			metalnetv1alpha1.AggregateLoadBalancerStatus(&lb.Status)
+		}); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return false, processingError
+	}
+
+	// Update LoadBalancer status with the reservations
+	if err := r.patchStatus(ctx, lb, func() {
+		// Update the reservation in status
+		lb.Status.Reservation = reservation
+
+		// Set controller status to Ready
+		metalnetv1alpha1.SetLoadBalancerControllerStatus(
+			&lb.Status,
+			r.ControllerID,
+			string(metalnetv1alpha1.LoadBalancerStateReady),
+			"IP reservations successfully generated",
+			lb.Generation,
+		)
+
+		// Update overall status
+		metalnetv1alpha1.AggregateLoadBalancerStatus(&lb.Status)
+	}); err != nil {
+		log.Error(err, "Failed to update LoadBalancer status with reservations")
+		return false, err
+	}
+
+	log.V(1).Info("Successfully updated reservations, requeuing for main reconciliation")
+	return true, nil
+}
+
+// reservationsNeedUpdate checks if the LoadBalancer spec has changed since the last reservation
+func (r *LoadBalancerReconciler) reservationsNeedUpdate(lb *metalnetv1alpha1.LoadBalancer) bool {
+	// If no reservation exists, update is needed
+	if lb.Status.Reservation == nil {
+		return true
+	}
+
+	// Check IP changes
+	if !lb.Spec.IP.IsValid() && lb.Status.Reservation.IP != nil {
+		return true
+	}
+
+	if lb.Spec.IP.IsValid() && (lb.Status.Reservation.IP == nil ||
+		lb.Status.Reservation.IP.Overlay != lb.Spec.IP.String()) {
+		return true
+	}
+
+	return false
+}
+
+// buildLoadBalancerReservation builds the complete reservation structure for all IP components
+func (r *LoadBalancerReconciler) buildLoadBalancerReservation(lb *metalnetv1alpha1.LoadBalancer) (*metalnetv1alpha1.LoadBalancerReservation, error) {
+	// Create new reservation structure
+	reservation := &metalnetv1alpha1.LoadBalancerReservation{}
+
+	// Only process IP if it's valid
+	if lb.Spec.IP.IsValid() {
+		overlayIP := lb.Spec.IP.String()
+		underlayIP, err := r.generateUnderlayIP(lb.Spec.IP)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate underlay IP for %s: %w", overlayIP, err)
+		}
+
+		reservation.IP = &metalnetv1alpha1.IPReservation{
+			Overlay:  overlayIP,
+			Underlay: underlayIP,
+		}
+	}
+
+	return reservation, nil
+}
+
+// generateUnderlayIP generates an underlay IP for a given overlay IP
+func (r *LoadBalancerReconciler) generateUnderlayIP(overlayIP metalnetv1alpha1.IP) (string, error) {
+	if overlayIP.Is6() && r.EnableIPv6Support {
+		// For IPv6, we use the IPv6Manager to generate a unique IPv6 address
+		ipv6Manager := ipv6manager.GetInstance()
+		return ipv6Manager.GenerateRandomIPv6()
+	}
+
+	return "", fmt.Errorf("unsupported IP family")
 }

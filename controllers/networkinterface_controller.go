@@ -943,9 +943,16 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 
 		r.Eventf(nic, corev1.EventTypeWarning, "NetworkNotFound", "Network %s could not be found", networkKey.Name)
 		if err := r.patchStatus(ctx, nic, func() {
-			nic.Status = metalnetv1alpha1.NetworkInterfaceStatus{
-				State: metalnetv1alpha1.NetworkInterfaceStatePending,
-			}
+			// Set controller status with pending state
+			metalnetv1alpha1.SetNetworkInterfaceControllerStatus(
+				&nic.Status,
+				r.ControllerID,
+				string(metalnetv1alpha1.NetworkInterfaceStatePending),
+				fmt.Sprintf("Network %s could not be found", networkKey.Name),
+				nic.Generation,
+			)
+			// Update overall status
+			metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status)
 		}); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -955,9 +962,16 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 	isValid, err := r.isValidInterfaceSpec(&nic.Spec)
 	if !isValid {
 		if errPatch := r.patchStatus(ctx, nic, func() {
-			nic.Status = metalnetv1alpha1.NetworkInterfaceStatus{
-				State: metalnetv1alpha1.NetworkInterfaceStateError,
-			}
+			// Set controller status with error state
+			metalnetv1alpha1.SetNetworkInterfaceControllerStatus(
+				&nic.Status,
+				r.ControllerID,
+				string(metalnetv1alpha1.NetworkInterfaceStateError),
+				fmt.Sprintf("Interface spec validation error: %v", err),
+				nic.Generation,
+			)
+			// Update overall status
+			metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status)
 		}); errPatch != nil {
 			log.Error(errPatch, "Error patching network interface status")
 		}
@@ -970,12 +984,19 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 	log.V(1).Info("Applying interface")
 	pciAddr, underlayRoute, isCreated, err := r.applyInterface(ctx, log, nic, vni)
 	if err != nil {
-		if err := r.patchStatus(ctx, nic, func() {
-			nic.Status = metalnetv1alpha1.NetworkInterfaceStatus{
-				State: metalnetv1alpha1.NetworkInterfaceStateError,
-			}
-		}); err != nil {
-			log.Error(err, "Error patching network interface status")
+		if patchErr := r.patchStatus(ctx, nic, func() {
+			// Set controller status with error state
+			metalnetv1alpha1.SetNetworkInterfaceControllerStatus(
+				&nic.Status,
+				r.ControllerID,
+				string(metalnetv1alpha1.NetworkInterfaceStateError),
+				fmt.Sprintf("Error applying interface: %v", err),
+				nic.Generation,
+			)
+			// Update overall status
+			metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status)
+		}); patchErr != nil {
+			log.Error(patchErr, "Error patching network interface status")
 		}
 		return ctrl.Result{}, fmt.Errorf("error applying interface: %w", err)
 	}
@@ -983,18 +1004,31 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 
 	// The interface was just created via GRPC and object status state is already Ready.
 	// So toggle the status state to reflect the "readiness" of the interface.
-	if isCreated && nic.Status.State == metalnetv1alpha1.NetworkInterfaceStateReady {
+	if isCreated && nic.Status.GetState() == metalnetv1alpha1.NetworkInterfaceStateReady {
+		// First set to pending
 		if err := r.patchStatus(ctx, nic, func() {
-			nic.Status = metalnetv1alpha1.NetworkInterfaceStatus{
-				State: metalnetv1alpha1.NetworkInterfaceStatePending,
-			}
+			metalnetv1alpha1.SetNetworkInterfaceControllerStatus(
+				&nic.Status,
+				r.ControllerID,
+				string(metalnetv1alpha1.NetworkInterfaceStatePending),
+				"Interface is being initialized",
+				nic.Generation,
+			)
+			metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status)
 		}); err != nil {
 			log.Error(err, "Error patching network interface status to pending")
 		}
+
+		// Then set to ready
 		if err := r.patchStatus(ctx, nic, func() {
-			nic.Status = metalnetv1alpha1.NetworkInterfaceStatus{
-				State: metalnetv1alpha1.NetworkInterfaceStateReady,
-			}
+			metalnetv1alpha1.SetNetworkInterfaceControllerStatus(
+				&nic.Status,
+				r.ControllerID,
+				string(metalnetv1alpha1.NetworkInterfaceStateReady),
+				"Interface is ready",
+				nic.Generation,
+			)
+			metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status)
 		}); err != nil {
 			log.Error(err, "Error patching network interface status to ready")
 		}
@@ -1053,7 +1087,16 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 
 	log.V(1).Info("Patching status")
 	if err := r.patchStatus(ctx, nic, func() {
-		nic.Status.State = metalnetv1alpha1.NetworkInterfaceStateReady
+		// Update controller status with successful reconciliation
+		metalnetv1alpha1.SetNetworkInterfaceControllerStatus(
+			&nic.Status,
+			r.ControllerID,
+			string(metalnetv1alpha1.NetworkInterfaceStateReady),
+			"Network interface successfully reconciled",
+			nic.Generation,
+		)
+
+		// Update PCI address in status
 		if r.BluefieldDetected {
 			pciAddr.Bus = r.BluefieldHostDefaultBusAddr
 			log.V(1).Info("Bluefield detected. Converting PCI Bus to the host PCI bus", "PCIAddress", pciAddr)
@@ -1072,6 +1115,7 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 			}
 		}
 
+		// Copy other fields from spec to status based on reconciliation result
 		if virtualIPErr == nil {
 			nic.Status.VirtualIP = nic.Spec.VirtualIP
 		}
@@ -1090,6 +1134,9 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 		if lbTargetErr == nil {
 			nic.Status.LoadBalancerTargets = nic.Spec.LoadBalancerTargets
 		}
+
+		// Update overall status
+		metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status)
 	}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error patching status: %w", err)
 	}

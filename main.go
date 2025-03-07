@@ -558,6 +558,7 @@ func main() {
 		PublicVNI:         publicVNI,
 		EnableIPv6Support: enableIPv6Support,
 		Control:           c,
+		ControllerID:      controllerID,
 	}).SetupWithManager(mgr, mgr.GetCache()); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LoadBalancer")
 		os.Exit(1)

@@ -1962,23 +1962,17 @@ func (r *NetworkInterfaceReconciler) reconcileReservations(ctx context.Context, 
 	log.V(1).Info("Reconciling reservations")
 
 	// Check if reservations need to be updated
-	needsUpdate := false
 	if nic.Status.Reservation == nil {
-		needsUpdate = true
 		log.V(1).Info("No existing reservations found, creating new ones")
 	} else {
 		// Check if spec has changed since last reservation
-		needsUpdate = r.reservationsNeedUpdate(nic)
+		needsUpdate := r.reservationsNeedUpdate(nic)
 		if needsUpdate {
 			log.V(1).Info("Spec has changed, updating reservations")
 		} else {
 			log.V(1).Info("Reservations are up to date")
 			return false, nil
 		}
-	}
-
-	if !needsUpdate {
-		return false, nil
 	}
 
 	// Create a new reservation

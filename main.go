@@ -15,6 +15,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
 	"sync"
 	"time"
@@ -210,6 +211,92 @@ func main() {
 		os.Exit(1)
 	}
 
+	setupLog.Info("Initializing IPv6 manager with existing IP reservations")
+
+	// Create a client for fetching resources
+	k8sConfig := ctrl.GetConfigOrDie()
+	clientOpts := client.Options{
+		Scheme: scheme,
+	}
+	k8sClient, err := client.New(k8sConfig, clientOpts)
+	if err != nil {
+		setupLog.Error(err, "unable to create k8s client for IP reservations initialization")
+		os.Exit(1)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Fetch and populate NetworkInterface reservations
+	var networkInterfaces networkingv1alpha1.NetworkInterfaceList
+	if err := k8sClient.List(ctx, &networkInterfaces); err != nil {
+		setupLog.Error(err, "unable to list NetworkInterfaces for IP reservations")
+	} else {
+		reservedCount := 0
+		for _, ni := range networkInterfaces.Items {
+			if ni.Spec.NodeName != nil && *ni.Spec.NodeName == nodeName && ni.Status.Reservation != nil {
+				for _, ip := range ni.Status.Reservation.IPs {
+					if err := ipv6mgr.AddExistingIP(ip.Underlay); err != nil {
+						log.Warnf("Failed to add existing IPv6 address %s from NetworkInterface %s: %v", ip.Underlay, ni.Name, err)
+					} else {
+						reservedCount++
+					}
+				}
+				for _, ip := range ni.Status.Reservation.Prefixes {
+					if err := ipv6mgr.AddExistingIP(ip.Underlay); err != nil {
+						log.Warnf("Failed to add existing IPv6 prefix address %s from NetworkInterface %s: %v", ip.Underlay, ni.Name, err)
+					} else {
+						reservedCount++
+					}
+				}
+				for _, ip := range ni.Status.Reservation.LoadBalancerTargets {
+					if err := ipv6mgr.AddExistingIP(ip.Underlay); err != nil {
+						log.Warnf("Failed to add existing IPv6 loadbalancer target address %s from NetworkInterface %s: %v", ip.Underlay, ni.Name, err)
+					} else {
+						reservedCount++
+					}
+				}
+				if ni.Status.Reservation.NatIP != nil {
+					if err := ipv6mgr.AddExistingIP(ni.Status.Reservation.NatIP.Underlay); err != nil {
+						log.Warnf("Failed to add existing IPv6 NAT address %s from NetworkInterface %s: %v", ni.Status.Reservation.NatIP.Underlay, ni.Name, err)
+					} else {
+						reservedCount++
+					}
+				}
+				if ni.Status.Reservation.VirtualIP != nil {
+					if err := ipv6mgr.AddExistingIP(ni.Status.Reservation.VirtualIP.Underlay); err != nil {
+						log.Warnf("Failed to add existing IPv6 virtual address %s from NetworkInterface %s: %v", ni.Status.Reservation.VirtualIP.Underlay, ni.Name, err)
+					} else {
+						reservedCount++
+					}
+				}
+			}
+		}
+		setupLog.Info("Loaded NetworkInterface IPv6 reservations", "count", reservedCount)
+	}
+
+	// Fetch and populate LoadBalancer reservations
+	var loadBalancers networkingv1alpha1.LoadBalancerList
+	if err := k8sClient.List(ctx, &loadBalancers); err != nil {
+		setupLog.Error(err, "unable to list LoadBalancers for IP reservations")
+	} else {
+		reservedCount := 0
+		for _, lb := range loadBalancers.Items {
+			if lb.Spec.NodeName != nil && *lb.Spec.NodeName == nodeName && lb.Status.Reservation != nil {
+				if lb.Status.Reservation.IP != nil {
+					if err := ipv6mgr.AddExistingIP(lb.Status.Reservation.IP.Underlay); err != nil {
+						log.Warnf("Failed to add existing IPv6 address %s from LoadBalancer %s: %v", lb.Status.Reservation.IP.Underlay, lb.Name, err)
+					} else {
+						reservedCount++
+					}
+				}
+			}
+		}
+		setupLog.Info("Loaded LoadBalancer IPv6 reservations", "count", reservedCount)
+	}
+
+	setupLog.Info("Completed IPv6 manager initialization", "totalAddresses", len(ipv6mgr.GetExistingIPs()))
+
 	defaultRouterAddr.PublicVNI = uint32(publicVNI)
 	defaultRouterAddr.SetBySubsciption = false
 
@@ -346,7 +433,7 @@ func main() {
 	}
 
 	// setup dpservice client
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
 	conn, err := grpc.NewClient(dpserviceAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))

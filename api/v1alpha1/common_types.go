@@ -249,7 +249,7 @@ func AggregateNetworkInterfaceStatus(status *NetworkInterfaceStatus) {
 	var stateStr string
 	if hasError {
 		stateStr = "Error"
-	} else if hasPending || readyCount < 2 { // Need at least 2 controllers reporting Ready
+	} else if hasPending {
 		stateStr = "Pending"
 	} else if readyCount >= 2 {
 		// At least 2 controllers are reporting Ready

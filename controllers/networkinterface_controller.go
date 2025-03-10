@@ -2061,7 +2061,7 @@ func (r *NetworkInterfaceReconciler) reservationsNeedUpdate(nic *metalnetv1alpha
 	if natIPInSpec && !natIPInStatus {
 		return true
 	}
-	if nic.Status.Reservation.NatIP.Overlay != nic.Spec.NAT.IP.String() {
+	if nic.Status.Reservation.NatIP != nil && nic.Status.Reservation.NatIP.Overlay != nic.Spec.NAT.IP.String() {
 		return true
 	}
 

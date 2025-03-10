@@ -118,4 +118,7 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-replace github.com/ironcore-dev/metalbond => github.com/opensovereigncloud/metalbond v0.3.6-0.20250318092513-800a99853ed0
+replace (
+	github.com/ironcore-dev/dpservice/go/dpservice-go => gitlab.devops.telekom.de/cas-devs/osc/upstream/onmetal/net-dpservice/go/dpservice-go v0.0.0-20250309234948-c41b85b621f7
+	github.com/ironcore-dev/metalbond => gitlab.devops.telekom.de/cas-devs/osc/upstream/onmetal/metalbond v1.0.2
+)

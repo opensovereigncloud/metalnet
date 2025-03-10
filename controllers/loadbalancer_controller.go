@@ -385,12 +385,14 @@ func (r *LoadBalancerReconciler) applyLoadBalancer(ctx context.Context, log logr
 
 		log.V(1).Info("DPDK loadbalancer does not yet exist, creating it")
 
+		underlayRoute := netip.MustParseAddr(lb.Status.Reservation.IP.Underlay)
 		lbalancer, err := r.DPDK.CreateLoadBalancer(ctx, &dpdk.LoadBalancer{
 			LoadBalancerMeta: dpdk.LoadBalancerMeta{ID: string(lb.UID)},
 			Spec: dpdk.LoadBalancerSpec{
-				VNI:     vni,
-				LbVipIP: &lb.Spec.IP.Addr,
-				Lbports: ports,
+				VNI:           vni,
+				LbVipIP:       &lb.Spec.IP.Addr,
+				Lbports:       ports,
+				UnderlayRoute: &underlayRoute,
 			},
 		})
 		if err != nil {
@@ -464,23 +466,17 @@ func (r *LoadBalancerReconciler) reconcileReservations(ctx context.Context, log 
 	log.V(1).Info("Reconciling reservations")
 
 	// Check if reservations need to be updated
-	needsUpdate := false
 	if lb.Status.Reservation == nil {
-		needsUpdate = true
 		log.V(1).Info("No existing reservations found, creating new ones")
 	} else {
 		// Check if spec has changed since last reservation
-		needsUpdate = r.reservationsNeedUpdate(lb)
+		needsUpdate := r.reservationsNeedUpdate(lb)
 		if needsUpdate {
 			log.V(1).Info("Spec has changed, updating reservations")
 		} else {
 			log.V(1).Info("Reservations are up to date")
 			return false, nil
 		}
-	}
-
-	if !needsUpdate {
-		return false, nil
 	}
 
 	// Create a new reservation

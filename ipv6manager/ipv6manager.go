@@ -22,7 +22,7 @@ var (
 	instance *IPv6Manager
 	once     sync.Once
 	// For test purposes
-	resetForTest bool = false
+	resetForTest = false
 )
 
 // GetInstance returns the singleton instance of IPv6Manager

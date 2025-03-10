@@ -584,12 +584,14 @@ func (r *NetworkInterfaceReconciler) applyNATIP(ctx context.Context, log logr.Lo
 }
 
 func (r *NetworkInterfaceReconciler) createNATIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, natIP netip.Addr, vni uint32) error {
+	underlayRoute := netip.MustParseAddr(nic.Status.Reservation.NatIP.Underlay)
 	natLocal, err := r.DPDK.CreateNat(ctx, &dpdk.Nat{
 		NatMeta: dpdk.NatMeta{InterfaceID: string(nic.UID)},
 		Spec: dpdk.NatSpec{
-			NatIP:   &natIP,
-			MinPort: uint32(nic.Spec.NAT.Port),
-			MaxPort: uint32(nic.Spec.NAT.EndPort),
+			NatIP:         &natIP,
+			MinPort:       uint32(nic.Spec.NAT.Port),
+			MaxPort:       uint32(nic.Spec.NAT.EndPort),
+			UnderlayRoute: &underlayRoute,
 		},
 	})
 	if err != nil {
@@ -746,9 +748,10 @@ func (r *NetworkInterfaceReconciler) applyVirtualIP(ctx context.Context, log log
 }
 
 func (r *NetworkInterfaceReconciler) createVirtualIP(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, virtualIP netip.Addr) error {
+	underlayRoute := netip.MustParseAddr(nic.Status.Reservation.VirtualIP.Underlay)
 	dpdkVIP, err := r.DPDK.CreateVirtualIP(ctx, &dpdk.VirtualIP{
 		VirtualIPMeta: dpdk.VirtualIPMeta{InterfaceID: string(nic.UID)},
-		Spec:          dpdk.VirtualIPSpec{IP: &virtualIP},
+		Spec:          dpdk.VirtualIPSpec{IP: &virtualIP, UnderlayRoute: &underlayRoute},
 	})
 	if err != nil {
 		if dpdkerrors.IsStatusErrorCode(err, dpdkerrors.DNAT_EXISTS) {
@@ -1211,9 +1214,22 @@ func (r *NetworkInterfaceReconciler) reconcilePrefixes(ctx context.Context, log 
 				log.V(1).Info("Create prefix")
 
 				log.V(1).Info("Creating dpdk prefix")
+				var underlayRoute = &netip.Addr{}
+				underlayRoute = nil
+				for _, pfx := range nic.Status.Reservation.Prefixes {
+					if pfx.Overlay == prefix.String() {
+						ip := netip.MustParseAddr(pfx.Underlay)
+						underlayRoute = &ip
+						break
+					}
+				}
+
+				if underlayRoute == nil {
+					return errors.New("no underlay route for prefix found")
+				}
 				resPrefix, err := r.DPDK.CreatePrefix(ctx, &dpdk.Prefix{
 					PrefixMeta: dpdk.PrefixMeta{InterfaceID: string(nic.UID)},
-					Spec:       dpdk.PrefixSpec{Prefix: prefix},
+					Spec:       dpdk.PrefixSpec{Prefix: prefix, UnderlayRoute: underlayRoute},
 				})
 				if err != nil {
 					if dpdkerrors.IsStatusErrorCode(err, dpdkerrors.ROUTE_EXISTS) {
@@ -1339,9 +1355,22 @@ func (r *NetworkInterfaceReconciler) reconcileLBTargets(ctx context.Context, log
 				log.V(1).Info("Create lb target")
 
 				log.V(1).Info("Creating dpdk lb target")
+				var underlayRoute = &netip.Addr{}
+				underlayRoute = nil
+				for _, lbt := range nic.Status.Reservation.LoadBalancerTargets {
+					if lbt.Overlay == prefix.String() {
+						ip := netip.MustParseAddr(lbt.Underlay)
+						underlayRoute = &ip
+						break
+					}
+				}
+
+				if underlayRoute == nil {
+					return errors.New("no underlay route for lb prefix found")
+				}
 				resPrefix, err := r.DPDK.CreateLoadBalancerPrefix(ctx, &dpdk.LoadBalancerPrefix{
 					LoadBalancerPrefixMeta: dpdk.LoadBalancerPrefixMeta{InterfaceID: string(nic.UID)},
-					Spec:                   dpdk.LoadBalancerPrefixSpec{Prefix: prefix},
+					Spec:                   dpdk.LoadBalancerPrefixSpec{Prefix: prefix, UnderlayRoute: underlayRoute},
 				})
 				if err != nil {
 					return err
@@ -1531,15 +1560,17 @@ func (r *NetworkInterfaceReconciler) applyInterface(ctx context.Context, log log
 			hostName = *nic.Spec.Hostname
 		}
 
+		underlayRoute := netip.MustParseAddr(nic.Status.Reservation.IPs[0].Underlay)
 		iface, err := r.DPDK.CreateInterface(ctx, &dpdk.Interface{
 			InterfaceMeta: dpdk.InterfaceMeta{ID: string(nic.UID)},
 			Spec: dpdk.InterfaceSpec{
-				VNI:      vni,
-				Device:   dpdkDevice,
-				IPv4:     &primaryIpv4,
-				IPv6:     &primaryIpv6,
-				Metering: meteringParams,
+				VNI:           vni,
+				Device:        dpdkDevice,
+				IPv4:          &primaryIpv4,
+				IPv6:          &primaryIpv6,
+				UnderlayRoute: &underlayRoute,
 				HostName: hostName,
+				Metering: meteringParams,
 			},
 		})
 		if err != nil {

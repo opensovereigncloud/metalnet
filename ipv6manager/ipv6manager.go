@@ -86,6 +86,7 @@ func (m *IPv6Manager) SetCIDR(cidrStr string) error {
 }
 
 // AddExistingIP adds an existing IPv6 address to the manager
+// Only adds the IP if it's within the configured CIDR
 func (m *IPv6Manager) AddExistingIP(ipStr string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -101,12 +102,11 @@ func (m *IPv6Manager) AddExistingIP(ipStr string) error {
 		return fmt.Errorf("not an IPv6 address: %s", ipStr)
 	}
 
-	// Ensure it's within our CIDR
-	if m.cidr != nil && !m.cidr.Contains(ip) {
-		return fmt.Errorf("IPv6 address %s is not within the CIDR %s", ipStr, m.cidr.String())
+	// Only add if it's within our CIDR (silently skip if not)
+	if m.cidr == nil || m.cidr.Contains(ip) {
+		m.existingIPs[ip.String()] = true
 	}
 
-	m.existingIPs[ip.String()] = true
 	return nil
 }
 

@@ -278,7 +278,7 @@ func (r *LoadBalancerReconciler) reconcile(ctx context.Context, log logr.Logger,
 				lb.Generation,
 			)
 			// Update overall status
-			metalnetv1alpha1.AggregateLoadBalancerStatus(&lb.Status)
+			metalnetv1alpha1.AggregateLoadBalancerStatus(&lb.Status, r.ReadyNeeded)
 		}); err != nil {
 			log.Error(err, "Error patching loadbalancer status")
 		}
@@ -310,7 +310,7 @@ func (r *LoadBalancerReconciler) reconcile(ctx context.Context, log logr.Logger,
 				lb.Generation,
 			)
 			// Update overall status
-			metalnetv1alpha1.AggregateLoadBalancerStatus(&lb.Status)
+			metalnetv1alpha1.AggregateLoadBalancerStatus(&lb.Status, r.ReadyNeeded)
 		}); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -333,7 +333,7 @@ func (r *LoadBalancerReconciler) reconcile(ctx context.Context, log logr.Logger,
 				lb.Generation,
 			)
 			// Update overall status
-			metalnetv1alpha1.AggregateLoadBalancerStatus(&lb.Status)
+			metalnetv1alpha1.AggregateLoadBalancerStatus(&lb.Status, r.ReadyNeeded)
 		}); patchErr != nil {
 			log.Error(patchErr, "Error patching loadbalancer status")
 		}
@@ -351,7 +351,7 @@ func (r *LoadBalancerReconciler) reconcile(ctx context.Context, log logr.Logger,
 			lb.Generation,
 		)
 		// Update overall status
-		metalnetv1alpha1.AggregateLoadBalancerStatus(&lb.Status)
+		metalnetv1alpha1.AggregateLoadBalancerStatus(&lb.Status, r.ReadyNeeded)
 	}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error patching status: %w", err)
 	}
@@ -498,7 +498,7 @@ func (r *LoadBalancerReconciler) reconcileReservations(ctx context.Context, log 
 				lb.Generation,
 			)
 			// Update overall status
-			metalnetv1alpha1.AggregateLoadBalancerStatus(&lb.Status)
+			metalnetv1alpha1.AggregateLoadBalancerStatus(&lb.Status, r.ReadyNeeded)
 		}); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
@@ -520,7 +520,7 @@ func (r *LoadBalancerReconciler) reconcileReservations(ctx context.Context, log 
 		)
 
 		// Update overall status
-		metalnetv1alpha1.AggregateLoadBalancerStatus(&lb.Status)
+		metalnetv1alpha1.AggregateLoadBalancerStatus(&lb.Status, r.ReadyNeeded)
 	}); err != nil {
 		log.Error(err, "Failed to update LoadBalancer status with reservations")
 		return false, err

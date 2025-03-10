@@ -205,7 +205,7 @@ func main() {
 	setupLog.Info(fmt.Sprintf("Multiport Eswitch mode set to: %v", multiportEswitchMode))
 
 	ipv6mgr := ipv6manager.GetInstance()
-	ipv6mgrCidr := ipv6manager.ComputeIPv6Subnet66(hostIP, ipv6SubnetIndex)
+	ipv6mgrCidr := ipv6manager.ComputeMetalnetSubnet(hostIP, ipv6SubnetIndex)
 	log.Infof("IPv6 reservation subnet: %s", ipv6mgrCidr)
 	err = ipv6mgr.SetCIDR(ipv6mgrCidr)
 	if err != nil {

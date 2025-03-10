@@ -7,6 +7,8 @@ import (
 	"crypto/rand"
 	"fmt"
 	"net"
+	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -258,16 +260,30 @@ func (m *IPv6Manager) WithdrawIP(ipStr string) {
 	delete(m.existingIPs, ip.String())
 }
 
-// Function to compute /82 subnet based on a variable
-func ComputeIPv6Subnet66(baseIP string, subnetIndex int) string {
-	// Parse the base IPv6 address
-	ip := net.ParseIP(baseIP)
+// Function to compute subnet based on a variable
+func ComputeMetalnetSubnet(baseIP string, subnetIndex int) string {
+	// Parse the base IPv6 address and mask
+	parts := strings.Split(baseIP, "/")
+	ipStr := parts[0]
+	ip := net.ParseIP(ipStr)
 	if ip == nil || ip.To16() == nil {
 		return ""
 	}
 
-	// For a /82 subnet, we have 46 bits for the host part (128-82=46)
-	// The index will be used to set bits in position 82-85 (the first 4 bits after the network part)
+	// Get the base mask
+	baseMask := 64 // Default to /64
+	if len(parts) > 1 {
+		var err error
+		baseMask, err = strconv.Atoi(parts[1])
+		if err != nil {
+			baseMask = 64 // Default to /64 on error
+		}
+	}
+
+	// For this implementation, we'll use a /88 subnet mask
+	subnetMask := 88
+
+	// Validate input
 	if subnetIndex < 0 {
 		return ""
 	}
@@ -276,62 +292,35 @@ func ComputeIPv6Subnet66(baseIP string, subnetIndex int) string {
 	result := make(net.IP, len(ip))
 	copy(result, ip)
 
-	// For /82, we're modifying the 11th byte (byte at index 10)
-	// The first 2 bits of the 11th byte are part of the network prefix
-	// So we need to set the value starting from the 3rd bit of this byte
-
-	// Set the appropriate bits in the 11th byte (byte index 10)
-	// Index 0 -> 0000:: (/82)
-	// Index 1 -> 4000:: (/82)
-	// Index 2 -> 8000:: (/82)
-	value := byte((subnetIndex & 0x3) << 6) // Shift left by 6 bits to set bits 6-7 of byte 10
-
-	// Keep the first 2 bits of the original byte (part of the network prefix)
-	// and set the next 2 bits based on the subnetIndex
-	result[10] = (result[10] & 0xC0) | value
-
-	// Clear all host bits after the subnet part
-	for i := 11; i < 16; i++ {
+	// Clear all host bits from the base network
+	for i := baseMask / 8; i < 16; i++ {
 		result[i] = 0
 	}
 
-	// Format with expanded zeros for test compatibility
-	return fmt.Sprintf("%s/82", expandIPv6Notation(result.String()))
+	// For a /64 base, the subnet bits should start at byte 8 (the 6th segment)
+	// For index 2 -> 0x8000 in 6th segment
+	// For index 3 -> 0xc000 in 6th segment
+
+	// Calculate which byte to modify based on base mask
+	byteIndex := 8 // Default for /64
+
+	// Set the appropriate bits in the correct position
+	// Index 2 -> 8000:: (/88)
+	// Index 3 -> c000:: (/88)
+
+	// For /64, we set the high 2 bits of byte 8-9 (the 6th segment)
+	result[byteIndex] = byte((subnetIndex & 0x3) << 6) // Shift left by 6 to set the high bits
+
+	// Format result with correct notation
+	return fmt.Sprintf("%s/%d", formatIPv6(result), subnetMask)
 }
 
-// Helper function to expand IPv6 notation for consistent formatting
-func expandIPv6Notation(ipStr string) string {
-	// For index 0, the resulting address should be 2001:db8:0:0:0:0000::/82
-	// For index 1, the resulting address should be 2001:db8:0:0:0:4000::/82
-	// For index 2, the resulting address should be 2001:db8:0:0:0:8000::/82
-
-	// Parse the IP to ensure it's valid
-	ip := net.ParseIP(ipStr)
-	if ip == nil {
-		return ipStr
+// Helper function to format IPv6 address with proper compression
+func formatIPv6(ip net.IP) string {
+	if ip == nil || len(ip) != 16 {
+		return ""
 	}
 
-	// Convert to IPv6 format
-	ip = ip.To16()
-	if ip == nil {
-		return ipStr
-	}
-
-	// Format for the specific pattern needed in tests
-	value := ip[10] & 0xC0 // Get the 2 high bits of byte at index 10
-
-	var segmentValue string
-	switch value {
-	case 0x00:
-		segmentValue = "0000"
-	case 0x40:
-		segmentValue = "4000"
-	case 0x80:
-		segmentValue = "8000"
-	case 0xC0:
-		segmentValue = "c000"
-	}
-
-	// Create the fixed format string
-	return fmt.Sprintf("2001:db8:0:0:0:%s::", segmentValue)
+	// Convert to standard IPv6 format and let Go handle the compression
+	return ip.String()
 }

@@ -2036,17 +2036,18 @@ func (r *NetworkInterfaceReconciler) reservationsNeedUpdate(nic *metalnetv1alpha
 	}
 
 	// Check for Virtual IP changes
-	if (nic.Spec.VirtualIP == nil || nic.Spec.VirtualIP.IsZero()) && nic.Status.Reservation.VirtualIP != nil {
+	if (nic.Spec.VirtualIP != nil) && nic.Status.Reservation.VirtualIP == nil {
 		return true
 	}
-	if nic.Spec.VirtualIP != nil && !nic.Spec.VirtualIP.IsZero() &&
+
+	if nic.Spec.VirtualIP != nil &&
 		(nic.Status.Reservation.VirtualIP == nil ||
 			nic.Status.Reservation.VirtualIP.Overlay != nic.Spec.VirtualIP.String()) {
 		return true
 	}
 
 	// Check for NAT IP changes
-	natIPInSpec := nic.Spec.NAT != nil && nic.Spec.NAT.IP != nil && !nic.Spec.NAT.IP.IsZero()
+	natIPInSpec := nic.Spec.NAT != nil && nic.Spec.NAT.IP != nil
 	natIPInStatus := nic.Status.Reservation.NatIP != nil
 
 	if !natIPInSpec && natIPInStatus {
@@ -2109,33 +2110,28 @@ func (r *NetworkInterfaceReconciler) buildNetworkInterfaceReservation(nic *metal
 	// Process IPs
 	for _, ip := range nic.Spec.IPs {
 		overlayIP := ip.String()
-		if ip.Is4() {
-			underlayIP, err := r.generateUnderlayIP()
-			if err != nil {
-				allErrors = append(allErrors, fmt.Errorf("failed to generate underlay IP for %s: %w", overlayIP, err))
-				continue
-			}
-
-			reservation.IPs = append(reservation.IPs, metalnetv1alpha1.IPReservation{
-				Overlay:  overlayIP,
-				Underlay: underlayIP,
-			})
+		underlayIP, err := r.generateUnderlayIP()
+		if err != nil {
+			allErrors = append(allErrors, fmt.Errorf("failed to generate underlay IP for %s: %w", overlayIP, err))
+			continue
 		}
+
+		reservation.IPs = append(reservation.IPs, metalnetv1alpha1.IPReservation{
+			Overlay:  overlayIP,
+			Underlay: underlayIP,
+		})
 	}
 
 	// Process Virtual IP if specified
 	if nic.Spec.VirtualIP != nil && !nic.Spec.VirtualIP.IsZero() {
 		overlayIP := nic.Spec.VirtualIP.String()
-		ip := *nic.Spec.VirtualIP
-		if ip.Is4() {
-			underlayIP, err := r.generateUnderlayIP()
-			if err != nil {
-				allErrors = append(allErrors, fmt.Errorf("failed to generate underlay IP for virtual IP %s: %w", overlayIP, err))
-			} else {
-				reservation.VirtualIP = &metalnetv1alpha1.IPReservation{
-					Overlay:  overlayIP,
-					Underlay: underlayIP,
-				}
+		underlayIP, err := r.generateUnderlayIP()
+		if err != nil {
+			allErrors = append(allErrors, fmt.Errorf("failed to generate underlay IP for virtual IP %s: %w", overlayIP, err))
+		} else {
+			reservation.VirtualIP = &metalnetv1alpha1.IPReservation{
+				Overlay:  overlayIP,
+				Underlay: underlayIP,
 			}
 		}
 	}
@@ -2143,18 +2139,15 @@ func (r *NetworkInterfaceReconciler) buildNetworkInterfaceReservation(nic *metal
 	// Process NAT IPs if specified
 	if nic.Spec.NAT != nil && nic.Spec.NAT.IP != nil && !nic.Spec.NAT.IP.IsZero() {
 		overlayIP := nic.Spec.NAT.IP.String()
-		ip := *nic.Spec.NAT.IP
-		if ip.Is4() {
-			underlayIP, err := r.generateUnderlayIP()
-			if err != nil {
-				allErrors = append(allErrors, fmt.Errorf("failed to generate underlay IP for NAT IP %s: %w", overlayIP, err))
-			} else {
-				reservation.NatIP = &metalnetv1alpha1.IPReservation{
-					Overlay:  overlayIP,
-					Underlay: underlayIP,
-				}
-
+		underlayIP, err := r.generateUnderlayIP()
+		if err != nil {
+			allErrors = append(allErrors, fmt.Errorf("failed to generate underlay IP for NAT IP %s: %w", overlayIP, err))
+		} else {
+			reservation.NatIP = &metalnetv1alpha1.IPReservation{
+				Overlay:  overlayIP,
+				Underlay: underlayIP,
 			}
+
 		}
 	}
 
@@ -2164,19 +2157,16 @@ func (r *NetworkInterfaceReconciler) buildNetworkInterfaceReservation(nic *metal
 
 		for _, target := range nic.Spec.LoadBalancerTargets {
 			overlayPrefix := target.String()
-			ip := target.IP()
-			if ip.Is4() {
-				underlayIP, err := r.generateUnderlayIP()
-				if err != nil {
-					allErrors = append(allErrors, fmt.Errorf("failed to generate underlay IP for LoadBalancer target %s: %w", overlayPrefix, err))
-					continue
-				}
-
-				reservation.LoadBalancerTargets = append(reservation.LoadBalancerTargets, metalnetv1alpha1.IPReservation{
-					Overlay:  overlayPrefix,
-					Underlay: underlayIP,
-				})
+			underlayIP, err := r.generateUnderlayIP()
+			if err != nil {
+				allErrors = append(allErrors, fmt.Errorf("failed to generate underlay IP for LoadBalancer target %s: %w", overlayPrefix, err))
+				continue
 			}
+
+			reservation.LoadBalancerTargets = append(reservation.LoadBalancerTargets, metalnetv1alpha1.IPReservation{
+				Overlay:  overlayPrefix,
+				Underlay: underlayIP,
+			})
 		}
 	}
 
@@ -2186,19 +2176,16 @@ func (r *NetworkInterfaceReconciler) buildNetworkInterfaceReservation(nic *metal
 
 		for _, prefix := range nic.Spec.Prefixes {
 			overlayPrefix := prefix.String()
-			ip := prefix.IP()
-			if ip.Is4() {
-				underlayIP, err := r.generateUnderlayIP()
-				if err != nil {
-					allErrors = append(allErrors, fmt.Errorf("failed to generate underlay IP for prefix %s: %w", overlayPrefix, err))
-					continue
-				}
-
-				reservation.Prefixes = append(reservation.Prefixes, metalnetv1alpha1.IPReservation{
-					Overlay:  overlayPrefix,
-					Underlay: underlayIP,
-				})
+			underlayIP, err := r.generateUnderlayIP()
+			if err != nil {
+				allErrors = append(allErrors, fmt.Errorf("failed to generate underlay IP for prefix %s: %w", overlayPrefix, err))
+				continue
 			}
+
+			reservation.Prefixes = append(reservation.Prefixes, metalnetv1alpha1.IPReservation{
+				Overlay:  overlayPrefix,
+				Underlay: underlayIP,
+			})
 		}
 	}
 

@@ -126,14 +126,6 @@ type NetworkInterfaceReconciler struct {
 func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrl.LoggerFrom(ctx)
 
-	// Initialize IPv6Manager if IPv6 is enabled
-	if r.EnableIPv6Support && r.IPv6CIDR != "" {
-		ipv6Manager := ipv6manager.GetInstance()
-		if err := ipv6Manager.SetCIDR(r.IPv6CIDR); err != nil {
-			log.Error(err, "Failed to set IPv6 CIDR for address manager")
-		}
-	}
-
 	if r.Control.ShouldSkip() {
 		log.V(1).Info("Skipping reconcile")
 		return ctrl.Result{}, nil
@@ -2212,7 +2204,7 @@ func (r *NetworkInterfaceReconciler) buildNetworkInterfaceReservation(nic *metal
 
 // generateUnderlayIP generates an underlay IP for a given overlay IP
 func (r *NetworkInterfaceReconciler) generateUnderlayIP(overlayIP metalnetv1alpha1.IP) (string, error) {
-	if overlayIP.Is6() && r.EnableIPv6Support {
+	if overlayIP.Is4() {
 		// For IPv6, we use the IPv6Manager to generate a unique IPv6 address
 		ipv6Manager := ipv6manager.GetInstance()
 		return ipv6Manager.GenerateRandomIPv6()

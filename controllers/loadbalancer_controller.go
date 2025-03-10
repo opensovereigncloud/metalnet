@@ -573,7 +573,7 @@ func (r *LoadBalancerReconciler) buildLoadBalancerReservation(lb *metalnetv1alph
 
 // generateUnderlayIP generates an underlay IP for a given overlay IP
 func (r *LoadBalancerReconciler) generateUnderlayIP(overlayIP metalnetv1alpha1.IP) (string, error) {
-	if overlayIP.Is6() && r.EnableIPv6Support {
+	if overlayIP.Is4() {
 		// For IPv6, we use the IPv6Manager to generate a unique IPv6 address
 		ipv6Manager := ipv6manager.GetInstance()
 		return ipv6Manager.GenerateRandomIPv6()

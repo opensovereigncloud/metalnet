@@ -115,6 +115,7 @@ func main() {
 	var libvirtMachineUIDPath string
 	var controllerID string
 	var hostIP string
+	var ipv6SubnetIndex int
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -158,6 +159,7 @@ func main() {
 	flag.StringVar(&libvirtMachineUIDPath, "libvirt-machine-uid-path", "/var/lib/libvirt-provider/machines", "The path to the libvirt provider machine UID directories.")
 	flag.StringVar(&controllerID, "controller-id", "", "The controller ID.")
 	flag.StringVar(&hostIP, "host-ip", "", "The host IP address.")
+	flag.IntVar(&ipv6SubnetIndex, "ipv6-subnet-index", 0, "The index of the IPv6 subnet to use.")
 
 	opts := zap.Options{
 		Development: true,
@@ -200,7 +202,9 @@ func main() {
 	setupLog.Info(fmt.Sprintf("Multiport Eswitch mode set to: %v", multiportEswitchMode))
 
 	ipv6mgr := ipv6manager.GetInstance()
-	err = ipv6mgr.SetCIDR(fmt.Sprintf("%s/64", hostIP))
+	ipv6mgrCidr := ipv6manager.ComputeIPv6Subnet66(hostIP, ipv6SubnetIndex)
+	log.Infof("IPv6 reservation subnet: %s", ipv6mgrCidr)
+	err = ipv6mgr.SetCIDR(ipv6mgrCidr)
 	if err != nil {
 		setupLog.Error(err, "unable to set IPv6 CIDR")
 		os.Exit(1)

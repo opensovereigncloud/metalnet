@@ -53,6 +53,7 @@ spec:
         - --node-name=$(NODE_NAME)
         - --pod-name=$(POD_NAME)
         - --dp-service-address=[$(NODE_IP)]:1337
+        - --host-ip=$(NODE_IP)
         image: controller:latest
         name: manager
         ports: []

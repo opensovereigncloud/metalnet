@@ -246,3 +246,35 @@ func (m *IPv6Manager) WithdrawIP(ipStr string) {
 	// Remove the IP from the tracking map
 	delete(m.existingIPs, ip.String())
 }
+
+// Function to compute /66 subnet based on a variable
+func ComputeIPv6Subnet66(baseIP string, subnetIndex int) string {
+	// Parse the base IPv6 address
+	ip := net.ParseIP(baseIP)
+	if ip == nil || ip.To16() == nil {
+		return ""
+	}
+
+	// The subnet index should be 0-3 since we have 2 bits (4 possible values)
+	if subnetIndex < 0 || subnetIndex > 3 {
+		return ""
+	}
+
+	// Calculate the 5th segment of the IPv6 address
+	// For a /66 subnet:
+	// Index 0 -> 0000:: (/66)
+	// Index 1 -> 4000:: (/66)  (01 in the first two bits)
+	// Index 2 -> 8000:: (/66)  (10 in the first two bits)
+	// Index 3 -> c000:: (/66)  (11 in the first two bits)
+	fifthSegment := subnetIndex << 14 // Shift left by 14 bits (16-2)
+
+	// Copy the original IP and modify the 5th segment
+	result := make(net.IP, len(ip))
+	copy(result, ip)
+
+	// Set the 5th segment (bytes 8-9 in the IPv6 address)
+	result[8] = byte(fifthSegment >> 8)
+	result[9] = byte(fifthSegment)
+
+	return fmt.Sprintf("%s/66", result.String())
+}

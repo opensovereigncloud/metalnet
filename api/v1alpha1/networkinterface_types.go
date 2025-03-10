@@ -65,6 +65,7 @@ type NetworkInterfaceStatus struct {
 	LoadBalancerTargets []IPPrefix `json:"loadBalancerTargets,omitempty"`
 
 	// State is the NetworkInterfaceState of the NetworkInterface.
+	// +optional
 	State NetworkInterfaceState `json:"state,omitempty"`
 }
 
@@ -92,6 +93,27 @@ const (
 	// NetworkInterfaceStateError is used for any NetworkInterface that is some error occurred.
 	NetworkInterfaceStateError NetworkInterfaceState = "Error"
 )
+
+// GetStatus implements the StatusAccessor interface.
+func (s *NetworkInterfaceStatus) GetStatus() *CommonStatus {
+	return &s.CommonStatus
+}
+
+// GetState returns the state of the network interface, maintaining compatibility
+func (s *NetworkInterfaceStatus) GetState() NetworkInterfaceState {
+	// Prefer the State field if set
+	if s.State != "" {
+		return s.State
+	}
+	// Otherwise, use the common status state
+	return NetworkInterfaceState(s.CommonStatus.State)
+}
+
+// SetState sets both the State and common status state fields
+func (s *NetworkInterfaceStatus) SetState(state NetworkInterfaceState) {
+	s.State = state
+	s.CommonStatus.State = string(state)
+}
 
 // FirewallRule defines the desired state of FirewallRule
 type FirewallRule struct {

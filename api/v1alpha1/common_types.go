@@ -59,6 +59,323 @@ type IPReservation struct {
 	Underlay string `json:"underlay"`
 }
 
+// ControllerStatus represents the status reported by a specific controller instance
+type ControllerStatus struct {
+	// ControllerID is the unique identifier of the controller instance
+	// +required
+	ControllerID string `json:"controllerID"`
+
+	// State is the state reported by this controller
+	// +optional
+	State string `json:"state,omitempty"`
+
+	// ObservedGeneration represents the .metadata.generation that the controller last processed
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Conditions is a list of conditions associated with this controller
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// Message provides additional information about the current state
+	// +optional
+	Message string `json:"message,omitempty"`
+
+	// LastUpdateTime is when the status was last updated by this controller
+	// +optional
+	LastUpdateTime *metav1.Time `json:"lastUpdateTime,omitempty"`
+}
+
+// CommonStatus provides a shared status structure for multiple controllers
+type CommonStatus struct {
+	// ControllerStatuses contains status information from different controllers
+	// +optional
+	ControllerStatuses []ControllerStatus `json:"controllerStatuses,omitempty"`
+
+	// Conditions is a list of conditions for the overall resource
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// State is the aggregated state of the resource
+	// +required
+	State string `json:"state,omitempty"`
+
+	// LastUpdateTime is when the overall status was last updated
+	// +optional
+	LastUpdateTime *metav1.Time `json:"lastUpdateTime,omitempty"`
+}
+
+// ConditionType defines standard condition types
+type ConditionType string
+
+const (
+	// ConditionReady indicates the resource is ready for use
+	ConditionReady ConditionType = "Ready"
+)
+
+// SetNetworkInterfaceControllerStatus sets or updates the status from a specific controller instance
+func SetNetworkInterfaceControllerStatus(status *NetworkInterfaceStatus, controllerID string, state string, message string, generation int64, conditions ...metav1.Condition) {
+	s := &status.CommonStatus
+
+	// Find existing controller status or create a new one
+	var controllerStatus *ControllerStatus
+	for i := range s.ControllerStatuses {
+		if s.ControllerStatuses[i].ControllerID == controllerID {
+			controllerStatus = &s.ControllerStatuses[i]
+			break
+		}
+	}
+
+	if controllerStatus == nil {
+		s.ControllerStatuses = append(s.ControllerStatuses, ControllerStatus{
+			ControllerID: controllerID,
+		})
+		controllerStatus = &s.ControllerStatuses[len(s.ControllerStatuses)-1]
+	}
+
+	// Update controller status fields
+	controllerStatus.State = state
+	controllerStatus.Message = message
+	controllerStatus.ObservedGeneration = generation
+	now := metav1.Now()
+	controllerStatus.LastUpdateTime = &now
+
+	// Update the overall status last update time
+	s.LastUpdateTime = &now
+
+	// Set/update conditions
+	for _, condition := range conditions {
+		condition.LastTransitionTime = now
+		// Update existing condition or add new one
+		existingCondition := false
+		for i, c := range controllerStatus.Conditions {
+			if c.Type == condition.Type {
+				controllerStatus.Conditions[i] = condition
+				existingCondition = true
+				break
+			}
+		}
+		if !existingCondition {
+			controllerStatus.Conditions = append(controllerStatus.Conditions, condition)
+		}
+	}
+
+	// Compute overall status (assuming Ready state has priority)
+	if s.State == "" || s.State == "Pending" {
+		s.State = state
+	} else if state == "Error" {
+		s.State = "Error"
+	}
+}
+
+// SetLoadBalancerControllerStatus sets or updates the status from a specific controller instance
+func SetLoadBalancerControllerStatus(status *LoadBalancerStatus, controllerID string, state string, message string, generation int64, conditions ...metav1.Condition) {
+	s := &status.CommonStatus
+
+	// Find existing controller status or create a new one
+	var controllerStatus *ControllerStatus
+	for i := range s.ControllerStatuses {
+		if s.ControllerStatuses[i].ControllerID == controllerID {
+			controllerStatus = &s.ControllerStatuses[i]
+			break
+		}
+	}
+
+	if controllerStatus == nil {
+		s.ControllerStatuses = append(s.ControllerStatuses, ControllerStatus{
+			ControllerID: controllerID,
+		})
+		controllerStatus = &s.ControllerStatuses[len(s.ControllerStatuses)-1]
+	}
+
+	// Update controller status fields
+	controllerStatus.State = state
+	controllerStatus.Message = message
+	controllerStatus.ObservedGeneration = generation
+	now := metav1.Now()
+	controllerStatus.LastUpdateTime = &now
+
+	// Update the overall status last update time
+	s.LastUpdateTime = &now
+
+	// Set/update conditions
+	for _, condition := range conditions {
+		condition.LastTransitionTime = now
+		// Update existing condition or add new one
+		existingCondition := false
+		for i, c := range controllerStatus.Conditions {
+			if c.Type == condition.Type {
+				controllerStatus.Conditions[i] = condition
+				existingCondition = true
+				break
+			}
+		}
+		if !existingCondition {
+			controllerStatus.Conditions = append(controllerStatus.Conditions, condition)
+		}
+	}
+
+	// Compute overall status (assuming Ready state has priority)
+	if s.State == "" || s.State == "Pending" {
+		s.State = state
+	} else if state == "Error" {
+		s.State = "Error"
+	}
+}
+
+// AggregateNetworkInterfaceStatus computes the overall status based on controller statuses
+func AggregateNetworkInterfaceStatus(status *NetworkInterfaceStatus) {
+	s := &status.CommonStatus
+
+	// Track controller states
+	readyCount := 0
+	totalCount := 0
+	hasError := false
+	hasPending := false
+
+	for _, cs := range s.ControllerStatuses {
+		totalCount++
+
+		if cs.State == "Error" {
+			hasError = true
+		} else if cs.State == "Pending" {
+			hasPending = true
+		} else if cs.State == "Ready" {
+			readyCount++
+		}
+	}
+
+	// Determine overall state based on controller statuses
+	if hasError {
+		s.State = "Error"
+	} else if hasPending || readyCount < 2 { // Need at least 2 controllers reporting Ready
+		s.State = "Pending"
+	} else if readyCount >= 2 {
+		// At least 2 controllers are reporting Ready
+		s.State = "Ready"
+	} else {
+		// No controllers reporting yet or not enough Ready reports
+		s.State = "Pending"
+	}
+
+	// Update the overall status timestamp
+	now := metav1.Now()
+	s.LastUpdateTime = &now
+}
+
+// NewCondition creates a new metav1.Condition
+func NewCondition(conditionType string, status metav1.ConditionStatus, reason, message string) metav1.Condition {
+	return metav1.Condition{
+		Type:               conditionType,
+		Status:             status,
+		Reason:             reason,
+		Message:            message,
+		LastTransitionTime: metav1.Now(),
+	}
+}
+
+/*
+Status Usage Example for HA Controllers:
+
+// To report status from one controller instance:
+func (r *Controller) updateStatus(ctx context.Context, obj *v1alpha1.NetworkInterface) error {
+    // Generate a unique controller ID - typically includes the node name
+    controllerID := fmt.Sprintf("metalnet-controller-%s-%s", r.NodeName, r.InstanceID)
+
+    // Create a ready condition
+    readyCondition := v1alpha1.NewCondition(
+        string(v1alpha1.ConditionReady),
+        metav1.ConditionTrue,
+        "ResourceReady",
+        "The resource has been successfully processed",
+    )
+
+    // Set the controller status with the unique controller ID
+    v1alpha1.SetNetworkInterfaceControllerStatus(
+        &obj.Status,                            // NetworkInterfaceStatus pointer
+        controllerID,                           // controller ID - unique to this controller instance
+        string(v1alpha1.NetworkInterfaceStateReady), // state - either Ready or Error
+        "Resource successfully processed",      // message - detailed status message
+        obj.Generation,                         // observed generation - tracks which version was processed
+        readyCondition,                         // conditions
+    )
+
+    // Automatically compute the overall status based on all controller reports
+    v1alpha1.AggregateNetworkInterfaceStatus(&obj.Status)
+
+    // Update the resource
+    return r.Status().Update(ctx, obj)
+}
+
+// A different controller instance reports its own status
+func (r *Controller) updateStatusFromSecondInstance(ctx context.Context, obj *v1alpha1.NetworkInterface) error {
+    // Different controller instance with a different ID
+    controllerID := fmt.Sprintf("metalnet-controller-%s-%s", r.NodeName, r.InstanceID)
+
+    // Create a ready condition
+    readyCondition := v1alpha1.NewCondition(
+        string(v1alpha1.ConditionReady),
+        metav1.ConditionTrue,
+        "ResourceReady",
+        "The resource has been successfully processed",
+    )
+
+    // Set this controller's status
+    v1alpha1.SetNetworkInterfaceControllerStatus(
+        &obj.Status,                           // NetworkInterfaceStatus pointer
+        controllerID,                          // controller ID - unique to this instance
+        string(v1alpha1.NetworkInterfaceStateReady), // state - either Ready or Error
+        "Resource successfully processed",     // message
+        obj.Generation,                        // observed generation
+        readyCondition,                        // conditions
+    )
+
+    // Compute overall status
+    v1alpha1.AggregateNetworkInterfaceStatus(&obj.Status)
+
+    // Update the resource
+    return r.Status().Update(ctx, obj)
+}
+
+// When viewing the resource with kubectl get:
+// NAME         STATUS   NODENAME   NETWORK     ...
+// interface1   Ready    node1      network1    ...
+// interface2   Pending  node2      network1    ...
+
+// For detailed status, use kubectl describe to see individual controller statuses:
+// ...
+// Status:
+//   Controller Statuses:
+//     Controller ID: metalnet-controller-node1-abc123
+//       State: Ready
+//       Message: Resource successfully processed
+//       Last Update: 2023-06-07T12:34:56Z
+//     Controller ID: metalnet-controller-node2-def456
+//       State: Ready
+//       Message: Resource successfully processed
+//       Last Update: 2023-06-07T12:35:01Z
+//   State: Ready
+//   ...
+
+// To get status from a specific controller:
+func getControllerStatus(obj *v1alpha1.NetworkInterface, controllerID string) (string, string, *metav1.Time) {
+    for _, cs := range obj.Status.ControllerStatuses {
+        if cs.ControllerID == controllerID {
+            return cs.State, cs.Message, cs.LastUpdateTime
+        }
+    }
+    return "Unknown", "Controller has not reported status", nil
+}
+
+// Check if all controllers are ready
+func isResourceReady(obj *v1alpha1.NetworkInterface) bool {
+    return obj.Status.State == string(v1alpha1.NetworkInterfaceStateReady)
+}
+
+// For LoadBalancer resources, use the LoadBalancer-specific functions instead:
+// v1alpha1.SetLoadBalancerControllerStatus() and v1alpha1.AggregateLoadBalancerStatus()
+*/
+
 func (in *IP) DeepCopyInto(out *IP) {
 	*out = *in
 }
@@ -279,4 +596,44 @@ func PtrToIPPrefix(prefix IPPrefix) *IPPrefix {
 
 func EqualIPPrefixes(a, b IPPrefix) bool {
 	return a == b
+}
+
+// AggregateLoadBalancerStatus computes the overall status based on controller statuses
+func AggregateLoadBalancerStatus(status *LoadBalancerStatus) {
+	s := &status.CommonStatus
+
+	// Track controller states
+	readyCount := 0
+	totalCount := 0
+	hasError := false
+	hasPending := false
+
+	for _, cs := range s.ControllerStatuses {
+		totalCount++
+
+		if cs.State == "Error" {
+			hasError = true
+		} else if cs.State == "Pending" {
+			hasPending = true
+		} else if cs.State == "Ready" {
+			readyCount++
+		}
+	}
+
+	// Determine overall state based on controller statuses
+	if hasError {
+		s.State = "Error"
+	} else if hasPending || readyCount < 2 { // Need at least 2 controllers reporting Ready
+		s.State = "Pending"
+	} else if readyCount >= 2 {
+		// At least 2 controllers are reporting Ready
+		s.State = "Ready"
+	} else {
+		// No controllers reporting yet or not enough Ready reports
+		s.State = "Pending"
+	}
+
+	// Update the overall status timestamp
+	now := metav1.Now()
+	s.LastUpdateTime = &now
 }

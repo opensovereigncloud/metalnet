@@ -35,6 +35,7 @@ type LoadBalancerStatus struct {
 	Reservation *LoadBalancerReservation `json:"reservation,omitempty"`
 
 	// State is the LoadBalancerState of the LoadBalancer.
+	// +optional
 	State LoadBalancerState `json:"state,omitempty"`
 }
 
@@ -59,6 +60,27 @@ const (
 	// LoadBalancerStateError is used for any LoadBalancer that is some error occurred.
 	LoadBalancerStateError LoadBalancerState = "Error"
 )
+
+// GetStatus implements the StatusAccessor interface.
+func (s *LoadBalancerStatus) GetStatus() *CommonStatus {
+	return &s.CommonStatus
+}
+
+// GetState returns the state of the load balancer, maintaining compatibility
+func (s *LoadBalancerStatus) GetState() LoadBalancerState {
+	// Prefer the State field if set
+	if s.State != "" {
+		return s.State
+	}
+	// Otherwise, use the common status state
+	return LoadBalancerState(s.CommonStatus.State)
+}
+
+// SetState sets both the State and common status state fields
+func (s *LoadBalancerStatus) SetState(state LoadBalancerState) {
+	s.State = state
+	s.CommonStatus.State = string(state)
+}
 
 // LoadBalancerReservation defines the network interface reservation details
 type LoadBalancerReservation struct {

@@ -246,17 +246,22 @@ func AggregateNetworkInterfaceStatus(status *NetworkInterfaceStatus) {
 	}
 
 	// Determine overall state based on controller statuses
+	var stateStr string
 	if hasError {
-		s.State = "Error"
+		stateStr = "Error"
 	} else if hasPending || readyCount < 2 { // Need at least 2 controllers reporting Ready
-		s.State = "Pending"
+		stateStr = "Pending"
 	} else if readyCount >= 2 {
 		// At least 2 controllers are reporting Ready
-		s.State = "Ready"
+		stateStr = "Ready"
 	} else {
 		// No controllers reporting yet or not enough Ready reports
-		s.State = "Pending"
+		stateStr = "Pending"
 	}
+
+	// Update both CommonStatus.State and the type-specific State
+	s.State = stateStr
+	status.State = NetworkInterfaceState(stateStr)
 
 	// Update the overall status timestamp
 	now := metav1.Now()
@@ -621,17 +626,22 @@ func AggregateLoadBalancerStatus(status *LoadBalancerStatus) {
 	}
 
 	// Determine overall state based on controller statuses
+	var stateStr string
 	if hasError {
-		s.State = "Error"
+		stateStr = "Error"
 	} else if hasPending || readyCount < 2 { // Need at least 2 controllers reporting Ready
-		s.State = "Pending"
+		stateStr = "Pending"
 	} else if readyCount >= 2 {
 		// At least 2 controllers are reporting Ready
-		s.State = "Ready"
+		stateStr = "Ready"
 	} else {
 		// No controllers reporting yet or not enough Ready reports
-		s.State = "Pending"
+		stateStr = "Pending"
 	}
+
+	// Update both CommonStatus.State and the type-specific State
+	s.State = stateStr
+	status.State = LoadBalancerState(stateStr)
 
 	// Update the overall status timestamp
 	now := metav1.Now()

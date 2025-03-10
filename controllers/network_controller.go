@@ -52,6 +52,7 @@ type NetworkReconciler struct {
 	EnableIPv6Support bool
 	Control           *control.ReconcileControl
 	ControllerID      string
+	ReadyNeeded       int
 }
 
 //+kubebuilder:rbac:groups=networking.metalnet.ironcore.dev,resources=networks,verbs=get;list;watch;create;update;patch;delete

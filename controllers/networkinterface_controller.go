@@ -112,6 +112,7 @@ type NetworkInterfaceReconciler struct {
 	IPv6CIDR     string
 	ControllerID string
 	VirtletMachineUIDPath       string
+	ReadyNeeded  int
 }
 
 //+kubebuilder:rbac:groups=networking.metalnet.ironcore.dev,resources=networkinterfaces,verbs=get;list;watch;create;update;patch;delete
@@ -947,7 +948,7 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 				nic.Generation,
 			)
 			// Update overall status
-			metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status)
+			metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status, r.ReadyNeeded)
 		}); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -966,7 +967,7 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 				nic.Generation,
 			)
 			// Update overall status
-			metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status)
+			metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status, r.ReadyNeeded)
 		}); errPatch != nil {
 			log.Error(errPatch, "Error patching network interface status")
 		}
@@ -989,7 +990,7 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 				nic.Generation,
 			)
 			// Update overall status
-			metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status)
+			metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status, r.ReadyNeeded)
 		}); patchErr != nil {
 			log.Error(patchErr, "Error patching network interface status")
 		}
@@ -1009,7 +1010,7 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 				"Interface is being initialized",
 				nic.Generation,
 			)
-			metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status)
+			metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status, r.ReadyNeeded)
 		}); err != nil {
 			log.Error(err, "Error patching network interface status to pending")
 		}
@@ -1023,7 +1024,7 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 				"Interface is ready",
 				nic.Generation,
 			)
-			metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status)
+			metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status, r.ReadyNeeded)
 		}); err != nil {
 			log.Error(err, "Error patching network interface status to ready")
 		}
@@ -1131,7 +1132,7 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 		}
 
 		// Update overall status
-		metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status)
+		metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status, r.ReadyNeeded)
 	}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error patching status: %w", err)
 	}
@@ -2013,7 +2014,7 @@ func (r *NetworkInterfaceReconciler) reconcileReservations(ctx context.Context, 
 		)
 
 		// Update overall status
-		metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status)
+		metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status, r.ReadyNeeded)
 	}); err != nil {
 		log.Error(err, "Failed to update NetworkInterface status with reservations")
 		return false, err

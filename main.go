@@ -117,6 +117,7 @@ func main() {
 	var controllerID string
 	var hostIP string
 	var ipv6SubnetIndex int
+	var readyControllerNeeded int
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -161,6 +162,7 @@ func main() {
 	flag.StringVar(&controllerID, "controller-id", "", "The controller ID.")
 	flag.StringVar(&hostIP, "host-ip", "", "The host IP address.")
 	flag.IntVar(&ipv6SubnetIndex, "ipv6-subnet-index", 0, "The index of the IPv6 subnet to use.")
+	flag.IntVar(&readyControllerNeeded, "ready-controller-needed", 1, "The number of ready controllers needed in status.")
 
 	opts := zap.Options{
 		Development: true,
@@ -611,6 +613,7 @@ func main() {
 		EnableIPv6Support: enableIPv6Support,
 		Control:           c,
 		ControllerID:      controllerID,
+		ReadyNeeded:       readyControllerNeeded,
 	}).SetupWithManager(mgr, mgr.GetCache()); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Network")
 		os.Exit(1)
@@ -634,6 +637,7 @@ func main() {
 		Control:                     c,
 		LibvirtMachineUIDPath:       libvirtMachineUIDPath,
 		ControllerID:                controllerID,
+		ReadyNeeded:                 readyControllerNeeded,
 	}).SetupWithManager(mgr, mgr.GetCache()); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkInterface")
 		os.Exit(1)
@@ -651,6 +655,7 @@ func main() {
 		EnableIPv6Support: enableIPv6Support,
 		Control:           c,
 		ControllerID:      controllerID,
+		ReadyNeeded:       readyControllerNeeded,
 	}).SetupWithManager(mgr, mgr.GetCache()); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LoadBalancer")
 		os.Exit(1)

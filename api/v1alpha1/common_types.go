@@ -224,7 +224,7 @@ func SetLoadBalancerControllerStatus(status *LoadBalancerStatus, controllerID st
 }
 
 // AggregateNetworkInterfaceStatus computes the overall status based on controller statuses
-func AggregateNetworkInterfaceStatus(status *NetworkInterfaceStatus) {
+func AggregateNetworkInterfaceStatus(status *NetworkInterfaceStatus, readyNeeded int) {
 	s := &status.CommonStatus
 
 	// Track controller states
@@ -251,7 +251,7 @@ func AggregateNetworkInterfaceStatus(status *NetworkInterfaceStatus) {
 		stateStr = "Error"
 	} else if hasPending {
 		stateStr = "Pending"
-	} else if readyCount >= 2 {
+	} else if readyCount >= readyNeeded {
 		// At least 2 controllers are reporting Ready
 		stateStr = "Ready"
 	} else {
@@ -604,7 +604,7 @@ func EqualIPPrefixes(a, b IPPrefix) bool {
 }
 
 // AggregateLoadBalancerStatus computes the overall status based on controller statuses
-func AggregateLoadBalancerStatus(status *LoadBalancerStatus) {
+func AggregateLoadBalancerStatus(status *LoadBalancerStatus, readyNeeded int) {
 	s := &status.CommonStatus
 
 	// Track controller states
@@ -629,9 +629,9 @@ func AggregateLoadBalancerStatus(status *LoadBalancerStatus) {
 	var stateStr string
 	if hasError {
 		stateStr = "Error"
-	} else if hasPending || readyCount < 2 { // Need at least 2 controllers reporting Ready
+	} else if hasPending { // Need at least 2 controllers reporting Ready
 		stateStr = "Pending"
-	} else if readyCount >= 2 {
+	} else if readyCount >= readyNeeded {
 		// At least 2 controllers are reporting Ready
 		stateStr = "Ready"
 	} else {

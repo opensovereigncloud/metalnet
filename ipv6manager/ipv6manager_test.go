@@ -279,23 +279,23 @@ var _ = Describe("IPv6Manager", func() {
 	Context("Computing IPv6 subnet /88", func() {
 		It("should compute correct /88 subnets based on index", func() {
 			// Test with a sample IPv6 base address
-			baseIP := "2001:db8::"
+			baseIP := "2001:db8:abcd:abcd::"
 
 			// Test for index 0
 			subnet := ipv6manager.ComputeMetalnetSubnet(baseIP, 0)
-			Expect(subnet).To(Equal("2001:db8::/88"))
+			Expect(subnet).To(Equal("2001:db8:abcd:abcd::/88"))
 
 			// Test for index 1
 			subnet = ipv6manager.ComputeMetalnetSubnet(baseIP, 1)
-			Expect(subnet).To(Equal("2001:db8:0:0:4000::/88"))
+			Expect(subnet).To(Equal("2001:db8:abcd:abcd:0:4000::/88"))
 
 			// Test for index 2
 			subnet = ipv6manager.ComputeMetalnetSubnet(baseIP, 2)
-			Expect(subnet).To(Equal("2001:db8:0:0:8000::/88"))
+			Expect(subnet).To(Equal("2001:db8:abcd:abcd:0:8000::/88"))
 
 			// Test for index 3
 			subnet = ipv6manager.ComputeMetalnetSubnet(baseIP, 3)
-			Expect(subnet).To(Equal("2001:db8:0:0:c000::/88"))
+			Expect(subnet).To(Equal("2001:db8:abcd:abcd:0:c000::/88"))
 		})
 
 		It("should return empty string for invalid inputs", func() {

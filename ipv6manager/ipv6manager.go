@@ -7,8 +7,6 @@ import (
 	"crypto/rand"
 	"fmt"
 	"net"
-	"strconv"
-	"strings"
 	"sync"
 )
 
@@ -262,26 +260,11 @@ func (m *IPv6Manager) WithdrawIP(ipStr string) {
 
 // Function to compute subnet based on a variable
 func ComputeMetalnetSubnet(baseIP string, subnetIndex int) string {
-	// Parse the base IPv6 address and mask
-	parts := strings.Split(baseIP, "/")
-	ipStr := parts[0]
-	ip := net.ParseIP(ipStr)
+	// Parse the base IPv6 address
+	ip := net.ParseIP(baseIP)
 	if ip == nil || ip.To16() == nil {
 		return ""
 	}
-
-	// Get the base mask
-	baseMask := 64 // Default to /64
-	if len(parts) > 1 {
-		var err error
-		baseMask, err = strconv.Atoi(parts[1])
-		if err != nil {
-			baseMask = 64 // Default to /64 on error
-		}
-	}
-
-	// For this implementation, we'll use a /88 subnet mask
-	subnetMask := 88
 
 	// Validate input
 	if subnetIndex < 0 {
@@ -292,35 +275,27 @@ func ComputeMetalnetSubnet(baseIP string, subnetIndex int) string {
 	result := make(net.IP, len(ip))
 	copy(result, ip)
 
-	// Clear all host bits from the base network
-	for i := baseMask / 8; i < 16; i++ {
+	// Set the subnet mask to /88
+	subnetMask := 88
+
+	// Clear all bytes after the first 64 bits (8 bytes)
+	// This preserves the 2001:db8:abcd:abcd part
+	for i := 8; i < 16; i++ {
 		result[i] = 0
 	}
 
-	// For a /64 base, the subnet bits should start at byte 8 (the 6th segment)
-	// For index 2 -> 0x8000 in 6th segment
-	// For index 3 -> 0xc000 in 6th segment
+	// For the desired format, we need to:
+	// - Keep bytes 0-7 (segments 1-4) unchanged (2001:db8:abcd:abcd)
+	// - Set byte 8-9 (segment 5) to 0 (0:)
+	// - Set byte 10-11 (segment 6) based on the index (8000: or c000:)
+	// - Leave bytes 12-15 (segments 7-8) as 0 (::)
 
-	// Calculate which byte to modify based on base mask
-	byteIndex := 8 // Default for /64
+	// Set the appropriate bits in segment 6 (bytes 10-11)
+	// Index 2 -> 0x8000 (bits 10[6-7] = 10)
+	// Index 3 -> 0xc000 (bits 10[6-7] = 11)
+	result[10] = byte((subnetIndex & 0x3) << 6) // Set the high 2 bits based on the index
 
-	// Set the appropriate bits in the correct position
-	// Index 2 -> 8000:: (/88)
-	// Index 3 -> c000:: (/88)
-
-	// For /64, we set the high 2 bits of byte 8-9 (the 6th segment)
-	result[byteIndex] = byte((subnetIndex & 0x3) << 6) // Shift left by 6 to set the high bits
-
-	// Format result with correct notation
-	return fmt.Sprintf("%s/%d", formatIPv6(result), subnetMask)
-}
-
-// Helper function to format IPv6 address with proper compression
-func formatIPv6(ip net.IP) string {
-	if ip == nil || len(ip) != 16 {
-		return ""
-	}
-
-	// Convert to standard IPv6 format and let Go handle the compression
-	return ip.String()
+	// Format the result using Go's IPv6 formatting (which includes proper compression)
+	// and append the subnet mask
+	return fmt.Sprintf("%s/%d", result.String(), subnetMask)
 }

@@ -6,6 +6,7 @@ package v1alpha1
 import (
 	"encoding/json"
 	"net/netip"
+	"sort"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -646,4 +647,47 @@ func AggregateLoadBalancerStatus(status *LoadBalancerStatus, readyNeeded int) {
 	// Update the overall status timestamp
 	now := metav1.Now()
 	s.LastUpdateTime = &now
+}
+
+// SortIPPrefixes sorts a slice of IPPrefix objects by their string representation
+func SortIPPrefixes(prefixes []IPPrefix) {
+	if len(prefixes) <= 1 {
+		return
+	}
+
+	sort.Slice(prefixes, func(i, j int) bool {
+		return prefixes[i].String() < prefixes[j].String()
+	})
+}
+
+func SortIPs(ips []IP) {
+	if len(ips) <= 1 {
+		return
+	}
+
+	sort.Slice(ips, func(i, j int) bool {
+		return ips[i].String() < ips[j].String()
+	})
+}
+
+// SortIPFamilies sorts a slice of IPFamily objects
+func SortIPFamilies(families []corev1.IPFamily) {
+	if len(families) <= 1 {
+		return
+	}
+
+	sort.Slice(families, func(i, j int) bool {
+		return string(families[i]) < string(families[j])
+	})
+}
+
+// SortFirewallRuleSpecs sorts a slice of FirewallRuleSpec objects by FirewallRuleID
+func SortFirewallRuleSpecs(rules []FirewallRuleSpec) {
+	if len(rules) <= 1 {
+		return
+	}
+
+	sort.Slice(rules, func(i, j int) bool {
+		return string(rules[i].FirewallRuleID) < string(rules[j].FirewallRuleID)
+	})
 }

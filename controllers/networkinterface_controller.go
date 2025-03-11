@@ -1131,6 +1131,13 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 			nic.Status.LoadBalancerTargets = nic.Spec.LoadBalancerTargets
 		}
 
+		metalnetv1alpha1.SortIPs(nic.Spec.IPs)
+		metalnetv1alpha1.SortIPPrefixes(nic.Spec.Prefixes)
+		metalnetv1alpha1.SortIPPrefixes(nic.Spec.LoadBalancerTargets)
+		metalnetv1alpha1.SortIPFamilies(nic.Spec.IPFamilies)
+		metalnetv1alpha1.SortFirewallRuleSpecs(nic.Spec.FirewallRules)
+		metalnetv1alpha1.SortIPPrefixes(nic.Status.Prefixes)
+		metalnetv1alpha1.SortIPPrefixes(nic.Status.LoadBalancerTargets)
 		// Update overall status
 		metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status, r.ReadyNeeded)
 	}); err != nil {

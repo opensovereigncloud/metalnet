@@ -1125,20 +1125,10 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 			nic.Status.NatIP = nil
 		}
 		if prefixesErr == nil {
-			// Use our helper method to ensure sorted order
-			if len(nic.Spec.Prefixes) > 0 {
-				nic.Status.SetPrefixes(nic.Spec.Prefixes)
-			} else {
-				nic.Status.Prefixes = nil
-			}
+			nic.Status.Prefixes = nic.Spec.Prefixes
 		}
 		if lbTargetErr == nil {
-			// Use our helper method to ensure sorted order
-			if len(nic.Spec.LoadBalancerTargets) > 0 {
-				nic.Status.SetLoadBalancerTargets(nic.Spec.LoadBalancerTargets)
-			} else {
-				nic.Status.LoadBalancerTargets = nil
-			}
+			nic.Status.LoadBalancerTargets = nic.Spec.LoadBalancerTargets
 		}
 
 		// Update overall status
@@ -1174,34 +1164,25 @@ func (r *NetworkInterfaceReconciler) reconcilePrefixes(ctx context.Context, log 
 	}
 
 	specPrefixes := sets.New[netip.Prefix]()
-
-	// Ensure we're working with sorted prefixes in the spec
-	if len(nic.Spec.Prefixes) > 0 {
-		// Make a copy of the spec prefixes to avoid modifying the original
-		prefixesCopy := make([]metalnetv1alpha1.IPPrefix, len(nic.Spec.Prefixes))
-		copy(prefixesCopy, nic.Spec.Prefixes)
-		metalnetv1alpha1.SortIPPrefixes(prefixesCopy)
-
-		for _, specPrefix := range prefixesCopy {
-			// only ipv4 is supported for now
-			if specPrefix.Addr().Is4() {
-				specPrefixes.Insert(specPrefix.Prefix)
-			}
+	for _, specPrefix := range nic.Spec.Prefixes {
+		// only ipv4 is supported for now
+		if specPrefix.Addr().Is4() {
+			specPrefixes.Insert(specPrefix.Prefix)
 		}
 	}
 
 	// Sort prefixes to have deterministic error event output
-	var allPrefixes []netip.Prefix
-
-	if dpdkPrefixes.Len() >= specPrefixes.Len() {
-		allPrefixes = dpdkPrefixes.UnsortedList()
-	} else {
-		allPrefixes = specPrefixes.UnsortedList()
-	}
-
+	allPrefixes := dpdkPrefixes.UnsortedList()
 	sort.Slice(allPrefixes, func(i, j int) bool {
 		return allPrefixes[i].String() < allPrefixes[j].String()
 	})
+
+	if dpdkPrefixes.Len() < specPrefixes.Len() {
+		allPrefixes = specPrefixes.UnsortedList()
+		sort.Slice(allPrefixes, func(i, j int) bool {
+			return allPrefixes[i].String() < allPrefixes[j].String()
+		})
+	}
 	var errs []error
 	for _, prefix := range allPrefixes {
 		if err := func() error {
@@ -1327,31 +1308,22 @@ func (r *NetworkInterfaceReconciler) reconcileLBTargets(ctx context.Context, log
 	}
 
 	specPrefixes := sets.New[netip.Prefix]()
-
-	// Ensure we're working with sorted targets
-	if len(nic.Spec.LoadBalancerTargets) > 0 {
-		// Make a copy of the spec targets to avoid modifying the original
-		targetsCopy := make([]metalnetv1alpha1.IPPrefix, len(nic.Spec.LoadBalancerTargets))
-		copy(targetsCopy, nic.Spec.LoadBalancerTargets)
-		metalnetv1alpha1.SortIPPrefixes(targetsCopy)
-
-		for _, specPrefix := range targetsCopy {
-			specPrefixes.Insert(specPrefix.Prefix)
-		}
+	for _, specPrefix := range nic.Spec.LoadBalancerTargets {
+		specPrefixes.Insert(specPrefix.Prefix)
 	}
 
 	// Sort prefixes to have deterministic error event output
-	var allPrefixes []netip.Prefix
-
-	if dpdkPrefixes.Len() >= specPrefixes.Len() {
-		allPrefixes = dpdkPrefixes.UnsortedList()
-	} else {
-		allPrefixes = specPrefixes.UnsortedList()
-	}
-
+	allPrefixes := dpdkPrefixes.UnsortedList()
 	sort.Slice(allPrefixes, func(i, j int) bool {
 		return allPrefixes[i].String() < allPrefixes[j].String()
 	})
+
+	if dpdkPrefixes.Len() < specPrefixes.Len() {
+		allPrefixes = specPrefixes.UnsortedList()
+		sort.Slice(allPrefixes, func(i, j int) bool {
+			return allPrefixes[i].String() < allPrefixes[j].String()
+		})
+	}
 	var errs []error
 	for _, prefix := range allPrefixes {
 		if err := func() error {
@@ -2097,29 +2069,15 @@ func (r *NetworkInterfaceReconciler) reservationsNeedUpdate(nic *metalnetv1alpha
 		return true
 	}
 
-	// Make a copy and sort to ensure consistent comparison
-	if len(nic.Spec.LoadBalancerTargets) > 0 {
-		targetsCopy := make([]metalnetv1alpha1.IPPrefix, len(nic.Spec.LoadBalancerTargets))
-		copy(targetsCopy, nic.Spec.LoadBalancerTargets)
-		metalnetv1alpha1.SortIPPrefixes(targetsCopy)
+	// Check for changes in the LoadBalancer targets
+	specTargets := make(map[string]bool)
+	for _, target := range nic.Spec.LoadBalancerTargets {
+		specTargets[target.String()] = true
+	}
 
-		// Check for changes in the LoadBalancer targets
-		specTargets := make(map[string]bool)
-		for _, target := range targetsCopy {
-			specTargets[target.String()] = true
-		}
-
-		// Sort the status targets too (by overlay field)
-		statusTargets := make([]metalnetv1alpha1.IPReservation, len(nic.Status.Reservation.LoadBalancerTargets))
-		copy(statusTargets, nic.Status.Reservation.LoadBalancerTargets)
-		sort.Slice(statusTargets, func(i, j int) bool {
-			return statusTargets[i].Overlay < statusTargets[j].Overlay
-		})
-
-		for _, target := range statusTargets {
-			if !specTargets[target.Overlay] {
-				return true
-			}
+	for _, target := range nic.Status.Reservation.LoadBalancerTargets {
+		if !specTargets[target.Overlay] {
+			return true
 		}
 	}
 
@@ -2128,29 +2086,15 @@ func (r *NetworkInterfaceReconciler) reservationsNeedUpdate(nic *metalnetv1alpha
 		return true
 	}
 
-	// Make a copy and sort to ensure consistent comparison
-	if len(nic.Spec.Prefixes) > 0 {
-		prefixesCopy := make([]metalnetv1alpha1.IPPrefix, len(nic.Spec.Prefixes))
-		copy(prefixesCopy, nic.Spec.Prefixes)
-		metalnetv1alpha1.SortIPPrefixes(prefixesCopy)
+	// Check for changes in the Prefixes
+	specPrefixes := make(map[string]bool)
+	for _, prefix := range nic.Spec.Prefixes {
+		specPrefixes[prefix.String()] = true
+	}
 
-		// Check for changes in the Prefixes
-		specPrefixes := make(map[string]bool)
-		for _, prefix := range prefixesCopy {
-			specPrefixes[prefix.String()] = true
-		}
-
-		// Sort the status prefixes too (by overlay field)
-		statusPrefixes := make([]metalnetv1alpha1.IPReservation, len(nic.Status.Reservation.Prefixes))
-		copy(statusPrefixes, nic.Status.Reservation.Prefixes)
-		sort.Slice(statusPrefixes, func(i, j int) bool {
-			return statusPrefixes[i].Overlay < statusPrefixes[j].Overlay
-		})
-
-		for _, prefix := range statusPrefixes {
-			if !specPrefixes[prefix.Overlay] {
-				return true
-			}
+	for _, prefix := range nic.Status.Reservation.Prefixes {
+		if !specPrefixes[prefix.Overlay] {
+			return true
 		}
 	}
 
@@ -2265,14 +2209,9 @@ func (r *NetworkInterfaceReconciler) buildNetworkInterfaceReservation(nic *metal
 
 	// Process LoadBalancerTargets
 	if len(nic.Spec.LoadBalancerTargets) > 0 {
-		// Make a copy and sort to ensure consistent ordering
-		targetsCopy := make([]metalnetv1alpha1.IPPrefix, len(nic.Spec.LoadBalancerTargets))
-		copy(targetsCopy, nic.Spec.LoadBalancerTargets)
-		metalnetv1alpha1.SortIPPrefixes(targetsCopy)
+		reservation.LoadBalancerTargets = make([]metalnetv1alpha1.IPReservation, 0, len(nic.Spec.LoadBalancerTargets))
 
-		reservation.LoadBalancerTargets = make([]metalnetv1alpha1.IPReservation, 0, len(targetsCopy))
-
-		for _, target := range targetsCopy {
+		for _, target := range nic.Spec.LoadBalancerTargets {
 			overlayPrefix := target.String()
 
 			// Check if this LoadBalancerTarget already exists in the current reservation
@@ -2304,23 +2243,13 @@ func (r *NetworkInterfaceReconciler) buildNetworkInterfaceReservation(nic *metal
 				Underlay: underlayIP,
 			})
 		}
-
-		// Sort the IPReservations by Overlay string to ensure consistent order
-		sort.Slice(reservation.LoadBalancerTargets, func(i, j int) bool {
-			return reservation.LoadBalancerTargets[i].Overlay < reservation.LoadBalancerTargets[j].Overlay
-		})
 	}
 
 	// Process Prefixes
 	if len(nic.Spec.Prefixes) > 0 {
-		// Make a copy and sort to ensure consistent ordering
-		prefixesCopy := make([]metalnetv1alpha1.IPPrefix, len(nic.Spec.Prefixes))
-		copy(prefixesCopy, nic.Spec.Prefixes)
-		metalnetv1alpha1.SortIPPrefixes(prefixesCopy)
+		reservation.Prefixes = make([]metalnetv1alpha1.IPReservation, 0, len(nic.Spec.Prefixes))
 
-		reservation.Prefixes = make([]metalnetv1alpha1.IPReservation, 0, len(prefixesCopy))
-
-		for _, prefix := range prefixesCopy {
+		for _, prefix := range nic.Spec.Prefixes {
 			overlayPrefix := prefix.String()
 
 			// Check if this prefix already exists in the current reservation
@@ -2352,11 +2281,6 @@ func (r *NetworkInterfaceReconciler) buildNetworkInterfaceReservation(nic *metal
 				Underlay: underlayIP,
 			})
 		}
-
-		// Sort the IPReservations by Overlay string to ensure consistent order
-		sort.Slice(reservation.Prefixes, func(i, j int) bool {
-			return reservation.Prefixes[i].Overlay < reservation.Prefixes[j].Overlay
-		})
 	}
 
 	// If there were any errors, combine them and return

@@ -6,7 +6,6 @@ package v1alpha1
 import (
 	"encoding/json"
 	"net/netip"
-	"sort"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -602,17 +601,6 @@ func PtrToIPPrefix(prefix IPPrefix) *IPPrefix {
 
 func EqualIPPrefixes(a, b IPPrefix) bool {
 	return a == b
-}
-
-// SortIPPrefixes sorts a slice of IPPrefix objects by their string representation
-func SortIPPrefixes(prefixes []IPPrefix) {
-	if len(prefixes) <= 1 {
-		return
-	}
-
-	sort.Slice(prefixes, func(i, j int) bool {
-		return prefixes[i].String() < prefixes[j].String()
-	})
 }
 
 // AggregateLoadBalancerStatus computes the overall status based on controller statuses

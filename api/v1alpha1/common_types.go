@@ -114,114 +114,83 @@ const (
 	ConditionReady ConditionType = "Ready"
 )
 
-// SetNetworkInterfaceControllerStatus sets or updates the status from a specific controller instance
-func SetNetworkInterfaceControllerStatus(status *NetworkInterfaceStatus, controllerID string, state string, message string, generation int64, conditions ...metav1.Condition) {
-	s := &status.CommonStatus
+// mergeControllerStatus updates a CommonStatus with a new controller status
+// using a merge strategy that preserves entries from other controllers
+func mergeControllerStatus(status *CommonStatus, controllerID string, state string, message string, generation int64, conditions ...metav1.Condition) {
+	// Create a new controller status list to hold both existing and updated entries
+	// This approach avoids the race condition where controllers overwrite each other's entries
+	newStatuses := make([]ControllerStatus, 0, len(status.ControllerStatuses)+1)
 
-	// Find existing controller status or create a new one
-	var controllerStatus *ControllerStatus
-	for i := range s.ControllerStatuses {
-		if s.ControllerStatuses[i].ControllerID == controllerID {
-			controllerStatus = &s.ControllerStatuses[i]
-			break
+	// Create the new controller status for the current controller
+	now := metav1.Now()
+	updatedStatus := ControllerStatus{
+		ControllerID:       controllerID,
+		State:              state,
+		Message:            message,
+		ObservedGeneration: generation,
+		LastUpdateTime:     &now,
+	}
+
+	// Check if we have an existing entry for this controller to preserve any conditions
+	var existingConditions []metav1.Condition
+
+	// Copy all existing statuses except the one we're updating
+	for _, existingStatus := range status.ControllerStatuses {
+		if existingStatus.ControllerID == controllerID {
+			// Save existing conditions if any (we'll merge them with new ones)
+			existingConditions = existingStatus.Conditions
+		} else {
+			// Copy other controllers' statuses unchanged
+			newStatuses = append(newStatuses, existingStatus)
 		}
 	}
 
-	if controllerStatus == nil {
-		s.ControllerStatuses = append(s.ControllerStatuses, ControllerStatus{
-			ControllerID: controllerID,
-		})
-		controllerStatus = &s.ControllerStatuses[len(s.ControllerStatuses)-1]
+	// Process conditions and merge with existing ones
+	conditionsByType := make(map[string]metav1.Condition)
+
+	// First add existing conditions to the map
+	for _, condition := range existingConditions {
+		conditionsByType[condition.Type] = condition
 	}
 
-	// Update controller status fields
-	controllerStatus.State = state
-	controllerStatus.Message = message
-	controllerStatus.ObservedGeneration = generation
-	now := metav1.Now()
-	controllerStatus.LastUpdateTime = &now
-
-	// Update the overall status last update time
-	s.LastUpdateTime = &now
-
-	// Set/update conditions
+	// Then add/override with new conditions
 	for _, condition := range conditions {
 		condition.LastTransitionTime = now
-		// Update existing condition or add new one
-		existingCondition := false
-		for i, c := range controllerStatus.Conditions {
-			if c.Type == condition.Type {
-				controllerStatus.Conditions[i] = condition
-				existingCondition = true
-				break
-			}
-		}
-		if !existingCondition {
-			controllerStatus.Conditions = append(controllerStatus.Conditions, condition)
-		}
+		conditionsByType[condition.Type] = condition
 	}
 
+	// Convert back to a slice
+	for _, condition := range conditionsByType {
+		updatedStatus.Conditions = append(updatedStatus.Conditions, condition)
+	}
+
+	// Add the updated status
+	newStatuses = append(newStatuses, updatedStatus)
+
+	// Replace the entire status list with our merged version
+	status.ControllerStatuses = newStatuses
+
+	// Update the overall status last update time
+	status.LastUpdateTime = &now
+
 	// Compute overall status (assuming Ready state has priority)
-	if s.State == "" || s.State == "Pending" {
-		s.State = state
+	if status.State == "" || status.State == "Pending" {
+		status.State = state
 	} else if state == "Error" {
-		s.State = "Error"
+		status.State = "Error"
 	}
 }
 
+// SetNetworkInterfaceControllerStatus sets or updates the status from a specific controller instance
+// using a merge strategy that preserves entries from other controllers
+func SetNetworkInterfaceControllerStatus(status *NetworkInterfaceStatus, controllerID string, state string, message string, generation int64, conditions ...metav1.Condition) {
+	mergeControllerStatus(&status.CommonStatus, controllerID, state, message, generation, conditions...)
+}
+
 // SetLoadBalancerControllerStatus sets or updates the status from a specific controller instance
+// using a merge strategy that preserves entries from other controllers
 func SetLoadBalancerControllerStatus(status *LoadBalancerStatus, controllerID string, state string, message string, generation int64, conditions ...metav1.Condition) {
-	s := &status.CommonStatus
-
-	// Find existing controller status or create a new one
-	var controllerStatus *ControllerStatus
-	for i := range s.ControllerStatuses {
-		if s.ControllerStatuses[i].ControllerID == controllerID {
-			controllerStatus = &s.ControllerStatuses[i]
-			break
-		}
-	}
-
-	if controllerStatus == nil {
-		s.ControllerStatuses = append(s.ControllerStatuses, ControllerStatus{
-			ControllerID: controllerID,
-		})
-		controllerStatus = &s.ControllerStatuses[len(s.ControllerStatuses)-1]
-	}
-
-	// Update controller status fields
-	controllerStatus.State = state
-	controllerStatus.Message = message
-	controllerStatus.ObservedGeneration = generation
-	now := metav1.Now()
-	controllerStatus.LastUpdateTime = &now
-
-	// Update the overall status last update time
-	s.LastUpdateTime = &now
-
-	// Set/update conditions
-	for _, condition := range conditions {
-		condition.LastTransitionTime = now
-		// Update existing condition or add new one
-		existingCondition := false
-		for i, c := range controllerStatus.Conditions {
-			if c.Type == condition.Type {
-				controllerStatus.Conditions[i] = condition
-				existingCondition = true
-				break
-			}
-		}
-		if !existingCondition {
-			controllerStatus.Conditions = append(controllerStatus.Conditions, condition)
-		}
-	}
-
-	// Compute overall status (assuming Ready state has priority)
-	if s.State == "" || s.State == "Pending" {
-		s.State = state
-	} else if state == "Error" {
-		s.State = "Error"
-	}
+	mergeControllerStatus(&status.CommonStatus, controllerID, state, message, generation, conditions...)
 }
 
 // AggregateNetworkInterfaceStatus computes the overall status based on controller statuses

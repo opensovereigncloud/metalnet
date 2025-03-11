@@ -119,6 +119,6 @@ require (
 )
 
 replace (
-	github.com/ironcore-dev/dpservice/go/dpservice-go => gitlab.devops.telekom.de/cas-devs/osc/upstream/onmetal/net-dpservice/go/dpservice-go v0.0.0-20250310155639-d0e624504c18
+	github.com/ironcore-dev/dpservice/go/dpservice-go => gitlab.devops.telekom.de/cas-devs/osc/upstream/onmetal/net-dpservice/go/dpservice-go v0.0.0-20250311142441-e380dd9e7dac
 	github.com/ironcore-dev/metalbond => gitlab.devops.telekom.de/cas-devs/osc/upstream/onmetal/metalbond v1.0.2
 )

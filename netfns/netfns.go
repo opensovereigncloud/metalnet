@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
+	"time"
 
 	"github.com/ironcore-dev/metalnet/sysfs"
 	"github.com/jaypipes/ghw"
@@ -17,8 +19,11 @@ import (
 )
 
 const (
-	perm     = 0777
-	filePerm = 0666
+	perm       = 0777
+	filePerm   = 0666
+	lockFile   = ".lock"
+	lockDelay  = 10 * time.Millisecond
+	maxRetries = 50 // Increase retries with shorter delay for better concurrency
 )
 
 var (
@@ -42,13 +47,87 @@ type ClaimStore interface {
 type fileClaimStore struct {
 	rootDir    string
 	isTAPStore bool
+	mu         sync.Mutex // Protects lockFile operations
 }
 
 func NewFileClaimStore(rootDir string, isTAPStore bool) (ClaimStore, error) {
 	if err := os.MkdirAll(rootDir, perm); err != nil {
 		return nil, fmt.Errorf("error creating directory at %s: %w", rootDir, err)
 	}
-	return &fileClaimStore{rootDir, isTAPStore}, nil
+	return &fileClaimStore{
+		rootDir:    rootDir,
+		isTAPStore: isTAPStore,
+	}, nil
+}
+
+// lockPath returns the path to the lock file
+func (s *fileClaimStore) lockPath() string {
+	return filepath.Join(s.rootDir, lockFile)
+}
+
+// acquireLock tries to create a lock file to ensure atomic operations
+// Returns true if lock was acquired, false otherwise
+func (s *fileClaimStore) acquireLock() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Try to create lock file
+	f, err := os.OpenFile(s.lockPath(), os.O_CREATE|os.O_EXCL|os.O_WRONLY, filePerm)
+	if err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return ErrLockTimeout
+		}
+		return fmt.Errorf("error creating lock file: %w", err)
+	}
+
+	// Write PID for debugging purposes
+	_, err = fmt.Fprintf(f, "%d\n", os.Getpid())
+	if err != nil {
+		_ = f.Close()
+		_ = os.Remove(s.lockPath())
+		return fmt.Errorf("error writing to lock file: %w", err)
+	}
+
+	if err := f.Close(); err != nil {
+		_ = os.Remove(s.lockPath())
+		return fmt.Errorf("error closing lock file: %w", err)
+	}
+
+	return nil
+}
+
+// releaseLock removes the lock file
+func (s *fileClaimStore) releaseLock() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	err := os.Remove(s.lockPath())
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("error removing lock file: %w", err)
+	}
+	return nil
+}
+
+// withLock executes the given function with a lock
+func (s *fileClaimStore) withLock(fn func() error) error {
+	// Try to acquire lock with retries
+	for i := 0; i < maxRetries; i++ {
+		err := s.acquireLock()
+		if err == nil {
+			// Lock acquired, execute function and release lock
+			defer s.releaseLock()
+			return fn()
+		}
+
+		if !errors.Is(err, ErrLockTimeout) {
+			return err
+		}
+
+		// Lock timeout, wait and retry
+		time.Sleep(lockDelay)
+	}
+
+	return ErrRetryExceeded
 }
 
 func (s *fileClaimStore) claimFile(uid types.UID) string {
@@ -56,23 +135,25 @@ func (s *fileClaimStore) claimFile(uid types.UID) string {
 }
 
 func (s *fileClaimStore) Create(uid types.UID, addr ghw.PCIAddress) error {
-	filename := s.claimFile(uid)
-	_, err := os.Stat(filename)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("error stat-ing %s: %w", filename, err)
-	}
-	if err == nil {
-		return ErrClaimAlreadyExists
-	}
+	return s.withLock(func() error {
+		filename := s.claimFile(uid)
+		_, err := os.Stat(filename)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("error stat-ing %s: %w", filename, err)
+		}
+		if err == nil {
+			return ErrClaimAlreadyExists
+		}
 
-	var data []byte
-	if !s.isTAPStore {
-		data = []byte(addr.String())
-	} else {
-		data = []byte(addr.Device)
-	}
+		var data []byte
+		if !s.isTAPStore {
+			data = []byte(addr.String())
+		} else {
+			data = []byte(addr.Device)
+		}
 
-	return os.WriteFile(filename, data, filePerm)
+		return os.WriteFile(filename, data, filePerm)
+	})
 }
 
 func (s *fileClaimStore) Get(uid types.UID) (*ghw.PCIAddress, error) {
@@ -100,33 +181,55 @@ func (s *fileClaimStore) Get(uid types.UID) (*ghw.PCIAddress, error) {
 }
 
 func (s *fileClaimStore) Delete(uid types.UID) (*ghw.PCIAddress, error) {
-	addr, err := s.Get(uid)
+	var addr *ghw.PCIAddress
+	var getErr error
+
+	err := s.withLock(func() error {
+		// Get the address first
+		addr, getErr = s.Get(uid)
+		if getErr != nil {
+			return getErr
+		}
+
+		// Then remove the file
+		if err := os.Remove(s.claimFile(uid)); err != nil {
+			return fmt.Errorf("error deleting pci address: %w", err)
+		}
+		return nil
+	})
+
 	if err != nil {
 		return nil, err
 	}
 
-	if err := os.Remove(s.claimFile(uid)); err != nil {
-		return nil, fmt.Errorf("error deleting pci address: %w", err)
-	}
 	return addr, nil
 }
 
 func (s *fileClaimStore) DeleteAll() error {
-	entries, err := os.ReadDir(s.rootDir)
-	if err != nil {
-		return fmt.Errorf("error reading dir %s: %w", s.rootDir, err)
-	}
-
-	for _, entry := range entries {
-		if err := os.Remove(filepath.Join(s.rootDir, entry.Name())); err != nil {
-			return fmt.Errorf("error deleting claim file %s: %w", entry.Name(), err)
+	return s.withLock(func() error {
+		entries, err := os.ReadDir(s.rootDir)
+		if err != nil {
+			return fmt.Errorf("error reading dir %s: %w", s.rootDir, err)
 		}
-	}
 
-	return nil
+		for _, entry := range entries {
+			// Skip the lock file itself
+			if entry.Name() == lockFile {
+				continue
+			}
+
+			if err := os.Remove(filepath.Join(s.rootDir, entry.Name())); err != nil {
+				return fmt.Errorf("error deleting claim file %s: %w", entry.Name(), err)
+			}
+		}
+
+		return nil
+	})
 }
 
 func (s *fileClaimStore) List() ([]Claim, error) {
+	// We don't need to acquire the lock for the entire operation
+	// Just for reading the directory
 	entries, err := os.ReadDir(s.rootDir)
 	if err != nil {
 		return nil, fmt.Errorf("error reading dir %s: %w", s.rootDir, err)
@@ -134,48 +237,80 @@ func (s *fileClaimStore) List() ([]Claim, error) {
 
 	var claims []Claim
 	for _, entry := range entries {
+		// Skip the lock file
+		if entry.Name() == lockFile {
+			continue
+		}
+
 		uid := types.UID(entry.Name())
 		addr, err := s.Get(uid)
 		if err != nil {
+			// If the file disappeared, just skip it
+			if errors.Is(err, ErrClaimNotFound) {
+				continue
+			}
 			return nil, fmt.Errorf("[claim %s] error getting claim: %w", uid, err)
 		}
 
 		claims = append(claims, Claim{UID: uid, Address: *addr})
 	}
+
 	return claims, nil
 }
 
 var (
 	ErrNoAddressAvailable = errors.New("no address available")
+	ErrLockTimeout        = errors.New("timed out acquiring lock")
+	ErrRetryExceeded      = errors.New("exceeded maximum retries")
 )
 
 type Manager struct {
-	store     ClaimStore
-	available sets.Set[ghw.PCIAddress]
+	store        ClaimStore
+	allAddresses []ghw.PCIAddress
 }
 
+// NewManager creates a new Manager that relies solely on the filesystem
+// rather than maintaining an in-memory state of available addresses
 func NewManager(store ClaimStore, initAvailable []ghw.PCIAddress) (*Manager, error) {
 	claims, err := store.List()
 	if err != nil {
 		return nil, fmt.Errorf("error listing claims: %w", err)
 	}
 
-	available := sets.New(initAvailable...)
+	// Validate that all claims reference addresses in the provided set
+	availableSet := sets.New(initAvailable...)
 	for _, claim := range claims {
-		if !available.Has(claim.Address) {
-			return nil, fmt.Errorf("claim %s cannot claim non-existent address %s", claim.UID, &claim.Address)
+		if !availableSet.Has(claim.Address) {
+			return nil, fmt.Errorf("claim %s references non-existent address %s", claim.UID, &claim.Address)
 		}
-
-		available.Delete(claim.Address)
 	}
 
 	return &Manager{
-		store:     store,
-		available: available,
+		store:        store,
+		allAddresses: initAvailable,
 	}, nil
 }
 
+// getAvailableAddresses returns the set of addresses that are not currently claimed
+func (m *Manager) getAvailableAddresses() (sets.Set[ghw.PCIAddress], error) {
+	// Start with all addresses
+	available := sets.New(m.allAddresses...)
+
+	// Remove claimed addresses
+	claims, err := m.store.List()
+	if err != nil {
+		return nil, fmt.Errorf("error listing claims: %w", err)
+	}
+
+	for _, claim := range claims {
+		available.Delete(claim.Address)
+	}
+
+	return available, nil
+}
+
 func (m *Manager) GetOrClaim(uid types.UID) (*ghw.PCIAddress, error) {
+	// First try to get the existing claim
 	addr, err := m.store.Get(uid)
 	if err != nil && !errors.Is(err, ErrClaimNotFound) {
 		return nil, fmt.Errorf("error getting claim: %w", err)
@@ -184,15 +319,39 @@ func (m *Manager) GetOrClaim(uid types.UID) (*ghw.PCIAddress, error) {
 		return addr, nil
 	}
 
-	newAddr, ok := m.available.PopAny()
-	if !ok {
-		return nil, ErrNoAddressAvailable
+	// Try to claim a new address with retries
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		// Get current available addresses
+		available, err := m.getAvailableAddresses()
+		if err != nil {
+			return nil, fmt.Errorf("error getting available addresses: %w", err)
+		}
+
+		// No addresses available
+		if available.Len() == 0 {
+			return nil, ErrNoAddressAvailable
+		}
+
+		// Pick an address
+		newAddr := available.UnsortedList()[0]
+
+		// Try to claim it
+		err = m.store.Create(uid, newAddr)
+		if err == nil {
+			// Success!
+			return &newAddr, nil
+		}
+
+		// If the error is not because the claim already exists, return the error
+		if !errors.Is(err, ErrClaimAlreadyExists) {
+			return nil, err
+		}
+
+		// Someone else created a claim in the meantime, retry
+		time.Sleep(lockDelay)
 	}
-	if err := m.store.Create(uid, newAddr); err != nil {
-		m.available.Insert(newAddr)
-		return nil, err
-	}
-	return &newAddr, nil
+
+	return nil, ErrRetryExceeded
 }
 
 func (m *Manager) Get(uid types.UID) (*ghw.PCIAddress, error) {
@@ -200,20 +359,14 @@ func (m *Manager) Get(uid types.UID) (*ghw.PCIAddress, error) {
 }
 
 func (m *Manager) Release(uid types.UID) error {
-	addr, err := m.store.Delete(uid)
-	if err != nil {
-		return err
-	}
-
-	m.available.Insert(*addr)
-	return nil
+	// We don't need to update any in-memory state since we always read from the filesystem
+	_, err := m.store.Delete(uid)
+	return err
 }
 
 func (m *Manager) ReleaseAll() error {
-	if err := m.store.DeleteAll(); err != nil {
-		return err
-	}
-	return nil
+	// Simply delegate to the store
+	return m.store.DeleteAll()
 }
 
 const (

@@ -204,11 +204,11 @@ func exponentialBackoff(attempt int) time.Duration {
 }
 
 // SkipReconcileOnOtherPods queries for pods with a specific label and retries on failure with exponential backoff
-func SkipReconcileOnOtherPods(nodeName, currentPodName, daemonSetName, namespace string) error {
+func SkipReconcileOnOtherPods(nodeName, currentPodName, daemonSetName, namespace, controllerID string) error {
 	var err error
 
 	for attempt := 0; attempt < 5; attempt++ {
-		err = trySkipReconcile(nodeName, currentPodName, daemonSetName, namespace)
+		err = trySkipReconcile(nodeName, currentPodName, daemonSetName, namespace, controllerID)
 		if err == nil {
 			return nil
 		}
@@ -223,7 +223,7 @@ func SkipReconcileOnOtherPods(nodeName, currentPodName, daemonSetName, namespace
 }
 
 // trySkipReconcile performs the actual pod listing and notifications
-func trySkipReconcile(nodeName, currentPodName, daemonSetName, namespace string) error {
+func trySkipReconcile(nodeName, currentPodName, daemonSetName, namespace, controllerID string) error {
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		return fmt.Errorf("unable to create in-cluster config: %w", err)
@@ -237,7 +237,7 @@ func trySkipReconcile(nodeName, currentPodName, daemonSetName, namespace string)
 	// Filter pods by node name and label 'app=metalnet'
 	podList, err := clientset.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
 		FieldSelector: "spec.nodeName=" + nodeName,
-		LabelSelector: "app=metalnet",
+		LabelSelector: "app=metalnet,controller-id=" + controllerID,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to list pods in namespace %q on node %q: %w", namespace, nodeName, err)

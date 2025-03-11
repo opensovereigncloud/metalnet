@@ -476,7 +476,7 @@ func main() {
 	go control.StartControlWebserver(c, controlWebserverBindAddr)
 
 	// Notify other DaemonSet-managed pods on this node to skip reconciliation
-	if err := control.SkipReconcileOnOtherPods(nodeName, podName, daemonSetName, namespace); err != nil {
+	if err := control.SkipReconcileOnOtherPods(nodeName, podName, daemonSetName, namespace, controllerID); err != nil {
 		setupLog.Error(err, "failed to notify other pods to skip reconciliation")
 		os.Exit(1)
 	}

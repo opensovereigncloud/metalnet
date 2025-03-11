@@ -260,14 +260,12 @@ func (in *NetworkInterface) DeepCopyInto(out *NetworkInterface) {
 	if in.Spec.IPFamilies != nil {
 		out.Spec.IPFamilies = make([]corev1.IPFamily, len(in.Spec.IPFamilies))
 		copy(out.Spec.IPFamilies, in.Spec.IPFamilies)
-		SortIPFamilies(out.Spec.IPFamilies)
 	}
 
 	// Copy and sort IPs
 	if in.Spec.IPs != nil {
 		out.Spec.IPs = make([]IP, len(in.Spec.IPs))
 		copy(out.Spec.IPs, in.Spec.IPs)
-		SortIPs(out.Spec.IPs)
 	}
 
 	// Copy and sort Prefixes
@@ -290,7 +288,6 @@ func (in *NetworkInterface) DeepCopyInto(out *NetworkInterface) {
 		for i := range in.Spec.FirewallRules {
 			in.Spec.FirewallRules[i].DeepCopyInto(&out.Spec.FirewallRules[i])
 		}
-		SortFirewallRuleSpecs(out.Spec.FirewallRules)
 	}
 
 	// Copy Status and sort arrays
@@ -350,57 +347,6 @@ func (n *NetworkInterfaceSpec) GetPrefixes() []IPPrefix {
 	copy(prefixes, n.Prefixes)
 	SortIPPrefixes(prefixes)
 	return prefixes
-}
-
-// SetIPs sets and sorts the IPs to ensure consistent ordering
-func (n *NetworkInterfaceSpec) SetIPs(ips []IP) {
-	n.IPs = ips
-	SortIPs(n.IPs)
-}
-
-// GetIPs returns a sorted copy of IPs
-func (n *NetworkInterfaceSpec) GetIPs() []IP {
-	if len(n.IPs) == 0 {
-		return nil
-	}
-	ips := make([]IP, len(n.IPs))
-	copy(ips, n.IPs)
-	SortIPs(ips)
-	return ips
-}
-
-// SetIPFamilies sets and sorts the IPFamilies to ensure consistent ordering
-func (n *NetworkInterfaceSpec) SetIPFamilies(families []corev1.IPFamily) {
-	n.IPFamilies = families
-	SortIPFamilies(n.IPFamilies)
-}
-
-// GetIPFamilies returns a sorted copy of IPFamilies
-func (n *NetworkInterfaceSpec) GetIPFamilies() []corev1.IPFamily {
-	if len(n.IPFamilies) == 0 {
-		return nil
-	}
-	families := make([]corev1.IPFamily, len(n.IPFamilies))
-	copy(families, n.IPFamilies)
-	SortIPFamilies(families)
-	return families
-}
-
-// SetFirewallRules sets and sorts the FirewallRules to ensure consistent ordering
-func (n *NetworkInterfaceSpec) SetFirewallRules(rules []FirewallRuleSpec) {
-	n.FirewallRules = rules
-	SortFirewallRuleSpecs(n.FirewallRules)
-}
-
-// GetFirewallRules returns a sorted copy of FirewallRules
-func (n *NetworkInterfaceSpec) GetFirewallRules() []FirewallRuleSpec {
-	if len(n.FirewallRules) == 0 {
-		return nil
-	}
-	rules := make([]FirewallRuleSpec, len(n.FirewallRules))
-	copy(rules, n.FirewallRules)
-	SortFirewallRuleSpecs(rules)
-	return rules
 }
 
 // Ensure status fields are also sorted

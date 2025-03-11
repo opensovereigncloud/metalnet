@@ -615,39 +615,6 @@ func SortIPPrefixes(prefixes []IPPrefix) {
 	})
 }
 
-// SortIPs sorts a slice of IP objects by their string representation
-func SortIPs(ips []IP) {
-	if len(ips) <= 1 {
-		return
-	}
-
-	sort.Slice(ips, func(i, j int) bool {
-		return ips[i].String() < ips[j].String()
-	})
-}
-
-// SortIPFamilies sorts a slice of IPFamily objects
-func SortIPFamilies(families []corev1.IPFamily) {
-	if len(families) <= 1 {
-		return
-	}
-
-	sort.Slice(families, func(i, j int) bool {
-		return string(families[i]) < string(families[j])
-	})
-}
-
-// SortFirewallRuleSpecs sorts a slice of FirewallRuleSpec objects by FirewallRuleID
-func SortFirewallRuleSpecs(rules []FirewallRuleSpec) {
-	if len(rules) <= 1 {
-		return
-	}
-
-	sort.Slice(rules, func(i, j int) bool {
-		return string(rules[i].FirewallRuleID) < string(rules[j].FirewallRuleID)
-	})
-}
-
 // AggregateLoadBalancerStatus computes the overall status based on controller statuses
 func AggregateLoadBalancerStatus(status *LoadBalancerStatus, readyNeeded int) {
 	s := &status.CommonStatus

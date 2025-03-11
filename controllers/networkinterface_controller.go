@@ -1577,8 +1577,34 @@ func (r *NetworkInterfaceReconciler) applyInterface(ctx context.Context, log log
 			},
 		})
 		if err != nil {
+			if dpdkerrors.IsStatusErrorCode(err, dpdkerrors.ROUTE_EXISTS) {
+				routes, err := r.DPDK.ListRoutes(ctx, vni)
+				if err != nil {
+					return nil, netip.Addr{}, false, fmt.Errorf("error creating dpdk interface while list routes: %w", err)
+				}
+
+				// Handles the cleanup of an old route that conflicts with the current interface underlay ip during route reconciliation.
+				for _, route := range routes.Items {
+					if route.Spec.NextHop.IP.String() == underlayRoute.String() {
+						log.V(1).Info(fmt.Sprintf("Cleanup old route that clashes with interface underlay ip: %s, vni: %d", underlayRoute.String(), vni))
+						// Try to delete old route
+						if _, err := r.DPDK.DeleteRoute(
+							ctx,
+							vni,
+							route.Spec.Prefix,
+							dpdkerrors.Ignore(dpdkerrors.NO_VNI, dpdkerrors.ROUTE_NOT_FOUND, dpdkerrors.ROUTE_BAD_PORT),
+						); err != nil {
+							return nil, netip.Addr{}, false, fmt.Errorf("error deleting old existing interface route vni: %d, prefix: %s,  %w", vni, underlayRoute.String(), err)
+						}
+
+						return nil, netip.Addr{}, false, errors.New("cleanup old route, force reconcile")
+					}
+				}
+			}
+
 			return nil, netip.Addr{}, false, fmt.Errorf("error creating dpdk interface: %w", err)
 		}
+
 		log.V(1).Info("Adding interface routes if not exist")
 		ips := getNetworkInterfaceIPs(nic)
 		if err := r.addInterfaceRoutesIfNotExist(ctx, log, vni, ips, *iface.Spec.UnderlayRoute); err != nil {

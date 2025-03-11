@@ -115,13 +115,45 @@ const (
 )
 
 // mergeControllerStatus updates a CommonStatus with a new controller status
-// using a merge strategy that preserves entries from other controllers
+// using a merge strategy that preserves entries from other controllers while
+// avoiding unnecessary updates that would change the resourceVersion
 func mergeControllerStatus(status *CommonStatus, controllerID string, state string, message string, generation int64, conditions ...metav1.Condition) {
-	// Create a new controller status list to hold both existing and updated entries
-	// This approach avoids the race condition where controllers overwrite each other's entries
+	// Check if we have an existing entry for this controller
+	var existingStatus *ControllerStatus
+	var existingIndex int = -1
+
+	// Find existing status entry if any
+	for i := range status.ControllerStatuses {
+		if status.ControllerStatuses[i].ControllerID == controllerID {
+			existingStatus = &status.ControllerStatuses[i]
+			existingIndex = i
+			break
+		}
+	}
+
+	// Skip update if nothing has changed - this prevents frequent resourceVersion changes
+	if existingStatus != nil {
+		// Check if status hasn't changed (ignoring timestamp)
+		if existingStatus.State == state &&
+			existingStatus.Message == message &&
+			existingStatus.ObservedGeneration == generation &&
+			len(conditions) == 0 {
+			// No changes, no need to update
+			return
+		}
+	}
+
+	// Create a new controller status list
 	newStatuses := make([]ControllerStatus, 0, len(status.ControllerStatuses)+1)
 
-	// Create the new controller status for the current controller
+	// Copy all existing statuses except the one we're updating
+	for i, cs := range status.ControllerStatuses {
+		if i != existingIndex {
+			newStatuses = append(newStatuses, cs)
+		}
+	}
+
+	// Create the updated status entry
 	now := metav1.Now()
 	updatedStatus := ControllerStatus{
 		ControllerID:       controllerID,
@@ -131,26 +163,14 @@ func mergeControllerStatus(status *CommonStatus, controllerID string, state stri
 		LastUpdateTime:     &now,
 	}
 
-	// Check if we have an existing entry for this controller to preserve any conditions
-	var existingConditions []metav1.Condition
-
-	// Copy all existing statuses except the one we're updating
-	for _, existingStatus := range status.ControllerStatuses {
-		if existingStatus.ControllerID == controllerID {
-			// Save existing conditions if any (we'll merge them with new ones)
-			existingConditions = existingStatus.Conditions
-		} else {
-			// Copy other controllers' statuses unchanged
-			newStatuses = append(newStatuses, existingStatus)
-		}
-	}
-
 	// Process conditions and merge with existing ones
 	conditionsByType := make(map[string]metav1.Condition)
 
-	// First add existing conditions to the map
-	for _, condition := range existingConditions {
-		conditionsByType[condition.Type] = condition
+	// Add existing conditions first (if we have an existing status)
+	if existingStatus != nil {
+		for _, condition := range existingStatus.Conditions {
+			conditionsByType[condition.Type] = condition
+		}
 	}
 
 	// Then add/override with new conditions
@@ -159,7 +179,7 @@ func mergeControllerStatus(status *CommonStatus, controllerID string, state stri
 		conditionsByType[condition.Type] = condition
 	}
 
-	// Convert back to a slice
+	// Convert conditions map back to a slice
 	for _, condition := range conditionsByType {
 		updatedStatus.Conditions = append(updatedStatus.Conditions, condition)
 	}
@@ -194,6 +214,7 @@ func SetLoadBalancerControllerStatus(status *LoadBalancerStatus, controllerID st
 }
 
 // AggregateNetworkInterfaceStatus computes the overall status based on controller statuses
+// with optimization to avoid unnecessary updates
 func AggregateNetworkInterfaceStatus(status *NetworkInterfaceStatus, readyNeeded int) {
 	s := &status.CommonStatus
 
@@ -222,11 +243,17 @@ func AggregateNetworkInterfaceStatus(status *NetworkInterfaceStatus, readyNeeded
 	} else if hasPending {
 		stateStr = "Pending"
 	} else if readyCount >= readyNeeded {
-		// At least 2 controllers are reporting Ready
+		// At least N controllers are reporting Ready
 		stateStr = "Ready"
 	} else {
 		// No controllers reporting yet or not enough Ready reports
 		stateStr = "Pending"
+	}
+
+	// Check if status would actually change to avoid unnecessary updates
+	if s.State == stateStr && status.State == NetworkInterfaceState(stateStr) {
+		// No changes to the state, don't update LastUpdateTime
+		return
 	}
 
 	// Update both CommonStatus.State and the type-specific State
@@ -574,6 +601,7 @@ func EqualIPPrefixes(a, b IPPrefix) bool {
 }
 
 // AggregateLoadBalancerStatus computes the overall status based on controller statuses
+// with optimization to avoid unnecessary updates
 func AggregateLoadBalancerStatus(status *LoadBalancerStatus, readyNeeded int) {
 	s := &status.CommonStatus
 
@@ -599,14 +627,20 @@ func AggregateLoadBalancerStatus(status *LoadBalancerStatus, readyNeeded int) {
 	var stateStr string
 	if hasError {
 		stateStr = "Error"
-	} else if hasPending { // Need at least 2 controllers reporting Ready
+	} else if hasPending {
 		stateStr = "Pending"
 	} else if readyCount >= readyNeeded {
-		// At least 2 controllers are reporting Ready
+		// At least N controllers are reporting Ready
 		stateStr = "Ready"
 	} else {
 		// No controllers reporting yet or not enough Ready reports
 		stateStr = "Pending"
+	}
+
+	// Check if status would actually change to avoid unnecessary updates
+	if s.State == stateStr && status.State == LoadBalancerState(stateStr) {
+		// No changes to the state, don't update LastUpdateTime
+		return
 	}
 
 	// Update both CommonStatus.State and the type-specific State

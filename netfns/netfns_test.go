@@ -11,9 +11,8 @@ import (
 	"testing"
 
 	"github.com/jaypipes/ghw"
-	. 
 	. "github.com/onsi/ginkgo/v2"
-	"github.com/jaypipes/ghw"
+	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/ironcore-dev/metalnet/netfns"
@@ -278,8 +277,8 @@ var _ = Describe("FileClaimStore", CoreLabel, func() {
 			// We test the lock mechanism indirectly since it's private
 			// Create a claim which internally acquires a lock
 			uid := types.UID("lock-test")
+			addr := *ghw.PCIAddressFromString("0000:00:01.0")
 
-			
 			err := store.Create(uid, addr)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create claim (which acquires lock)")
 
@@ -290,8 +289,8 @@ var _ = Describe("FileClaimStore", CoreLabel, func() {
 
 			// Create a second claim to ensure we can acquire the lock again
 			uid2 := types.UID("lock-test-2")
+			addr2 := *ghw.PCIAddressFromString("0000:00:02.0")
 
-			
 			err = store.Create(uid2, addr2)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create second claim (which acquires lock again)")
 		})
@@ -392,7 +391,6 @@ var _ = Describe("Multi-process claims", MultiprocessLabel, func() {
 			} else {
 				failCount++
 				Expect(err).To(MatchError(netfns.ErrNoAddressAvailable),
-				Expect(err).To(MatchError(netfns.ErrNoAddressAvailable), 
 					"Manager %d failed with unexpected error", i)
 			}
 		}
@@ -415,5 +413,4 @@ var _ = Describe("Multi-process claims", MultiprocessLabel, func() {
 
 		Expect(singleClaimCount).To(Equal(1), "Expected exactly 1 claim file for single address")
 	})
-ai
 })

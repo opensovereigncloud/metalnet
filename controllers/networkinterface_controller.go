@@ -827,6 +827,26 @@ func (r *NetworkInterfaceReconciler) deleteExistingVirtualIP(ctx context.Context
 func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface) (ctrl.Result, error) {
 	log.V(1).Info("Reconcile")
 
+	// Check if we should proceed with reconciliation based on controller status
+	// Only proceed if status differs by observed generation or controller hash and not ready
+	for _, cs := range nic.Status.ControllerStatuses {
+		if cs.ControllerID == r.ControllerID {
+			// Skip reconciliation if this controller has already processed this generation with the same hash
+			// and the controller is already reporting ready
+			if cs.ObservedGeneration == nic.Generation &&
+				cs.ControllerHash == r.ControllerHash &&
+				cs.State == string(metalnetv1alpha1.NetworkInterfaceStateReady) {
+				log.V(1).Info("Skipping reconciliation - no changes detected for this controller instance",
+					"controllerID", r.ControllerID,
+					"observedGeneration", cs.ObservedGeneration,
+					"currentGeneration", nic.Generation,
+					"controllerHash", cs.ControllerHash)
+				return ctrl.Result{}, nil
+			}
+			break
+		}
+	}
+
 	log.V(1).Info("Ensuring finalizer")
 	modified, err := clientutils.PatchEnsureFinalizer(ctx, r.Client, nic, r.finalizer())
 	if err != nil {

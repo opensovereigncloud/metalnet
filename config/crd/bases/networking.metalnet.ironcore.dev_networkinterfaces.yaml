@@ -415,6 +415,11 @@ spec:
                         - type
                         type: object
                       type: array
+                    controllerHash:
+                      description: ControllerHash is a hash that identifies the controller
+                        instance and is used to determine if the controller has been
+                        restarted
+                      type: string
                     controllerID:
                       description: ControllerID is the unique identifier of the controller
                         instance

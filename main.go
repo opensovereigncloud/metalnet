@@ -516,7 +516,6 @@ func main() {
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to get proto version")
-		os.Exit(1)
 	}
 	setupLog.Info("protobuf versions",
 		"dpserviceProtocol", protoVersion.Spec.ServiceProtocol,

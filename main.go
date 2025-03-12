@@ -117,6 +117,7 @@ func main() {
 	var controllerID string
 	var hostIP string
 	var ipv6SubnetIndex int
+	var secondaryUnderlayPool bool
 	var readyControllerNeeded int
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
@@ -162,6 +163,7 @@ func main() {
 	flag.StringVar(&controllerID, "controller-id", "", "The controller ID.")
 	flag.StringVar(&hostIP, "host-ip", "", "The host IP address.")
 	flag.IntVar(&ipv6SubnetIndex, "ipv6-subnet-index", 0, "The index of the IPv6 subnet to use.")
+	flag.BoolVar(&secondaryUnderlayPool, "secondary-underlay-pool", false, "Use secondary underlay pool.")
 	flag.IntVar(&readyControllerNeeded, "ready-controller-needed", 1, "The number of ready controllers needed in status.")
 
 	opts := zap.Options{
@@ -205,11 +207,11 @@ func main() {
 	setupLog.Info(fmt.Sprintf("Multiport Eswitch mode set to: %v", multiportEswitchMode))
 
 	ipv6mgr := ipv6manager.GetInstance()
-	ipv6mgrCidr := ipv6manager.ComputeMetalnetSubnet(hostIP, ipv6SubnetIndex)
-	log.Infof("IPv6 reservation subnet: %s", ipv6mgrCidr)
+	ipv6mgrCidr := ipv6manager.ComputeMetalnetSubnet(hostIP, secondaryUnderlayPool)
+	log.Infof("IPv6 underlay reservation subnet: %s", ipv6mgrCidr)
 	err = ipv6mgr.SetCIDR(ipv6mgrCidr)
 	if err != nil {
-		setupLog.Error(err, "unable to set IPv6 CIDR")
+		setupLog.Error(err, "unable to set IPv6 underlay CIDR")
 		os.Exit(1)
 	}
 

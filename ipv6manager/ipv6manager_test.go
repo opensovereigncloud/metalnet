@@ -282,30 +282,12 @@ var _ = Describe("IPv6Manager", func() {
 			baseIP := "2001:db8:abcd:abcd::"
 
 			// Test for index 0
-			subnet := ipv6manager.ComputeMetalnetSubnet(baseIP, 0)
-			Expect(subnet).To(Equal("2001:db8:abcd:abcd::/88"))
-
-			// Test for index 1
-			subnet = ipv6manager.ComputeMetalnetSubnet(baseIP, 1)
-			Expect(subnet).To(Equal("2001:db8:abcd:abcd:0:4000::/88"))
-
-			// Test for index 2
-			subnet = ipv6manager.ComputeMetalnetSubnet(baseIP, 2)
+			subnet := ipv6manager.ComputeMetalnetSubnet(baseIP, false)
 			Expect(subnet).To(Equal("2001:db8:abcd:abcd:0:8000::/88"))
 
-			// Test for index 3
-			subnet = ipv6manager.ComputeMetalnetSubnet(baseIP, 3)
+			// Test for index 1
+			subnet = ipv6manager.ComputeMetalnetSubnet(baseIP, true)
 			Expect(subnet).To(Equal("2001:db8:abcd:abcd:0:c000::/88"))
-		})
-
-		It("should return empty string for invalid inputs", func() {
-			// Test with invalid IPv6 address
-			subnet := ipv6manager.ComputeMetalnetSubnet("invalid", 0)
-			Expect(subnet).To(BeEmpty())
-
-			// Test with negative index
-			subnet = ipv6manager.ComputeMetalnetSubnet("2001:db8::", -1)
-			Expect(subnet).To(BeEmpty())
 		})
 	})
 })

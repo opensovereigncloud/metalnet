@@ -259,15 +259,10 @@ func (m *IPv6Manager) WithdrawIP(ipStr string) {
 }
 
 // Function to compute subnet based on a variable
-func ComputeMetalnetSubnet(baseIP string, subnetIndex int) string {
+func ComputeMetalnetSubnet(baseIP string, secondaryPool bool) string {
 	// Parse the base IPv6 address
 	ip := net.ParseIP(baseIP)
 	if ip == nil || ip.To16() == nil {
-		return ""
-	}
-
-	// Validate input
-	if subnetIndex < 0 {
 		return ""
 	}
 
@@ -284,16 +279,13 @@ func ComputeMetalnetSubnet(baseIP string, subnetIndex int) string {
 		result[i] = 0
 	}
 
-	// For the desired format, we need to:
-	// - Keep bytes 0-7 (segments 1-4) unchanged (2001:db8:abcd:abcd)
-	// - Set byte 8-9 (segment 5) to 0 (0:)
-	// - Set byte 10-11 (segment 6) based on the index (8000: or c000:)
-	// - Leave bytes 12-15 (segments 7-8) as 0 (::)
-
-	// Set the appropriate bits in segment 6 (bytes 10-11)
-	// Index 2 -> 0x8000 (bits 10[6-7] = 10)
-	// Index 3 -> 0xc000 (bits 10[6-7] = 11)
-	result[10] = byte((subnetIndex & 0x3) << 6) // Set the high 2 bits based on the index
+	//#define DP_UNDERLAY_FLAG_EXTERNALLY_GENERATED 0x80
+	//#define DP_UNDERLAY_FLAG_SECONDARY_POOL 0x40
+	if secondaryPool {
+		result[10] = byte(0x80 | 0x40)
+	} else {
+		result[10] = byte(0x80)
+	}
 
 	// Format the result using Go's IPv6 formatting (which includes proper compression)
 	// and append the subnet mask

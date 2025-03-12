@@ -237,12 +237,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	//ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	//defer cancel()
 
 	// Fetch and populate NetworkInterface reservations
 	var networkInterfaces networkingv1alpha1.NetworkInterfaceList
-	if err := k8sClient.List(ctx, &networkInterfaces); err != nil {
+	if err := k8sClient.List(context.Background(), &networkInterfaces); err != nil {
 		setupLog.Error(err, "unable to list NetworkInterfaces for IP reservations")
 	} else {
 		reservedCount := 0
@@ -290,7 +290,7 @@ func main() {
 
 	// Fetch and populate LoadBalancer reservations
 	var loadBalancers networkingv1alpha1.LoadBalancerList
-	if err := k8sClient.List(ctx, &loadBalancers); err != nil {
+	if err := k8sClient.List(context.Background(), &loadBalancers); err != nil {
 		setupLog.Error(err, "unable to list LoadBalancers for IP reservations")
 	} else {
 		reservedCount := 0
@@ -446,7 +446,7 @@ func main() {
 	}
 
 	// setup dpservice client
-	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 2000*time.Millisecond)
 	defer cancel()
 
 	conn, err := grpc.NewClient(dpserviceAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -516,6 +516,7 @@ func main() {
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to get proto version")
+		os.Exit(1)
 	}
 	setupLog.Info("protobuf versions",
 		"dpserviceProtocol", protoVersion.Spec.ServiceProtocol,

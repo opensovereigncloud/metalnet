@@ -249,37 +249,27 @@ func main() {
 		for _, ni := range networkInterfaces.Items {
 			if ni.Spec.NodeName != nil && *ni.Spec.NodeName == nodeName && ni.Status.Reservation != nil {
 				for _, ip := range ni.Status.Reservation.IPs {
-					if err := ipv6mgr.AddExistingIP(ip.Underlay); err != nil {
-						log.Warnf("Failed to add existing IPv6 address %s from NetworkInterface %s: %v", ip.Underlay, ni.Name, err)
-					} else {
+					if err := ipv6mgr.AddExistingIP(ip.Underlay); err == nil {
 						reservedCount++
 					}
 				}
 				for _, ip := range ni.Status.Reservation.Prefixes {
-					if err := ipv6mgr.AddExistingIP(ip.Underlay); err != nil {
-						log.Warnf("Failed to add existing IPv6 prefix address %s from NetworkInterface %s: %v", ip.Underlay, ni.Name, err)
-					} else {
+					if err := ipv6mgr.AddExistingIP(ip.Underlay); err == nil {
 						reservedCount++
 					}
 				}
 				for _, ip := range ni.Status.Reservation.LoadBalancerTargets {
-					if err := ipv6mgr.AddExistingIP(ip.Underlay); err != nil {
-						log.Warnf("Failed to add existing IPv6 loadbalancer target address %s from NetworkInterface %s: %v", ip.Underlay, ni.Name, err)
-					} else {
+					if err := ipv6mgr.AddExistingIP(ip.Underlay); err == nil {
 						reservedCount++
 					}
 				}
 				if ni.Status.Reservation.NatIP != nil {
-					if err := ipv6mgr.AddExistingIP(ni.Status.Reservation.NatIP.Underlay); err != nil {
-						log.Warnf("Failed to add existing IPv6 NAT address %s from NetworkInterface %s: %v", ni.Status.Reservation.NatIP.Underlay, ni.Name, err)
-					} else {
+					if err := ipv6mgr.AddExistingIP(ni.Status.Reservation.NatIP.Underlay); err == nil {
 						reservedCount++
 					}
 				}
 				if ni.Status.Reservation.VirtualIP != nil {
-					if err := ipv6mgr.AddExistingIP(ni.Status.Reservation.VirtualIP.Underlay); err != nil {
-						log.Warnf("Failed to add existing IPv6 virtual address %s from NetworkInterface %s: %v", ni.Status.Reservation.VirtualIP.Underlay, ni.Name, err)
-					} else {
+					if err := ipv6mgr.AddExistingIP(ni.Status.Reservation.VirtualIP.Underlay); err == nil {
 						reservedCount++
 					}
 				}

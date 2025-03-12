@@ -6,10 +6,12 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"crypto/sha256"
 	"errors"
 	goflag "flag"
 	"fmt"
 	"github.com/ironcore-dev/metalnet/ipv6manager"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/netip"
@@ -119,6 +121,7 @@ func main() {
 	var ipv6SubnetIndex int
 	var secondaryUnderlayPool bool
 	var readyControllerNeeded int
+	var controllerHash string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -187,6 +190,12 @@ func main() {
 		setupLog.Error(errors.New("node-name and pod-name are required"), "missing required flags")
 		os.Exit(1)
 	}
+
+	// Generate a unique controller hash value that will be used to detect controller restarts
+	// This hash is based on start time, pod name, and a random component
+	h := sha256.New()
+	h.Write([]byte(fmt.Sprintf("%s-%s-%d-%d", nodeName, podName, time.Now().UnixNano(), rand.Int63())))
+	controllerHash = fmt.Sprintf("%x", h.Sum(nil)[:8])
 
 	logger := zap.New(zap.UseFlagOptions(&opts))
 	ctrl.SetLogger(logger)
@@ -615,6 +624,7 @@ func main() {
 		EnableIPv6Support: enableIPv6Support,
 		Control:           c,
 		ControllerID:      controllerID,
+		ControllerHash:    controllerHash,
 		ReadyNeeded:       readyControllerNeeded,
 	}).SetupWithManager(mgr, mgr.GetCache()); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Network")
@@ -639,6 +649,7 @@ func main() {
 		Control:                     c,
 		LibvirtMachineUIDPath:       libvirtMachineUIDPath,
 		ControllerID:                controllerID,
+		ControllerHash:              controllerHash,
 		ReadyNeeded:                 readyControllerNeeded,
 	}).SetupWithManager(mgr, mgr.GetCache()); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkInterface")
@@ -657,6 +668,7 @@ func main() {
 		EnableIPv6Support: enableIPv6Support,
 		Control:           c,
 		ControllerID:      controllerID,
+		ControllerHash:    controllerHash,
 		ReadyNeeded:       readyControllerNeeded,
 	}).SetupWithManager(mgr, mgr.GetCache()); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LoadBalancer")

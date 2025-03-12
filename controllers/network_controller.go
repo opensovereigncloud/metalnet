@@ -52,6 +52,7 @@ type NetworkReconciler struct {
 	EnableIPv6Support bool
 	Control           *control.ReconcileControl
 	ControllerID      string
+	ControllerHash    string
 	ReadyNeeded       int
 }
 

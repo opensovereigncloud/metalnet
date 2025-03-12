@@ -113,6 +113,10 @@ type NetworkInterfaceReconciler struct {
 	ControllerID string
 	VirtletMachineUIDPath       string
 	ReadyNeeded  int
+	IPv6CIDR       string
+	ControllerID   string
+	ControllerHash string
+	ReadyNeeded    int
 }
 
 //+kubebuilder:rbac:groups=networking.metalnet.ironcore.dev,resources=networkinterfaces,verbs=get;list;watch;create;update;patch;delete
@@ -946,6 +950,7 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 				string(metalnetv1alpha1.NetworkInterfaceStatePending),
 				fmt.Sprintf("Network %s could not be found", networkKey.Name),
 				nic.Generation,
+				r.ControllerHash,
 			)
 			// Update overall status
 			metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status, r.ReadyNeeded)
@@ -965,6 +970,7 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 				string(metalnetv1alpha1.NetworkInterfaceStateError),
 				fmt.Sprintf("Interface spec validation error: %v", err),
 				nic.Generation,
+				r.ControllerHash,
 			)
 			// Update overall status
 			metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status, r.ReadyNeeded)
@@ -988,6 +994,7 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 				string(metalnetv1alpha1.NetworkInterfaceStateError),
 				fmt.Sprintf("Error applying interface: %v", err),
 				nic.Generation,
+				r.ControllerHash,
 			)
 			// Update overall status
 			metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status, r.ReadyNeeded)
@@ -1009,6 +1016,7 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 				string(metalnetv1alpha1.NetworkInterfaceStatePending),
 				"Interface is being initialized",
 				nic.Generation,
+				r.ControllerHash,
 			)
 			metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status, r.ReadyNeeded)
 		}); err != nil {
@@ -1023,6 +1031,7 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 				string(metalnetv1alpha1.NetworkInterfaceStateReady),
 				"Interface is ready",
 				nic.Generation,
+				r.ControllerHash,
 			)
 			metalnetv1alpha1.AggregateNetworkInterfaceStatus(&nic.Status, r.ReadyNeeded)
 		}); err != nil {
@@ -1090,6 +1099,7 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 			string(metalnetv1alpha1.NetworkInterfaceStateReady),
 			"Network interface successfully reconciled",
 			nic.Generation,
+			r.ControllerHash,
 		)
 
 		// Update PCI address in status
@@ -2028,6 +2038,7 @@ func (r *NetworkInterfaceReconciler) reconcileReservations(ctx context.Context, 
 				string(metalnetv1alpha1.NetworkInterfaceStateError),
 				fmt.Sprintf("Failed to generate IP reservations: %v", processingError),
 				nic.Generation,
+				r.ControllerHash,
 			)
 		}); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
@@ -2047,6 +2058,7 @@ func (r *NetworkInterfaceReconciler) reconcileReservations(ctx context.Context, 
 			string(metalnetv1alpha1.NetworkInterfaceStateReady),
 			"IP reservations successfully generated",
 			nic.Generation,
+			r.ControllerHash,
 		)
 
 		// Update overall status

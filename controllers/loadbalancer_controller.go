@@ -53,6 +53,7 @@ type LoadBalancerReconciler struct {
 	EnableIPv6Support bool
 	Control           *control.ReconcileControl
 	ControllerID      string
+	ControllerHash    string
 	ReadyNeeded       int
 }
 
@@ -276,6 +277,7 @@ func (r *LoadBalancerReconciler) reconcile(ctx context.Context, log logr.Logger,
 				string(metalnetv1alpha1.LoadBalancerStateError),
 				"IPv6 flag not enabled but IPv6 address set on loadbalancer",
 				lb.Generation,
+				r.ControllerHash,
 			)
 			// Update overall status
 			metalnetv1alpha1.AggregateLoadBalancerStatus(&lb.Status, r.ReadyNeeded)
@@ -308,6 +310,7 @@ func (r *LoadBalancerReconciler) reconcile(ctx context.Context, log logr.Logger,
 				string(metalnetv1alpha1.LoadBalancerStatePending),
 				fmt.Sprintf("Network %s could not be found", networkKey.Name),
 				lb.Generation,
+				r.ControllerHash,
 			)
 			// Update overall status
 			metalnetv1alpha1.AggregateLoadBalancerStatus(&lb.Status, r.ReadyNeeded)
@@ -331,6 +334,7 @@ func (r *LoadBalancerReconciler) reconcile(ctx context.Context, log logr.Logger,
 				string(metalnetv1alpha1.LoadBalancerStateError),
 				fmt.Sprintf("Error applying loadBalancer: %v", err),
 				lb.Generation,
+				r.ControllerHash,
 			)
 			// Update overall status
 			metalnetv1alpha1.AggregateLoadBalancerStatus(&lb.Status, r.ReadyNeeded)
@@ -349,6 +353,7 @@ func (r *LoadBalancerReconciler) reconcile(ctx context.Context, log logr.Logger,
 			string(metalnetv1alpha1.LoadBalancerStateReady),
 			"LoadBalancer successfully reconciled",
 			lb.Generation,
+			r.ControllerHash,
 		)
 		// Update overall status
 		metalnetv1alpha1.AggregateLoadBalancerStatus(&lb.Status, r.ReadyNeeded)
@@ -496,6 +501,7 @@ func (r *LoadBalancerReconciler) reconcileReservations(ctx context.Context, log 
 				string(metalnetv1alpha1.LoadBalancerStateError),
 				fmt.Sprintf("Failed to generate IP reservations: %v", processingError),
 				lb.Generation,
+				r.ControllerHash,
 			)
 			// Update overall status
 			metalnetv1alpha1.AggregateLoadBalancerStatus(&lb.Status, r.ReadyNeeded)
@@ -517,6 +523,7 @@ func (r *LoadBalancerReconciler) reconcileReservations(ctx context.Context, log 
 			string(metalnetv1alpha1.LoadBalancerStateReady),
 			"IP reservations successfully generated",
 			lb.Generation,
+			r.ControllerHash,
 		)
 
 		// Update overall status

@@ -85,6 +85,11 @@ type ControllerStatus struct {
 	// LastUpdateTime is when the status was last updated by this controller
 	// +optional
 	LastUpdateTime *metav1.Time `json:"lastUpdateTime,omitempty"`
+
+	// ControllerHash is a hash that identifies the controller instance and is used
+	// to determine if the controller has been restarted
+	// +optional
+	ControllerHash string `json:"controllerHash,omitempty"`
 }
 
 // CommonStatus provides a shared status structure for multiple controllers
@@ -117,7 +122,7 @@ const (
 // mergeControllerStatus updates a CommonStatus with a new controller status
 // using a merge strategy that preserves entries from other controllers while
 // avoiding unnecessary updates that would change the resourceVersion
-func mergeControllerStatus(status *CommonStatus, controllerID string, state string, message string, generation int64, conditions ...metav1.Condition) {
+func mergeControllerStatus(status *CommonStatus, controllerID string, state string, message string, generation int64, controllerHash string, conditions ...metav1.Condition) {
 	// Check if we have an existing entry for this controller
 	var existingStatus *ControllerStatus
 	var existingIndex int = -1
@@ -131,12 +136,23 @@ func mergeControllerStatus(status *CommonStatus, controllerID string, state stri
 		}
 	}
 
+	// If generation in the request is older than or equal to what we have observed, and the controller hash matches,
+	// skip the update unless it's an error state (errors should always be reported)
+	if existingStatus != nil && state != "Error" {
+		if generation <= existingStatus.ObservedGeneration &&
+			existingStatus.ControllerHash == controllerHash {
+			// Skip update as we've already processed this or a newer generation
+			return
+		}
+	}
+
 	// Skip update if nothing has changed - this prevents frequent resourceVersion changes
 	if existingStatus != nil {
 		// Check if status hasn't changed (ignoring timestamp)
 		if existingStatus.State == state &&
 			existingStatus.Message == message &&
 			existingStatus.ObservedGeneration == generation &&
+			existingStatus.ControllerHash == controllerHash &&
 			len(conditions) == 0 {
 			// No changes, no need to update
 			return
@@ -161,6 +177,7 @@ func mergeControllerStatus(status *CommonStatus, controllerID string, state stri
 		Message:            message,
 		ObservedGeneration: generation,
 		LastUpdateTime:     &now,
+		ControllerHash:     controllerHash,
 	}
 
 	// Process conditions and merge with existing ones
@@ -203,14 +220,14 @@ func mergeControllerStatus(status *CommonStatus, controllerID string, state stri
 
 // SetNetworkInterfaceControllerStatus sets or updates the status from a specific controller instance
 // using a merge strategy that preserves entries from other controllers
-func SetNetworkInterfaceControllerStatus(status *NetworkInterfaceStatus, controllerID string, state string, message string, generation int64, conditions ...metav1.Condition) {
-	mergeControllerStatus(&status.CommonStatus, controllerID, state, message, generation, conditions...)
+func SetNetworkInterfaceControllerStatus(status *NetworkInterfaceStatus, controllerID string, state string, message string, generation int64, controllerHash string, conditions ...metav1.Condition) {
+	mergeControllerStatus(&status.CommonStatus, controllerID, state, message, generation, controllerHash, conditions...)
 }
 
 // SetLoadBalancerControllerStatus sets or updates the status from a specific controller instance
 // using a merge strategy that preserves entries from other controllers
-func SetLoadBalancerControllerStatus(status *LoadBalancerStatus, controllerID string, state string, message string, generation int64, conditions ...metav1.Condition) {
-	mergeControllerStatus(&status.CommonStatus, controllerID, state, message, generation, conditions...)
+func SetLoadBalancerControllerStatus(status *LoadBalancerStatus, controllerID string, state string, message string, generation int64, controllerHash string, conditions ...metav1.Condition) {
+	mergeControllerStatus(&status.CommonStatus, controllerID, state, message, generation, controllerHash, conditions...)
 }
 
 // AggregateNetworkInterfaceStatus computes the overall status based on controller statuses

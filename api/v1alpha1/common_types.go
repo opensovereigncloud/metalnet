@@ -136,16 +136,6 @@ func mergeControllerStatus(status *CommonStatus, controllerID string, state stri
 		}
 	}
 
-	// If generation in the request is older than or equal to what we have observed, and the controller hash matches,
-	// skip the update unless it's an error state (errors should always be reported)
-	if existingStatus != nil && state != "Error" {
-		if generation <= existingStatus.ObservedGeneration &&
-			existingStatus.ControllerHash == controllerHash {
-			// Skip update as we've already processed this or a newer generation
-			return
-		}
-	}
-
 	// Skip update if nothing has changed - this prevents frequent resourceVersion changes
 	if existingStatus != nil {
 		// Check if status hasn't changed (ignoring timestamp)

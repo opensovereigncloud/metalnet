@@ -1728,6 +1728,14 @@ func (r *NetworkInterfaceReconciler) patchStatus(
 
 	mutate()
 
+	metalnetv1alpha1.SortIPs(base.Spec.IPs)
+	metalnetv1alpha1.SortIPPrefixes(base.Spec.Prefixes)
+	metalnetv1alpha1.SortIPPrefixes(base.Spec.LoadBalancerTargets)
+	metalnetv1alpha1.SortIPFamilies(base.Spec.IPFamilies)
+	metalnetv1alpha1.SortFirewallRuleSpecs(base.Spec.FirewallRules)
+	metalnetv1alpha1.SortIPPrefixes(base.Status.Prefixes)
+	metalnetv1alpha1.SortIPPrefixes(base.Status.LoadBalancerTargets)
+
 	metalnetv1alpha1.SortIPs(nic.Spec.IPs)
 	metalnetv1alpha1.SortIPPrefixes(nic.Spec.Prefixes)
 	metalnetv1alpha1.SortIPPrefixes(nic.Spec.LoadBalancerTargets)

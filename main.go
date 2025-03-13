@@ -573,32 +573,37 @@ func main() {
 		os.Exit(1)
 	}
 
-	err = metalbondRouteUtil.Subscribe(ctx, metalbond.VNI(publicVNI))
-	if err != nil {
-		setupLog.Error(err, "unable to subscribe to metalbond's public VNI")
-	}
+	if routerAddress.Equal(net.IP{}) {
+		err = metalbondRouteUtil.Subscribe(ctx, metalbond.VNI(publicVNI))
+		if err != nil {
+			setupLog.Error(err, "unable to subscribe to metalbond's public VNI")
+		}
 
-	// wait using backoff for default router address to be set by subscription
-	for i := 1; i <= 3; i++ {
+		// wait using backoff for default router address to be set by subscription
+		for i := 1; i <= 3; i++ {
+			if defaultRouterAddr.SetBySubsciption {
+				break
+			}
+			time.Sleep(time.Duration(100*i) * time.Millisecond)
+		}
+
+		defaultRouterAddr.RWMutex.Lock()
 		if defaultRouterAddr.SetBySubsciption {
-			break
+			if defaultRouterAddr.RouterAddress.Compare(netip.MustParseAddr(routerAddress.String())) != 0 {
+				setupLog.Info("--router-address flag's value does not match the default router address set by subscription, using the latter")
+			}
+		} else if routerAddress.Equal(net.IP{}) {
+			setupLog.Error(fmt.Errorf("must specify --router-address or obtain default router address via metalbond subscription"), "invalid values")
+			os.Exit(1)
+		} else {
+			defaultRouterAddr.RouterAddress = netip.MustParseAddr(routerAddress.String())
+			setupLog.Info("Couldn't obtain default router address via metalbond subscription, using --router-address flag's value")
 		}
-		time.Sleep(time.Duration(100*i) * time.Millisecond)
-	}
-
-	defaultRouterAddr.RWMutex.Lock()
-	if defaultRouterAddr.SetBySubsciption {
-		if defaultRouterAddr.RouterAddress.Compare(netip.MustParseAddr(routerAddress.String())) != 0 {
-			setupLog.Info("--router-address flag's value does not match the default router address set by subscription, using the latter")
-		}
-	} else if routerAddress.Equal(net.IP{}) {
-		setupLog.Error(fmt.Errorf("must specify --router-address or obtain default router address via metalbond subscription"), "invalid values")
-		os.Exit(1)
+		defaultRouterAddr.RWMutex.Unlock()
 	} else {
 		defaultRouterAddr.RouterAddress = netip.MustParseAddr(routerAddress.String())
-		setupLog.Info("Couldn't obtain default router address via metalbond subscription, using --router-address flag's value")
 	}
-	defaultRouterAddr.RWMutex.Unlock()
+	setupLog.Info("default router address", "address", defaultRouterAddr.RouterAddress)
 
 	bluefieldDetected = detectBluefield(&nodeName)
 

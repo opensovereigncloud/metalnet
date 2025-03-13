@@ -287,9 +287,7 @@ func main() {
 		for _, lb := range loadBalancers.Items {
 			if lb.Spec.NodeName != nil && *lb.Spec.NodeName == nodeName && lb.Status.Reservation != nil {
 				if lb.Status.Reservation.IP != nil {
-					if err := ipv6mgr.AddExistingIP(lb.Status.Reservation.IP.Underlay); err != nil {
-						log.Warnf("Failed to add existing IPv6 address %s from LoadBalancer %s: %v", lb.Status.Reservation.IP.Underlay, lb.Name, err)
-					} else {
+					if err := ipv6mgr.AddExistingIP(lb.Status.Reservation.IP.Underlay); err == nil {
 						reservedCount++
 					}
 				}

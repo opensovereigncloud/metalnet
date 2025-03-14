@@ -1625,7 +1625,28 @@ func (r *NetworkInterfaceReconciler) applyInterface(ctx context.Context, log log
 				}
 			}
 
-			return nil, netip.Addr{}, false, fmt.Errorf("error creating dpdk interface: %w", err)
+			interfaces, err := r.DPDK.ListInterfaces(ctx)
+			if err != nil {
+				return nil, netip.Addr{}, false, fmt.Errorf("error creating dpdk interface while list interfaces: %w", err)
+			}
+
+			ifaceExists := false
+			for _, knownIface := range interfaces.Items {
+				if knownIface.Spec.VNI == vni &&
+					knownIface.Spec.Device == dpdkDevice &&
+					knownIface.Spec.IPv4.String() == primaryIpv4.String() &&
+					knownIface.Spec.IPv6.String() == primaryIpv6.String() &&
+					knownIface.Spec.UnderlayRoute.String() == underlayRoute.String() {
+
+					ifaceExists = true
+					log.V(1).Info("Interface already exists")
+					break
+				}
+			}
+
+			if !ifaceExists {
+				return nil, netip.Addr{}, false, fmt.Errorf("error creating dpdk interface: %w", err)
+			}
 		}
 
 		log.V(1).Info("Adding interface routes if not exist")

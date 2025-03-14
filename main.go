@@ -11,8 +11,6 @@ import (
 	goflag "flag"
 	"fmt"
 	"github.com/ironcore-dev/metalnet/ipv6manager"
-	"google.golang.org/grpc/connectivity"
-	"google.golang.org/grpc/keepalive"
 	"math/rand"
 	"net"
 	"net/http"
@@ -484,14 +482,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 2000*time.Millisecond)
 	defer cancel()
 
-	// Configure keepalive parameters for fast detection
-	kp := grpc.WithKeepaliveParams(keepalive.ClientParameters{
-		Time:                1 * time.Second,        // Ping every 1 second
-		Timeout:             500 * time.Millisecond, // Wait 500ms for a response
-		PermitWithoutStream: true,                   // Ping even without active streams
-	})
-
-	conn, err := grpc.NewClient(dpserviceAddr, grpc.WithTransportCredentials(insecure.NewCredentials()), kp)
+	conn, err := grpc.NewClient(dpserviceAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		setupLog.Error(err, "unable create dpdk client")
 		os.Exit(1)
@@ -501,19 +492,6 @@ func main() {
 			setupLog.Error(err, "unable to close dpdk connection")
 		}
 	}()
-
-	// Monitor connection state in a background goroutine
-	go func(clientConn *grpc.ClientConn) {
-		for {
-			state := conn.GetState()
-			if state != connectivity.Ready {
-				//setupLog.Error(fmt.Errorf("server is down, connection"), "state", state)
-				setupLog.Info("server is down, connection", "state", state)
-				//os.Exit(1)
-			}
-			time.Sleep(1 * time.Second) // Check every second
-		}
-	}(conn)
 
 	dpdkProtoClient := dpdkproto.NewDPDKironcoreClient(conn)
 	dpdkClient := dpdkclient.NewClient(dpdkProtoClient)

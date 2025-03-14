@@ -90,7 +90,7 @@ func (r *NetworkReconciler) reconcileExists(ctx context.Context, log logr.Logger
 func (r *NetworkReconciler) delete(ctx context.Context, log logr.Logger, network *metalnetv1alpha1.Network) (ctrl.Result, error) {
 	log.V(1).Info("Delete")
 
-	if !controllerutil.ContainsFinalizer(network, r.networkFinalizer()) {
+	if !controllerutil.ContainsFinalizer(network, r.finalizer()) {
 		log.V(1).Info("No finalizer present, nothing to do.")
 		return ctrl.Result{}, nil
 	}
@@ -118,6 +118,10 @@ func (r *NetworkReconciler) delete(ctx context.Context, log logr.Logger, network
 	log.V(1).Info("Deleted peered VNIs")
 
 	log.V(1).Info("Cleanup done, removing finalizer")
+	if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, network, r.finalizer()); err != nil {
+		return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
+	}
+	// keep backward compatibility
 	if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, network, r.networkFinalizer()); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
 	}
@@ -130,7 +134,7 @@ func (r *NetworkReconciler) reconcile(ctx context.Context, log logr.Logger, netw
 	log.V(1).Info("Reconcile")
 
 	log.V(1).Info("Ensuring finalizer")
-	modified, err := clientutils.PatchEnsureFinalizer(ctx, r.Client, network, r.networkFinalizer())
+	modified, err := clientutils.PatchEnsureFinalizer(ctx, r.Client, network, r.finalizer())
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error ensuring finalizer: %w", err)
 	}

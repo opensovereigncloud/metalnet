@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/jaypipes/ghw"
@@ -122,6 +123,7 @@ func main() {
 	var secondaryUnderlayPool bool
 	var readyControllerNeeded int
 	var controllerHash string
+	var dpserviceLock string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -168,6 +170,7 @@ func main() {
 	flag.IntVar(&ipv6SubnetIndex, "ipv6-subnet-index", 0, "The index of the IPv6 subnet to use.")
 	flag.BoolVar(&secondaryUnderlayPool, "secondary-underlay-pool", false, "Use secondary underlay pool.")
 	flag.IntVar(&readyControllerNeeded, "ready-controller-needed", 1, "The number of ready controllers needed in status.")
+	flag.StringVar(&dpserviceLock, "dpservice-lock", "", "The lock to use for dpservice.")
 
 	opts := zap.Options{
 		Development: true,
@@ -185,6 +188,28 @@ func main() {
 		setupLog.Error(errors.New("host-ip is required"), "missing required flag")
 		os.Exit(1)
 	}
+
+	if dpserviceLock == "" {
+		setupLog.Error(errors.New("dpservice-lock is required"), "missing required flag")
+		os.Exit(1)
+	} else {
+		// check if dpservice lock file exists
+		if _, err := os.Stat(dpserviceLock); os.IsNotExist(err) {
+			setupLog.Error(err, "dpservice-lock file does not exist")
+			os.Exit(1)
+		}
+	}
+
+	go func() {
+		err := waitForDpserviceLock(dpserviceLock)
+		if err != nil {
+			fmt.Printf("Error while waiting: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Println("Detected dpservice termination, exiting with code 1")
+		os.Exit(1)
+	}()
 
 	if nodeName == "" || podName == "" {
 		setupLog.Error(errors.New("node-name and pod-name are required"), "missing required flags")
@@ -236,9 +261,6 @@ func main() {
 		setupLog.Error(err, "unable to create k8s client for IP reservations initialization")
 		os.Exit(1)
 	}
-
-	//ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	//defer cancel()
 
 	// Fetch and populate NetworkInterface reservations
 	var networkInterfaces networkingv1alpha1.NetworkInterfaceList
@@ -819,4 +841,32 @@ func startPeerRemovalWorker(mbInstance *mb.MetalBond) {
 			})
 		}
 	}()
+}
+
+// waitForDpserviceLock blocks until the specified lock file can be acquired,
+// indicating that the dpservice holding it has terminated
+func waitForDpserviceLock(lockFilePath string) error {
+	// Open the lock file
+	file, err := os.OpenFile(lockFilePath, os.O_CREATE|os.O_RDWR, 0666)
+	if err != nil {
+		return fmt.Errorf("error opening lock file: %w", err)
+	}
+	defer file.Close()
+
+	fmt.Println("Waiting for the dpservice to terminate...")
+
+	// Try to acquire an exclusive lock (blocking mode)
+	// This will block until the lock can be acquired
+	err = syscall.Flock(int(file.Fd()), syscall.LOCK_EX)
+	if err != nil {
+		return fmt.Errorf("error acquiring lock: %w", err)
+	}
+
+	// If we get here, we've acquired the lock, meaning the C++ app has terminated
+	fmt.Println("dpservice has terminated, lock acquired")
+
+	// Release the lock before returning
+	_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+
+	return nil
 }

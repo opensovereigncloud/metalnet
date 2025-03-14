@@ -193,10 +193,33 @@ func main() {
 		setupLog.Error(errors.New("dpservice-lock is required"), "missing required flag")
 		os.Exit(1)
 	} else {
-		// check if dpservice lock file exists
-		if _, err := os.Stat(dpserviceLock); os.IsNotExist(err) {
-			setupLog.Error(err, "dpservice-lock file does not exist")
-			os.Exit(1)
+		// Wait max 60s for dpservice lock file, checking every 1s
+		waitTimeout := 60 * time.Second
+		checkInterval := 1 * time.Second
+		startTime := time.Now()
+
+		for {
+			// Check if dpservice lock file exists
+			_, err := os.Stat(dpserviceLock)
+			if err == nil {
+				// File exists, continue execution
+				break
+			}
+
+			if !os.IsNotExist(err) {
+				// Error is not "file not exists", it's some other error
+				setupLog.Error(err, "Error checking dpservice lock file")
+				os.Exit(1)
+			}
+
+			// Check if timeout expired
+			if time.Since(startTime) > waitTimeout {
+				setupLog.Error(err, "Timeout waiting for dpservice lock file")
+				os.Exit(1)
+			}
+
+			// Wait before next check
+			time.Sleep(checkInterval)
 		}
 	}
 

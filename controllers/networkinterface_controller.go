@@ -146,11 +146,6 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return ctrl.Result{}, nil
 		}
 
-		// Handle IP reservations first
-		if requeue, err := r.reconcileReservations(ctx, log, nic); requeue || err != nil {
-			return ctrl.Result{Requeue: requeue}, err
-		}
-
 		return r.reconcileExists(ctx, log, nic)
 	}
 }
@@ -158,6 +153,11 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 func (r *NetworkInterfaceReconciler) reconcileExists(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface) (ctrl.Result, error) {
 	if !nic.DeletionTimestamp.IsZero() {
 		return r.delete(ctx, log, nic)
+	}
+
+	// Handle IP reservations first
+	if requeue, err := r.reconcileReservations(ctx, log, nic); requeue || err != nil {
+		return ctrl.Result{Requeue: requeue}, err
 	}
 
 	return r.reconcile(ctx, log, nic)

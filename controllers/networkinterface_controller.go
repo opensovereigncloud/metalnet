@@ -2123,7 +2123,7 @@ func (r *NetworkInterfaceReconciler) reconcileReservations(ctx context.Context, 
 		metalnetv1alpha1.SetNetworkInterfaceControllerStatus(
 			&nic.Status,
 			r.ControllerID,
-			string(metalnetv1alpha1.NetworkInterfaceStateReady),
+			string(metalnetv1alpha1.NetworkInterfaceStatePending),
 			"IP reservations successfully generated",
 			nic.Generation,
 			r.ControllerHash,

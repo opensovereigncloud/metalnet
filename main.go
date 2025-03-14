@@ -503,16 +503,17 @@ func main() {
 	}()
 
 	// Monitor connection state in a background goroutine
-	go func() {
+	go func(clientConn *grpc.ClientConn) {
 		for {
 			state := conn.GetState()
 			if state != connectivity.Ready {
-				setupLog.Error(fmt.Errorf("server is down, connection"), "state", state)
-				os.Exit(1)
+				//setupLog.Error(fmt.Errorf("server is down, connection"), "state", state)
+				setupLog.Info("server is down, connection", "state", state)
+				//os.Exit(1)
 			}
 			time.Sleep(1 * time.Second) // Check every second
 		}
-	}()
+	}(conn)
 
 	dpdkProtoClient := dpdkproto.NewDPDKironcoreClient(conn)
 	dpdkClient := dpdkclient.NewClient(dpdkProtoClient)

@@ -1625,46 +1625,7 @@ func (r *NetworkInterfaceReconciler) applyInterface(ctx context.Context, log log
 				}
 			}
 
-			//interfaces, err := r.DPDK.ListInterfaces(ctx)
-			//if err != nil {
-			//	return nil, netip.Addr{}, false, fmt.Errorf("error creating dpdk interface while list interfaces: %w", err)
-			//}
-			//
-			//ifaceExists := false
-			//for _, knownIface := range interfaces.Items {
-			//	if knownIface.Spec.VNI == vni &&
-			//		knownIface.Spec.IPv4.String() == primaryIpv4.String() &&
-			//		knownIface.Spec.IPv6.String() == primaryIpv6.String() &&
-			//		knownIface.Spec.UnderlayRoute.String() == underlayRoute.String() {
-			//
-			//		ifaceExists = true
-			//		log.V(1).Info("Interface already exists")
-			//
-			//		var nicList metalnetv1alpha1.NetworkInterfaceList
-			//		err := r.Client.List(ctx, &nicList, client.InNamespace(nic.Namespace))
-			//		if err != nil {
-			//			return nil, netip.Addr{}, false, fmt.Errorf("error creating dpdk interface while list nics: %w", err)
-			//		}
-			//
-			//		var filteredNICs []metalnetv1alpha1.NetworkInterface
-			//		for _, nicItem := range nicList.Items {
-			//			if nicItem.UID == nic.UID {
-			//				filteredNICs = append(filteredNICs, nicItem)
-			//			}
-			//		}
-			//
-			//		if len(filteredNICs) == 1 {
-			//			nic = &filteredNICs[0]
-			//
-			//		}
-			//
-			//		break
-			//	}
-			//}
-
-			//if !ifaceExists {
 			return nil, netip.Addr{}, false, errors.New("error creating dpdk interface: ROUTE_EXISTS")
-			//}
 		}
 
 		log.V(1).Info("Adding interface routes if not exist")

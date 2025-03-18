@@ -114,3 +114,5 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.7.0 // indirect
 	sigs.k8s.io/yaml v1.5.0 // indirect
 )
+
+replace github.com/ironcore-dev/metalbond => github.com/opensovereigncloud/metalbond v0.3.6-0.20250318092513-800a99853ed0

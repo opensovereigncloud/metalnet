@@ -83,8 +83,6 @@ github.com/ironcore-dev/dpservice/go/dpservice-go v0.3.16 h1:gRd8IUsbMhN+5ZU9Ql8
 github.com/ironcore-dev/dpservice/go/dpservice-go v0.3.16/go.mod h1:d5x2tPmu1yqrVHac/FvL+MFOeEb3IT4gn7Bj4+Xkj8M=
 github.com/ironcore-dev/ironcore v0.2.3 h1:me2LuScaoekxSRtV7KhCqGZ/jOsU7fCuqt6LBxcx+ts=
 github.com/ironcore-dev/ironcore v0.2.3/go.mod h1:u39dlr8d3RfPCK4FLBLvFfmbDdh8Tu7a3R06nXkIJug=
-github.com/ironcore-dev/metalbond v0.3.6 h1:JeK7pROqUBPO4yUsVKMa87hYG2kTn8PF0NnV9GbPYO4=
-github.com/ironcore-dev/metalbond v0.3.6/go.mod h1:YaOX+NBpe7MGukpPHHKSvVcmpsxXJpSFnyjjFsOl0AA=
 github.com/jaypipes/ghw v0.17.0 h1:EVLJeNcy5z6GK/Lqby0EhBpynZo+ayl8iJWY0kbEUJA=
 github.com/jaypipes/ghw v0.17.0/go.mod h1:In8SsaDqlb1oTyrbmTC14uy+fbBMvp+xdqX51MidlD8=
 github.com/jaypipes/pcidb v1.0.1 h1:WB2zh27T3nwg8AE8ei81sNRb9yWBii3JGNJtT7K9Oic=
@@ -119,6 +117,8 @@ github.com/onsi/ginkgo/v2 v2.23.4 h1:ktYTpKJAVZnDT4VjxSbiBenUjmlL/5QkBEocaWXiQus
 github.com/onsi/ginkgo/v2 v2.23.4/go.mod h1:Bt66ApGPBFzHyR+JO10Zbt0Gsp4uWxu5mIOTusL46e8=
 github.com/onsi/gomega v1.38.0 h1:c/WX+w8SLAinvuKKQFh77WEucCnPk4j2OTUr7lt7BeY=
 github.com/onsi/gomega v1.38.0/go.mod h1:OcXcwId0b9QsE7Y49u+BTrL4IdKOBOKnD6VQNTJEB6o=
+github.com/opensovereigncloud/metalbond v0.3.6-0.20250318092513-800a99853ed0 h1:aE4a4qLNk3yTzhlDhioInFyGrX7yW5F1cTk4eaRYrdE=
+github.com/opensovereigncloud/metalbond v0.3.6-0.20250318092513-800a99853ed0/go.mod h1:fCV7JZIvQUcwq05la4p07+4E7iUOPS1fq61h0S9kbK4=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=

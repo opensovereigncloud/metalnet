@@ -540,7 +540,7 @@ func (r *LoadBalancerReconciler) reconcileReservations(ctx context.Context, log 
 		metalnetv1alpha1.SetLoadBalancerControllerStatus(
 			&lb.Status,
 			r.ControllerID,
-			string(metalnetv1alpha1.LoadBalancerStateReady),
+			string(metalnetv1alpha1.LoadBalancerStatePending),
 			"IP reservations successfully generated",
 			lb.Generation,
 			r.ControllerHash,

@@ -278,6 +278,13 @@ func (r *LoadBalancerReconciler) reconcile(ctx context.Context, log logr.Logger,
 		return ctrl.Result{}, fmt.Errorf("error patching status: %w", err)
 	}
 
+	// Since it can not be ensured that we have not missed loadbalancer targets we ask for vni routes
+	log.V(1).Info("Get routes for vni")
+	if err := r.RouteUtil.GetRoutesForVni(ctx, metalbond.VNI(vni)); err != nil {
+		return ctrl.Result{}, err
+	}
+	log.V(1).Info("Got routes for vni")
+
 	return ctrl.Result{}, nil
 }
 
@@ -334,6 +341,7 @@ func (r *LoadBalancerReconciler) applyLoadBalancer(ctx context.Context, log logr
 		return netip.Addr{}, err
 	}
 	log.V(1).Info("Added loadbalancer route if not existed")
+
 	return *lbalancer.Spec.UnderlayRoute, nil
 }
 

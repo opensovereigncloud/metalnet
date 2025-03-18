@@ -28,6 +28,7 @@ COPY metalbond/ metalbond/
 COPY netfns/ netfns/
 COPY sysfs/ sysfs/
 COPY ipv6manager/ ipv6manager/
+COPY health/ health/
 # Needed for version extraction by go build
 COPY .git/ .git/
 

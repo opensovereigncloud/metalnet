@@ -50,7 +50,7 @@ func (c *MetalnetClient) SetMetalBond(mb *mb.MetalBond) {
 }
 
 func (c *MetalnetClient) addLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.Destination, hop mb.NextHop) error {
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	if c.config.IPv4Only && dest.IPVersion != mb.IPV4 {
 		// log.Infof("Received non-IPv4 route will not be installed in kernel route table (IPv4-only mode)")
@@ -116,15 +116,90 @@ func (c *MetalnetClient) addLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.Desti
 				IP:  &hop.TargetAddress,
 			},
 		},
-	}, dpdkerrors.Ignore(dpdkerrors.ROUTE_EXISTS),
-	); err != nil {
-		return fmt.Errorf("error creating route: %w", err)
+	}); err != nil {
+		if dpdkerrors.IsStatusErrorCode(err, dpdkerrors.ROUTE_EXISTS) {
+			routes, err := c.dpdk.ListRoutes(ctx, uint32(vni))
+			if err != nil {
+				// trigger reconcile
+				defer func(mbInstance *mb.MetalBond, vni mb.VNI) {
+					_ = mbInstance.GetRoutesForVni(vni)
+				}(c.mbInstance, vni)
+				return fmt.Errorf("error listing dpdk routes for vni %d: %w", vni, err)
+			}
+
+			for _, route := range routes.Items {
+				// Look for an existing route with the same prefix as the destination
+				if route.Spec.Prefix.Addr() == dest.Prefix.Addr() && route.Spec.Prefix.Bits() == dest.Prefix.Bits() {
+					// Get the list of next hops for the given VNI and destination
+					hops := c.mbInstance.GetNextHopForVniAndDestination(vni, dest)
+
+					// Check if the next hop of the route is different from the target address
+					if route.Spec.NextHop.IP.String() != hop.TargetAddress.String() {
+						isRouteHopKnown := false
+
+						// If there are more than 1 hops, verify if the next hop is already known
+						if len(hops) > 1 {
+							for _, knownHop := range hops {
+								// Mark the next hop as known if it matches the route's next hop IP
+								if route.Spec.NextHop.IP.String() == knownHop.TargetAddress.String() {
+									isRouteHopKnown = true
+									// Log that the prefix with the next hop is known
+									c.log.Info(fmt.Sprintf("Prefix %s with nextHop %s and vni %d is known", dest.String(), route.Spec.NextHop.IP.String(), int(vni)))
+									break
+								}
+							}
+						}
+
+						// If the next hop is not known, perform necessary actions
+						if !isRouteHopKnown {
+							c.log.Info(fmt.Sprintf("Prefix %s with nextHop %s and vni %d is unknown", dest.String(), route.Spec.NextHop.IP.String(), int(vni)))
+
+							// Try to delete the existing route
+							if _, err := c.dpdk.DeleteRoute(
+								ctx,
+								uint32(vni),
+								&dest.Prefix,
+								dpdkerrors.Ignore(dpdkerrors.NO_VNI, dpdkerrors.ROUTE_NOT_FOUND, dpdkerrors.ROUTE_BAD_PORT),
+							); err != nil {
+								// Trigger a reconciliation if there's an error
+								defer func(mbInstance *mb.MetalBond, vni mb.VNI) {
+									_ = mbInstance.GetRoutesForVni(vni)
+								}(c.mbInstance, vni)
+								return fmt.Errorf("error deleting existing route vni: %d, prefix: %s, nh: %s:  %w", vni, dest.Prefix.String(), hop.TargetAddress.String(), err)
+							}
+
+							// Try to create a new route with the updated next hop
+							if _, err = c.dpdk.CreateRoute(ctx, &dpdk.Route{
+								RouteMeta: dpdk.RouteMeta{
+									VNI: uint32(vni),
+								},
+								Spec: dpdk.RouteSpec{
+									Prefix: &dest.Prefix,
+									NextHop: &dpdk.RouteNextHop{
+										VNI: uint32(destVni),
+										IP:  &hop.TargetAddress,
+									},
+								},
+							}, dpdkerrors.Ignore(dpdkerrors.NO_VNI)); err != nil {
+								// Trigger a reconciliation if there's an error
+								defer func(mbInstance *mb.MetalBond, vni mb.VNI) {
+									_ = mbInstance.GetRoutesForVni(vni)
+								}(c.mbInstance, vni)
+								return fmt.Errorf("error recreating route vni: %d, prefix: %s, nh: %s:  %w", vni, dest.Prefix.String(), hop.TargetAddress.String(), err)
+							}
+						}
+					}
+				}
+			}
+		} else {
+			return fmt.Errorf("error creating route vni: %d, prefix: %s, nh: %s:  %w", vni, dest.Prefix.String(), hop.TargetAddress.String(), err)
+		}
 	}
 	return nil
 }
 
 func (c *MetalnetClient) removeLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.Destination, hop mb.NextHop) error {
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	if c.config.IPv4Only && dest.IPVersion != mb.IPV4 {
 		// log.Infof("Received non-IPv4 route will not be installed in kernel route table (IPv4-only mode)")
@@ -265,7 +340,7 @@ func (c *MetalnetClient) RemoveRoute(vni mb.VNI, dest mb.Destination, hop mb.Nex
 }
 
 func (c *MetalnetClient) CleanupNotPeeredRoutes(vni uint32) error {
-	ctx := context.TODO()
+	ctx := context.Background()
 	routes, err := c.dpdk.ListRoutes(ctx, vni)
 	if err != nil {
 		return fmt.Errorf("error listing dpdk routes for vni %d: %w", vni, err)
@@ -299,7 +374,7 @@ func (c *MetalnetClient) SetDefaultRouterAddress(address netip.Addr) {
 func (c *MetalnetClient) handleDefaultRouterChange(operation DefaultRouteOperation) error {
 
 	defaultRoutePrefix := netip.MustParsePrefix("0.0.0.0/0")
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	existingVNIs := c.mbInstance.GetSubscribedVnis()
 

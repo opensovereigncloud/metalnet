@@ -5,6 +5,7 @@ package metalbond
 
 import (
 	"context"
+	"fmt"
 	"net/netip"
 	"sync"
 
@@ -53,6 +54,7 @@ func netIPAddrIPVersion(addr netip.Addr) metalbond.IPVersion {
 	case addr.Is6():
 		return metalbond.IPV6
 	default:
+		fmt.Printf("unknown IP version for %s", addr)
 		return 0
 	}
 }

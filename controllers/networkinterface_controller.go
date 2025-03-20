@@ -1744,7 +1744,10 @@ func (r *NetworkInterfaceReconciler) patchStatus(
 	metalnetv1alpha1.SortIPPrefixes(nic.Status.Prefixes)
 	metalnetv1alpha1.SortIPPrefixes(nic.Status.LoadBalancerTargets)
 
-	if err := r.Status().Patch(ctx, nic, client.MergeFrom(base)); err != nil {
+	// Create a merge patch with optimistic locking
+	patch := client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})
+
+	if err := r.Status().Patch(ctx, nic, patch); err != nil {
 		return fmt.Errorf("error patching status: %w", err)
 	}
 	return nil

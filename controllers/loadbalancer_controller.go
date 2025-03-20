@@ -248,7 +248,10 @@ func (r *LoadBalancerReconciler) patchStatus(
 
 	mutate()
 
-	if err := r.Status().Patch(ctx, lb, client.MergeFrom(base)); err != nil {
+	// Create a merge patch with optimistic locking
+	patch := client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})
+
+	if err := r.Status().Patch(ctx, lb, patch); err != nil {
 		return fmt.Errorf("error patching status: %w", err)
 	}
 	return nil

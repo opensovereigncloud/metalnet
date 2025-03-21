@@ -129,24 +129,15 @@ func (r *LoadBalancerReconciler) delete(ctx context.Context, log logr.Logger, lb
 
 		log.V(1).Info("No dpdk loadbalancer, removing finalizer")
 		// keep backward compatibility
-		if controllerutil.ContainsFinalizer(lb, loadBalancerFinalizer) {
-			log.V(1).Info("Old finalizer present, cleaning up")
-			removed := controllerutil.RemoveFinalizer(lb, loadBalancerFinalizer)
-			if removed {
-				if err := r.Update(ctx, lb); err != nil {
-					return ctrl.Result{}, fmt.Errorf("error removing old finalizer: %w", err)
-				}
-				return ctrl.Result{Requeue: true}, nil
-			}
+		removed, err := r.removeFinalizer(ctx, log, lb, loadBalancerFinalizer)
+		if err != nil {
+			return ctrl.Result{}, err
 		}
-		if controllerutil.ContainsFinalizer(lb, r.finalizer()) {
-			log.V(1).Info("finalizer present, cleaning up")
-			removed := controllerutil.RemoveFinalizer(lb, r.finalizer())
-			if removed {
-				if err := r.Update(ctx, lb); err != nil {
-					return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
-				}
-			}
+		if removed {
+			return ctrl.Result{Requeue: true}, nil
+		}
+		if _, err := r.removeFinalizer(ctx, log, lb, r.finalizer()); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
 		}
 		log.V(1).Info("Removed finalizer")
 
@@ -177,24 +168,15 @@ func (r *LoadBalancerReconciler) delete(ctx context.Context, log logr.Logger, lb
 
 	log.V(1).Info("Removing finalizer")
 	// keep backward compatibility
-	if controllerutil.ContainsFinalizer(lb, loadBalancerFinalizer) {
-		log.V(1).Info("Old finalizer present, cleaning up")
-		removed := controllerutil.RemoveFinalizer(lb, loadBalancerFinalizer)
-		if removed {
-			if err := r.Update(ctx, lb); err != nil {
-				return ctrl.Result{}, fmt.Errorf("error removing old finalizer: %w", err)
-			}
-			return ctrl.Result{Requeue: true}, nil
-		}
+	removed, err := r.removeFinalizer(ctx, log, lb, loadBalancerFinalizer)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
-	if controllerutil.ContainsFinalizer(lb, r.finalizer()) {
-		log.V(1).Info("finalizer present, cleaning up")
-		removed := controllerutil.RemoveFinalizer(lb, r.finalizer())
-		if removed {
-			if err := r.Update(ctx, lb); err != nil {
-				return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
-			}
-		}
+	if removed {
+		return ctrl.Result{Requeue: true}, nil
+	}
+	if _, err := r.removeFinalizer(ctx, log, lb, r.finalizer()); err != nil {
+		return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
 	}
 	log.V(1).Info("Removed finalizer")
 	return ctrl.Result{}, nil
@@ -641,4 +623,21 @@ func (r *LoadBalancerReconciler) generateUnderlayIP(overlayIP metalnetv1alpha1.I
 
 func (r *LoadBalancerReconciler) finalizer() string {
 	return fmt.Sprintf("%s-%s", loadBalancerFinalizer, r.ControllerID)
+}
+
+func (r *LoadBalancerReconciler) removeFinalizer(ctx context.Context, log logr.Logger, lb *metalnetv1alpha1.LoadBalancer, finalizer string) (bool, error) {
+	if controllerutil.ContainsFinalizer(lb, finalizer) {
+		log.V(1).Info(fmt.Sprintf("finalizer '%s' present, cleaning up", finalizer))
+		removed := controllerutil.RemoveFinalizer(lb, finalizer)
+		if removed {
+			if err := r.Update(ctx, lb); err != nil {
+				return false, fmt.Errorf("error removing '%s' finalizer: %w", finalizer, err)
+			}
+			return true, nil
+		} else {
+			return false, nil
+		}
+	}
+
+	return false, nil
 }

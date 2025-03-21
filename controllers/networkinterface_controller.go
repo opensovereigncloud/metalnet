@@ -1778,24 +1778,15 @@ func (r *NetworkInterfaceReconciler) delete(ctx context.Context, log logr.Logger
 
 		log.V(1).Info("No dpdk interface, removing finalizer")
 		// keep backward compatibility
-		if controllerutil.ContainsFinalizer(nic, networkInterfaceFinalizer) {
-			log.V(1).Info("Old finalizer present, cleaning up")
-			removed := controllerutil.RemoveFinalizer(nic, networkInterfaceFinalizer)
-			if removed {
-				if err := r.Update(ctx, nic); err != nil {
-					return ctrl.Result{}, fmt.Errorf("error removing old finalizer: %w", err)
-				}
-				return ctrl.Result{Requeue: true}, nil
-			}
+		removed, err := r.removeFinalizer(ctx, log, nic, networkInterfaceFinalizer)
+		if err != nil {
+			return ctrl.Result{}, err
 		}
-		if controllerutil.ContainsFinalizer(nic, r.finalizer()) {
-			log.V(1).Info("finalizer present, cleaning up")
-			removed := controllerutil.RemoveFinalizer(nic, r.finalizer())
-			if removed {
-				if err := r.Update(ctx, nic); err != nil {
-					return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
-				}
-			}
+		if removed {
+			return ctrl.Result{Requeue: true}, nil
+		}
+		if _, err := r.removeFinalizer(ctx, log, nic, r.finalizer()); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
 		}
 		log.V(1).Info("Removed finalizer")
 		return ctrl.Result{}, nil
@@ -1843,24 +1834,15 @@ func (r *NetworkInterfaceReconciler) delete(ctx context.Context, log logr.Logger
 
 	log.V(1).Info("Removing finalizer")
 	// keep backward compatibility
-	if controllerutil.ContainsFinalizer(nic, networkInterfaceFinalizer) {
-		log.V(1).Info("Old finalizer present, cleaning up")
-		removed := controllerutil.RemoveFinalizer(nic, networkInterfaceFinalizer)
-		if removed {
-			if err := r.Update(ctx, nic); err != nil {
-				return ctrl.Result{}, fmt.Errorf("error removing old finalizer: %w", err)
-			}
-			return ctrl.Result{Requeue: true}, nil
-		}
+	removed, err := r.removeFinalizer(ctx, log, nic, networkInterfaceFinalizer)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
-	if controllerutil.ContainsFinalizer(nic, r.finalizer()) {
-		log.V(1).Info("finalizer present, cleaning up")
-		removed := controllerutil.RemoveFinalizer(nic, r.finalizer())
-		if removed {
-			if err := r.Update(ctx, nic); err != nil {
-				return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
-			}
-		}
+	if removed {
+		return ctrl.Result{Requeue: true}, nil
+	}
+	if _, err := r.removeFinalizer(ctx, log, nic, r.finalizer()); err != nil {
+		return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
 	}
 	log.V(1).Info("Removed finalizer")
 	return ctrl.Result{}, nil
@@ -2426,4 +2408,21 @@ func (r *NetworkInterfaceReconciler) enqueueNetworkInterfacesReferencingLoadBala
 
 func (r *NetworkInterfaceReconciler) finalizer() string {
 	return fmt.Sprintf("%s-%s", networkInterfaceFinalizer, r.ControllerID)
+}
+
+func (r *NetworkInterfaceReconciler) removeFinalizer(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, finalizer string) (bool, error) {
+	if controllerutil.ContainsFinalizer(nic, finalizer) {
+		log.V(1).Info(fmt.Sprintf("finalizer '%s' present, cleaning up", finalizer))
+		removed := controllerutil.RemoveFinalizer(nic, finalizer)
+		if removed {
+			if err := r.Update(ctx, nic); err != nil {
+				return false, fmt.Errorf("error removing '%s' finalizer: %w", finalizer, err)
+			}
+			return true, nil
+		} else {
+			return false, nil
+		}
+	}
+
+	return false, nil
 }

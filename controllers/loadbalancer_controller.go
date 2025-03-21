@@ -128,12 +128,25 @@ func (r *LoadBalancerReconciler) delete(ctx context.Context, log logr.Logger, lb
 		}
 
 		log.V(1).Info("No dpdk loadbalancer, removing finalizer")
-		if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, lb, r.finalizer()); err != nil {
-			return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
-		}
 		// keep backward compatibility
-		if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, lb, loadBalancerFinalizer); err != nil {
-			return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
+		if controllerutil.ContainsFinalizer(lb, loadBalancerFinalizer) {
+			log.V(1).Info("Old finalizer present, cleaning up")
+			removed := controllerutil.RemoveFinalizer(lb, loadBalancerFinalizer)
+			if removed {
+				if err := r.Update(ctx, lb); err != nil {
+					return ctrl.Result{}, fmt.Errorf("error removing old finalizer: %w", err)
+				}
+				return ctrl.Result{Requeue: true}, nil
+			}
+		}
+		if controllerutil.ContainsFinalizer(lb, r.finalizer()) {
+			log.V(1).Info("finalizer present, cleaning up")
+			removed := controllerutil.RemoveFinalizer(lb, r.finalizer())
+			if removed {
+				if err := r.Update(ctx, lb); err != nil {
+					return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
+				}
+			}
 		}
 		log.V(1).Info("Removed finalizer")
 
@@ -163,12 +176,25 @@ func (r *LoadBalancerReconciler) delete(ctx context.Context, log logr.Logger, lb
 	}
 
 	log.V(1).Info("Removing finalizer")
-	if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, lb, r.finalizer()); err != nil {
-		return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
-	}
 	// keep backward compatibility
-	if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, lb, loadBalancerFinalizer); err != nil {
-		return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
+	if controllerutil.ContainsFinalizer(lb, loadBalancerFinalizer) {
+		log.V(1).Info("Old finalizer present, cleaning up")
+		removed := controllerutil.RemoveFinalizer(lb, loadBalancerFinalizer)
+		if removed {
+			if err := r.Update(ctx, lb); err != nil {
+				return ctrl.Result{}, fmt.Errorf("error removing old finalizer: %w", err)
+			}
+			return ctrl.Result{Requeue: true}, nil
+		}
+	}
+	if controllerutil.ContainsFinalizer(lb, r.finalizer()) {
+		log.V(1).Info("finalizer present, cleaning up")
+		removed := controllerutil.RemoveFinalizer(lb, r.finalizer())
+		if removed {
+			if err := r.Update(ctx, lb); err != nil {
+				return ctrl.Result{}, fmt.Errorf("error removing finalizer: %w", err)
+			}
+		}
 	}
 	log.V(1).Info("Removed finalizer")
 	return ctrl.Result{}, nil

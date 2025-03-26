@@ -25,6 +25,7 @@ import (
 type ClientOptions struct {
 	IPv4Only         bool
 	PreferredNetwork *net.IPNet
+	HostRange        *net.IPNet
 }
 
 type MetalnetClient struct {
@@ -136,6 +137,16 @@ func (c *MetalnetClient) addLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.Desti
 
 	if hop.Type == mbproto.NextHopType_NAT {
 		natIP := dest.Prefix.Addr()
+
+		// drop neighbour nat that are local
+		if c.config.HostRange != nil {
+			targetAddress := net.ParseIP(hop.TargetAddress.String())
+			if c.config.HostRange.Contains(targetAddress) {
+				c.log.V(1).Info(fmt.Sprintf("NAT target %s is in host range %s, ignoring...", targetAddress, c.config.HostRange))
+				return nil
+			}
+		}
+
 		nats, err := c.dpdk.ListNeighborNats(ctx, &natIP)
 		if err != nil {
 			return fmt.Errorf("error listing neighbor nats for ip %s: %w", natIP.String(), err)

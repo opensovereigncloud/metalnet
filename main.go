@@ -457,10 +457,17 @@ func main() {
 
 	metalnetCache := internal.NewMetalnetCache(&logger)
 
+	hostRangeCidr := fmt.Sprintf("%s/64", hostIP)
+	_, hostRange, err := net.ParseCIDR(hostRangeCidr)
+	if err != nil {
+		log.Fatalf("invalid host range cidr: %s - %v", hostRangeCidr, err)
+	}
+
 	metalnetMBClient := metalbond.NewMetalnetClient(&logger, dpdkClient, metalnetCache, &defaultRouterAddr,
 		metalbond.ClientOptions{
 			IPv4Only:         true,
 			PreferredNetwork: preferredNetwork,
+			HostRange:        hostRange,
 		})
 
 	config := mb.Config{

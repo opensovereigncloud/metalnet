@@ -10,19 +10,8 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/rest"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	dpdkclient "github.com/ironcore-dev/dpservice/go/dpservice-go/client"
 	dpdkproto "github.com/ironcore-dev/dpservice/go/dpservice-go/proto"
@@ -31,7 +20,19 @@ import (
 	"github.com/ironcore-dev/metalnet/internal"
 	"github.com/ironcore-dev/metalnet/metalbond"
 	"github.com/ironcore-dev/metalnet/netfns"
-	//+kubebuilder:scaffold:imports
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
@@ -120,7 +121,7 @@ var _ = BeforeSuite(func() {
 	_, err = dpdkClient.Initialize(context.TODO())
 	Expect(err).NotTo(HaveOccurred())
 
-	//setup metalbond client
+	// setup metalbond client
 	config := mb.Config{
 		KeepaliveInterval: 3,
 	}
@@ -139,16 +140,14 @@ var _ = BeforeSuite(func() {
 	mbInstance := mb.NewMetalBond(config, metalnetMBClient)
 	metalbondRouteUtil = metalbond.NewMBRouteUtil(mbInstance)
 
-	err = mbInstance.AddPeer("[::1]:4711", "")
+	err = mbInstance.AddPeer("[::1]:4711", "", 100, 10, 100)
 	Expect(err).NotTo(HaveOccurred())
 })
 
 // SetupTest returns a namespace which will be created before each ginkgo Container Node and deleted at the end of their Closures
 // so that each test case can run in an independent way
 func SetupTest(ctx context.Context) *corev1.Namespace {
-	var (
-		ns = &corev1.Namespace{}
-	)
+	ns := &corev1.Namespace{}
 
 	BeforeEach(func() {
 		*ns = corev1.Namespace{
@@ -158,7 +157,6 @@ func SetupTest(ctx context.Context) *corev1.Namespace {
 			},
 		}
 		Expect(k8sClient.Create(ctx, ns)).To(Succeed(), "failed to create test namespace")
-
 	})
 
 	AfterEach(func() {

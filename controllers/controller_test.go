@@ -8,20 +8,21 @@ import (
 	"fmt"
 	"net/netip"
 
-	. "github.com/ironcore-dev/ironcore/utils/testing"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	dpdkerrors "github.com/ironcore-dev/dpservice/go/dpservice-go/errors"
+	dpdk "github.com/ironcore-dev/dpservice/go/dpservice-go/proto"
+	metalnetv1alpha1 "github.com/ironcore-dev/metalnet/api/v1alpha1"
+
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 
-	dpdkerrors "github.com/ironcore-dev/dpservice/go/dpservice-go/errors"
-	dpdk "github.com/ironcore-dev/dpservice/go/dpservice-go/proto"
-	metalnetv1alpha1 "github.com/ironcore-dev/metalnet/api/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
+	. "github.com/ironcore-dev/ironcore/utils/testing"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 )
 
 var _ = Describe("Network Controller", Label("network"), Ordered, func() {
@@ -265,7 +266,6 @@ var _ = Describe("Network Controller", Label("network"), Ordered, func() {
 				Expect(k8sClient.Delete(ctx, network2)).To(Succeed())
 				Expect(networkReconcile(ctx, *network2)).To(Succeed())
 			})
-
 		})
 	})
 
@@ -298,7 +298,6 @@ var _ = Describe("Network Controller", Label("network"), Ordered, func() {
 			Expect(vniAvail.Spec.InUse).To(BeFalse())
 		})
 	})
-
 })
 
 var _ = Describe("Network Interface and LoadBalancer Controller", func() {
@@ -384,7 +383,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 				Expect(createdNetworkInterface.Spec.NetworkRef.Name).To(Equal("test-network"))
 				Expect(createdNetworkInterface.Spec.IPs[0].Addr.String()).To(Equal("10.0.0.1"))
 				Expect(createdNetworkInterface.Spec.IPs[1].Addr.String()).To(Equal("fd00::1"))
-				Expect(*createdNetworkInterface.Spec.MeteringRate.TotalRate).To(Equal(totalRate)) //MeteringRarameters cannot take actual effect, but it should be in the spec
+				Expect(*createdNetworkInterface.Spec.MeteringRate.TotalRate).To(Equal(totalRate)) // MeteringRarameters cannot take actual effect, but it should be in the spec
 				Expect(*createdNetworkInterface.Spec.MeteringRate.PublicRate).To(Equal(publicRate))
 
 				// It should not yet be created in dpservice
@@ -1229,7 +1228,6 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 		var srcPort int32 = 80
 		var dstPort int32 = 443
 		wfr1 = metalnetv1alpha1.FirewallRule{
-
 			FirewallRuleID:    "wfr1",
 			Direction:         "Egress",
 			Action:            "ACCEPT",
@@ -1266,7 +1264,7 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 				},
 				Prefixes:            []metalnetv1alpha1.IPPrefix{metalnetv1alpha1.MustParseIPPrefix("5.5.5.5/32")},
 				LoadBalancerTargets: []metalnetv1alpha1.IPPrefix{metalnetv1alpha1.MustParseIPPrefix("5.5.5.5/32")},
-				//NAT:                 &nat,
+				// NAT:                 &nat,
 				VirtualIP:     metalnetv1alpha1.MustParseNewIP("5.5.5.5"),
 				FirewallRules: []metalnetv1alpha1.FirewallRule{},
 			},
@@ -1411,7 +1409,6 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 			Expect(k8sClient.Delete(ctx, wrongNetworkInterface)).To(Succeed())
 			// and reconcile
 			Expect(ifaceReconcile(ctx, *wrongNetworkInterface)).To(Succeed())
-
 		})
 	})
 
@@ -1487,7 +1484,6 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 			Expect(k8sClient.Delete(ctx, wrongNetworkInterface)).To(Succeed())
 			// and reconcile
 			Expect(ifaceReconcile(ctx, *wrongNetworkInterface)).To(Succeed())
-
 		})
 	})
 
@@ -1495,8 +1491,8 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 		It("should fail", func() {
 			By("negative icmp type")
 			var protocolType metalnetv1alpha1.ProtocolType = metalnetv1alpha1.FirewallRuleProtocolTypeICMP
-			var icmpType = int32(-5)
-			var icmpCode = int32(0)
+			icmpType := int32(-5)
+			icmpCode := int32(0)
 			wfr1.ProtocolMatch = &metalnetv1alpha1.ProtocolMatch{
 				ProtocolType: &protocolType,
 				ICMP: &metalnetv1alpha1.ICMPMatch{
@@ -1650,7 +1646,6 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 
 			// Delete the NetworkInterface object from k8s
 			Expect(k8sClient.Delete(ctx, wrongNetworkInterface)).To(Succeed())
-
 		})
 	})
 
@@ -1687,7 +1682,6 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 
 			// Delete the NetworkInterface object from k8s
 			Expect(k8sClient.Delete(ctx, wrongNetworkInterface)).To(Succeed())
-
 		})
 	})
 
@@ -1730,7 +1724,6 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 			Expect(k8sClient.Delete(ctx, wrongNetworkInterface)).To(Succeed())
 			// and reconcile
 			Expect(ifaceReconcile(ctx, *wrongNetworkInterface)).To(Succeed())
-
 		})
 	})
 

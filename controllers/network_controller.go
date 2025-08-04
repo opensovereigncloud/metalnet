@@ -492,6 +492,10 @@ func (r *NetworkReconciler) findObjectsForNetworkInterface(ctx context.Context, 
 		return []reconcile.Request{}
 	}
 
+	if !isNetworkInterfaceAssignedToNode(networkInterface, r.NodeName) {
+		return []reconcile.Request{}
+	}
+
 	return []reconcile.Request{{
 		NamespacedName: types.NamespacedName{
 			Name:      networkInterface.Spec.NetworkRef.Name,
@@ -507,6 +511,10 @@ func (r *NetworkReconciler) networkFinalizer() string {
 func (r *NetworkReconciler) findObjectsForLoadBalancer(ctx context.Context, obj client.Object) []reconcile.Request {
 	loadBalancer, ok := obj.(*metalnetv1alpha1.LoadBalancer)
 	if !ok {
+		return []reconcile.Request{}
+	}
+
+	if !isLoadBalancerAssignedToNode(loadBalancer, r.NodeName) {
 		return []reconcile.Request{}
 	}
 

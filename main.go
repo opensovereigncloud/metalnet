@@ -18,29 +18,26 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hashicorp/go-version"
 	"github.com/jaypipes/ghw"
+	log "github.com/sirupsen/logrus"
 	flag "github.com/spf13/pflag"
-
-	metalnetclient "github.com/ironcore-dev/metalnet/client"
-	"github.com/ironcore-dev/metalnet/internal"
-
-	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
-	// to ensure that exec-entrypoint and run can make use of them.
-
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
-
-	"github.com/ironcore-dev/metalnet/control"
-	"github.com/ironcore-dev/metalnet/metalbond"
-	"github.com/ironcore-dev/metalnet/netfns"
-	"github.com/ironcore-dev/metalnet/sysfs"
 
 	dpdk "github.com/ironcore-dev/dpservice/go/dpservice-go/api"
 	dpdkclient "github.com/ironcore-dev/dpservice/go/dpservice-go/client"
 	dpdkproto "github.com/ironcore-dev/dpservice/go/dpservice-go/proto"
 	mb "github.com/ironcore-dev/metalbond"
-	log "github.com/sirupsen/logrus"
+	networkingv1alpha1 "github.com/ironcore-dev/metalnet/api/v1alpha1"
+	metalnetclient "github.com/ironcore-dev/metalnet/client"
+	"github.com/ironcore-dev/metalnet/control"
+	"github.com/ironcore-dev/metalnet/controllers"
+	"github.com/ironcore-dev/metalnet/internal"
+	"github.com/ironcore-dev/metalnet/metalbond"
+	"github.com/ironcore-dev/metalnet/netfns"
+	"github.com/ironcore-dev/metalnet/sysfs"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -51,10 +48,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	"github.com/hashicorp/go-version"
-	networkingv1alpha1 "github.com/ironcore-dev/metalnet/api/v1alpha1"
-	"github.com/ironcore-dev/metalnet/controllers"
-	//+kubebuilder:scaffold:imports
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
 )
 
 const dpserviceIPv6SupportVersionStr = "v0.3.1"
@@ -117,6 +111,7 @@ func main() {
 	var metalbondRxChanDataUpdateCapacity int
 	var controlWebserverBindAddr string
 	var podName, daemonSetName, namespace string
+	var virtletMachineUIDPath string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -157,6 +152,7 @@ func main() {
 	flag.StringVar(&podName, "pod-name", "", "The name of the current pod.")
 	flag.StringVar(&daemonSetName, "daemonset-name", "metalnet-controller-manager", "The name of the DaemonSet.")
 	flag.StringVar(&namespace, "namespace", "metalnet-system", "The namespace of the DaemonSet.")
+	flag.StringVar(&virtletMachineUIDPath, "virtlet-machine-uid-path", "/var/lib/virtlet/machines", "The path to the virtlet machine UID directories.")
 
 	opts := zap.Options{
 		Development: true,
@@ -521,6 +517,7 @@ func main() {
 		MultiportEswitchMode:        multiportEswitchMode,
 		TapDeviceMode:               tapDeviceMod,
 		Control:                     c,
+		VirtletMachineUIDPath:       virtletMachineUIDPath,
 	}).SetupWithManager(mgr, mgr.GetCache()); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkInterface")
 		os.Exit(1)

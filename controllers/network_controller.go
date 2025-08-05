@@ -11,10 +11,6 @@ import (
 
 	"github.com/go-logr/logr"
 
-	metalnetv1alpha1 "github.com/ironcore-dev/metalnet/api/v1alpha1"
-	"github.com/ironcore-dev/metalnet/internal"
-	"github.com/ironcore-dev/metalnet/metalbond"
-
 	"github.com/ironcore-dev/controller-utils/clientutils"
 	dpdk "github.com/ironcore-dev/dpservice/go/dpservice-go/api"
 	dpdkclient "github.com/ironcore-dev/dpservice/go/dpservice-go/client"
@@ -23,6 +19,7 @@ import (
 	"github.com/ironcore-dev/metalnet/control"
 	"github.com/ironcore-dev/metalnet/internal"
 	"github.com/ironcore-dev/metalnet/metalbond"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"

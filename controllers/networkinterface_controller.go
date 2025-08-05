@@ -8,12 +8,15 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/jaypipes/ghw"
+
 	"github.com/ironcore-dev/controller-utils/clientutils"
 	dpdk "github.com/ironcore-dev/dpservice/go/dpservice-go/api"
 	dpdkclient "github.com/ironcore-dev/dpservice/go/dpservice-go/client"
@@ -26,7 +29,7 @@ import (
 	"github.com/ironcore-dev/metalnet/metalbond"
 	"github.com/ironcore-dev/metalnet/netfns"
 	"github.com/ironcore-dev/metalnet/sysfs"
-	"github.com/jaypipes/ghw"
+
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -45,6 +48,11 @@ const (
 	networkInterfaceFinalizer = "networking.metalnet.ironcore.dev/networkInterface"
 	defaultFirewallRulePrio   = 100
 	defaultFirewallRulePrefix = "0.0.0.0/0"
+
+	virtletMachineUIDAnnotation = "virtlet.onmetal.de/machine-uid"
+
+	metalnetDeletionMarkAnnotation        = "metalnet.onmetal.de/ok-to-delete"
+	metalnetDeletionGracePeriodAnnotation = "metalnet.onmetal.de/deletion-grace-period-timestamp"
 )
 
 func getIP(ipFamily corev1.IPFamily, ipFamilies []corev1.IPFamily, ips []metalnetv1alpha1.IP) netip.Addr {
@@ -97,6 +105,7 @@ type NetworkInterfaceReconciler struct {
 	MultiportEswitchMode        bool
 	TapDeviceMode               bool
 	Control                     *control.ReconcileControl
+	VirtletMachineUIDPath       string
 }
 
 //+kubebuilder:rbac:groups=networking.metalnet.ironcore.dev,resources=networkinterfaces,verbs=get;list;watch;create;update;patch;delete
@@ -204,7 +213,7 @@ func (r *NetworkInterfaceReconciler) deleteDPDKVirtualIPIfExists(ctx context.Con
 	return nil
 }
 
-func (r *NetworkInterfaceReconciler) removeVirtualIPRouteIfExists(ctx context.Context, virtualIP netip.Addr, underlayRoute netip.Addr) error {
+func (r *NetworkInterfaceReconciler) removeVirtualIPRouteIfExists(ctx context.Context, virtualIP, underlayRoute netip.Addr) error {
 	if err := r.RouteUtil.WithdrawRoute(ctx, metalbond.VNI(r.PublicVNI), metalbond.Destination{
 		Prefix: NetIPAddrPrefix(virtualIP),
 	}, metalbond.NextHop{
@@ -217,7 +226,7 @@ func (r *NetworkInterfaceReconciler) removeVirtualIPRouteIfExists(ctx context.Co
 	return nil
 }
 
-func (r *NetworkInterfaceReconciler) addVirtualIPRouteIfNotExists(ctx context.Context, virtualIP netip.Addr, underlayRoute netip.Addr) error {
+func (r *NetworkInterfaceReconciler) addVirtualIPRouteIfNotExists(ctx context.Context, virtualIP, underlayRoute netip.Addr) error {
 	if err := r.RouteUtil.AnnounceRoute(ctx, metalbond.VNI(r.PublicVNI), metalbond.Destination{
 		Prefix: NetIPAddrPrefix(virtualIP),
 	}, metalbond.NextHop{
@@ -408,7 +417,8 @@ func (r *NetworkInterfaceReconciler) createDPDKFwRule(ctx context.Context, nic *
 		}
 		protocolFilter.Filter = &dpdkproto.ProtocolFilter_Icmp{Icmp: &dpdkproto.IcmpFilter{
 			IcmpType: icmpType,
-			IcmpCode: icmpCode}}
+			IcmpCode: icmpCode,
+		}}
 	case metalnetv1alpha1.FirewallRuleProtocolTypeUDP, metalnetv1alpha1.FirewallRuleProtocolTypeTCP:
 		if err := r.fillTCPUDPFilter(ctx, specFirewallRule, &protocolFilter); err != nil {
 			return fmt.Errorf("error filling TCP/UDP filter: %w", err)
@@ -446,7 +456,8 @@ func (r *NetworkInterfaceReconciler) createDPDKFwRule(ctx context.Context, nic *
 			SourcePrefix:      &sourcePrefix.Prefix,
 			DestinationPrefix: &destPrefix.Prefix,
 			ProtocolFilter: &dpdkproto.ProtocolFilter{
-				Filter: protocolFilter.Filter},
+				Filter: protocolFilter.Filter,
+			},
 		},
 	})
 	if err != nil && fwrule.Status.Code == 0 {
@@ -455,7 +466,7 @@ func (r *NetworkInterfaceReconciler) createDPDKFwRule(ctx context.Context, nic *
 	return nil
 }
 
-func (r *NetworkInterfaceReconciler) deleteDPDKfwRuleIDIfExists(ctx context.Context, nicUID string, ruleUID string) error {
+func (r *NetworkInterfaceReconciler) deleteDPDKfwRuleIDIfExists(ctx context.Context, nicUID, ruleUID string) error {
 	if _, err := r.DPDK.DeleteFirewallRule(
 		ctx,
 		nicUID,
@@ -807,6 +818,98 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 		return ctrl.Result{RequeueAfter: time.Nanosecond}, nil
 	}
 	log.V(1).Info("Ensured finalizer")
+
+	// get the annotation
+	machineUID, hasAnnotation := nic.Annotations[virtletMachineUIDAnnotation]
+	if hasAnnotation {
+		log.V(1).Info("Check for existing machine UID", "machineUID", machineUID)
+		// iterate through libvirt subdir
+		dirInfo, err := os.ReadDir(r.VirtletMachineUIDPath)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("error reading virtlet directory: %w", err)
+		}
+
+		// check if there is a match for the uid
+		hasUID := false
+		for _, d := range dirInfo {
+			if !d.IsDir() {
+				continue
+			}
+			if machineUID == d.Name() {
+				log.V(1).Info("Machine UID is tracked, continue reconcile", "machineUID", machineUID)
+				hasUID = true
+				break
+			}
+		}
+
+		if hasUID {
+			baseNIC := nic.DeepCopy()
+			if nic.Annotations == nil {
+				nic.Annotations = make(map[string]string)
+			}
+
+			// remove label "ok-to-delete"
+			// remove timestamp "grace-period"
+			requiresPatch := false
+			if _, hasDeletionMarkAnnotation := nic.Annotations[metalnetDeletionMarkAnnotation]; hasDeletionMarkAnnotation {
+				requiresPatch = true
+				delete(nic.Annotations, metalnetDeletionMarkAnnotation)
+			}
+			if _, hasDeletionGracePeriodTimestampAnnotation := nic.Annotations[metalnetDeletionGracePeriodAnnotation]; hasDeletionGracePeriodTimestampAnnotation {
+				requiresPatch = true
+				delete(nic.Annotations, metalnetDeletionGracePeriodAnnotation)
+			}
+			// if changed, re-queue
+			if requiresPatch {
+				if err = r.Patch(ctx, nic, client.MergeFrom(baseNIC)); err != nil {
+					return ctrl.Result{}, fmt.Errorf("error removing ok-to-delete information for nic: %w", err)
+				}
+
+				return ctrl.Result{Requeue: true}, nil
+			}
+		} else {
+			// if not, log warning and
+			log.V(1).Info("Machine UID not tracked, mark for deletion", "machineUID", machineUID)
+			_, hasDeletionMarkAnnotation := nic.Annotations[metalnetDeletionMarkAnnotation]
+			if hasDeletionMarkAnnotation {
+				// check if grace period has been reached
+				log.V(1).Info("Deletion mark annotation found, check deletion grace period timestamp", "machineUID", machineUID)
+				gracePeriodTimestampValue := nic.Annotations[metalnetDeletionGracePeriodAnnotation]
+				gracePeriodTimestamp, err := time.Parse(time.RFC3339, gracePeriodTimestampValue)
+				if err != nil {
+					return ctrl.Result{}, fmt.Errorf("error parsing deletion grace period timestamp: %w", err)
+				}
+
+				if time.Now().After(gracePeriodTimestamp) {
+					log.V(1).Info("NIC deletion grace period reached, delete NIC", "machineUID", machineUID)
+					// yes - delete
+					if err = r.Delete(ctx, nic); err != nil {
+						return ctrl.Result{}, fmt.Errorf("error deleting metalnet nic: %w", err)
+					}
+
+					return ctrl.Result{Requeue: true}, nil
+				}
+
+				return r.delete(ctx, log, nic)
+			}
+
+			log.V(1).Info("Deletion mark annotation not found, patch with deletion mark annotations", "machineUID", machineUID)
+			baseNIC := nic.DeepCopy()
+			if nic.Annotations == nil {
+				nic.Annotations = make(map[string]string)
+			}
+
+			// add label "ok-to-delete"
+			// add timestamp "grace-period"
+			nic.Annotations[metalnetDeletionMarkAnnotation] = "true"
+			nic.Annotations[metalnetDeletionGracePeriodAnnotation] = time.Now().Add(time.Hour * 24).Format(time.RFC3339)
+			if err = r.Patch(ctx, nic, client.MergeFrom(baseNIC)); err != nil {
+				return ctrl.Result{}, fmt.Errorf("error patching ok-to-delete information for nic: %w", err)
+			}
+
+			return ctrl.Result{}, nil
+		}
+	}
 
 	network := &metalnetv1alpha1.Network{}
 	networkKey := client.ObjectKey{Namespace: nic.Namespace, Name: nic.Spec.NetworkRef.Name}
@@ -1299,7 +1402,6 @@ func (r *NetworkInterfaceReconciler) isValidMeteringParams(meteringParams *metal
 }
 
 func (r *NetworkInterfaceReconciler) getInterfaceMeteringParams(nic *metalnetv1alpha1.NetworkInterface) (*dpdk.MeteringParams, error) {
-
 	meterParams := &dpdk.MeteringParams{
 		TotalRate:  0,
 		PublicRate: 0,
@@ -1322,7 +1424,7 @@ func (r *NetworkInterfaceReconciler) getInterfaceMeteringParams(nic *metalnetv1a
 
 func (r *NetworkInterfaceReconciler) applyInterface(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, vni uint32) (*ghw.PCIAddress, netip.Addr, bool, error) {
 	log.V(1).Info("Getting dpdk interface")
-	var hostName = ""
+	hostName := ""
 
 	iface, err := r.DPDK.GetInterface(ctx, string(nic.UID))
 	if err != nil {

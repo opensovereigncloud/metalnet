@@ -111,7 +111,7 @@ func main() {
 	var metalbondRxChanDataUpdateCapacity int
 	var controlWebserverBindAddr string
 	var podName, daemonSetName, namespace string
-	var virtletMachineUIDPath string
+	var libvirtMachineUIDPath string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -152,7 +152,7 @@ func main() {
 	flag.StringVar(&podName, "pod-name", "", "The name of the current pod.")
 	flag.StringVar(&daemonSetName, "daemonset-name", "metalnet-controller-manager", "The name of the DaemonSet.")
 	flag.StringVar(&namespace, "namespace", "metalnet-system", "The namespace of the DaemonSet.")
-	flag.StringVar(&virtletMachineUIDPath, "virtlet-machine-uid-path", "/var/lib/virtlet/machines", "The path to the virtlet machine UID directories.")
+	flag.StringVar(&libvirtMachineUIDPath, "libvirt-machine-uid-path", "/var/lib/libvirt-provider/machines", "The path to the libvirt provider machine UID directories.")
 
 	opts := zap.Options{
 		Development: true,
@@ -517,7 +517,7 @@ func main() {
 		MultiportEswitchMode:        multiportEswitchMode,
 		TapDeviceMode:               tapDeviceMod,
 		Control:                     c,
-		VirtletMachineUIDPath:       virtletMachineUIDPath,
+		LibvirtMachineUIDPath:       libvirtMachineUIDPath,
 	}).SetupWithManager(mgr, mgr.GetCache()); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NetworkInterface")
 		os.Exit(1)

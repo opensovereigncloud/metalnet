@@ -49,10 +49,10 @@ const (
 	defaultFirewallRulePrio   = 100
 	defaultFirewallRulePrefix = "0.0.0.0/0"
 
-	virtletMachineUIDAnnotation = "virtlet.onmetal.de/machine-uid"
+	libvirtMachineUIDAnnotation = "libvirt-provider.ironcore.dev/machine-uid"
 
-	metalnetDeletionMarkAnnotation        = "metalnet.onmetal.de/ok-to-delete"
-	metalnetDeletionGracePeriodAnnotation = "metalnet.onmetal.de/deletion-grace-period-timestamp"
+	metalnetDeletionMarkAnnotation        = "metalnet.ironcore.dev/ok-to-delete"
+	metalnetDeletionGracePeriodAnnotation = "metalnet.ironcore.dev/deletion-grace-period-timestamp"
 )
 
 func getIP(ipFamily corev1.IPFamily, ipFamilies []corev1.IPFamily, ips []metalnetv1alpha1.IP) netip.Addr {
@@ -105,7 +105,7 @@ type NetworkInterfaceReconciler struct {
 	MultiportEswitchMode        bool
 	TapDeviceMode               bool
 	Control                     *control.ReconcileControl
-	VirtletMachineUIDPath       string
+	LibvirtMachineUIDPath       string
 }
 
 //+kubebuilder:rbac:groups=networking.metalnet.ironcore.dev,resources=networkinterfaces,verbs=get;list;watch;create;update;patch;delete
@@ -819,12 +819,15 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 	}
 	log.V(1).Info("Ensured finalizer")
 
+	// TODO(balpert): in current situation this will never be entered due to the changes of ironcore-net.
+	// the libvirt-provider now creates the ironcore-net nic and metalnetlet will create the metalnet nic.
+	// there is no mechanism to broker the annotations for involved nic objects.
 	// get the annotation
-	machineUID, hasAnnotation := nic.Annotations[virtletMachineUIDAnnotation]
+	machineUID, hasAnnotation := nic.Annotations[libvirtMachineUIDAnnotation]
 	if hasAnnotation {
 		log.V(1).Info("Check for existing machine UID", "machineUID", machineUID)
 		// iterate through libvirt subdir
-		dirInfo, err := os.ReadDir(r.VirtletMachineUIDPath)
+		dirInfo, err := os.ReadDir(r.LibvirtMachineUIDPath)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error reading virtlet directory: %w", err)
 		}

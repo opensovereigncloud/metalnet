@@ -266,25 +266,30 @@ func ComputeMetalnetSubnet(baseIP string, secondaryPool bool) string {
 		return ""
 	}
 
-	// Copy the original IP
+	// The first 64 bits (8 bytes) is the host address: 2001:db8:abcd:abcd::
 	result := make(net.IP, len(ip))
 	copy(result, ip)
 
-	// Set the subnet mask to /88
-	subnetMask := 88
+	// Next 16 bits indicate the address type on that host
+	//  0000..7fff - host only
+	//  d000..dfff - dpservice
+	//  ffff - podIPs
+	result[8] = 0xd0;
+	result[9] = 0x00;
 
-	// Clear all bytes after the first 64 bits (8 bytes)
-	// This preserves the 2001:db8:abcd:abcd part
-	for i := 8; i < 16; i++ {
-		result[i] = 0
-	}
-
-	//#define DP_UNDERLAY_FLAG_EXTERNALLY_GENERATED 0x80
-	//#define DP_UNDERLAY_FLAG_SECONDARY_POOL 0x40
+	// Next 8 bits hold dpservice address flags
+	//   #define DP_UNDERLAY_FLAG_EXTERNALLY_GENERATED 0x80
+	//   #define DP_UNDERLAY_FLAG_SECONDARY_POOL 0x40
 	if secondaryPool {
 		result[10] = byte(0x80 | 0x40)
 	} else {
 		result[10] = byte(0x80)
+	}
+
+	// That's 88 bits in total as a network address
+	subnetMask := 88
+	for i := 11; i < 16; i++ {
+		result[i] = 0
 	}
 
 	// Format the result using Go's IPv6 formatting (which includes proper compression)

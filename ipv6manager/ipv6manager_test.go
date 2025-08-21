@@ -283,11 +283,11 @@ var _ = Describe("IPv6Manager", func() {
 
 			// Test for index 0
 			subnet := ipv6manager.ComputeMetalnetSubnet(baseIP, false)
-			Expect(subnet).To(Equal("2001:db8:abcd:abcd:0:8000::/88"))
+			Expect(subnet).To(Equal("2001:db8:abcd:abcd:d000:8000::/88"))
 
 			// Test for index 1
 			subnet = ipv6manager.ComputeMetalnetSubnet(baseIP, true)
-			Expect(subnet).To(Equal("2001:db8:abcd:abcd:0:c000::/88"))
+			Expect(subnet).To(Equal("2001:db8:abcd:abcd:d000:c000::/88"))
 		})
 	})
 })

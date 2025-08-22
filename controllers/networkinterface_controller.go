@@ -2223,7 +2223,7 @@ func (r *NetworkInterfaceReconciler) buildNetworkInterfaceReservation(nic *metal
 
 		// If no existing underlay IP was found, generate a new one
 		if underlayIP == "" {
-			underlayIP, err = r.generateUnderlayIP()
+			underlayIP, err = r.generateUnderlayIP(ipv6manager.UNDERLAY_TYPE_NIC)
 			if err != nil {
 				allErrors = append(allErrors, fmt.Errorf("failed to generate underlay IP for %s: %w", overlayIP, err))
 				continue
@@ -2250,7 +2250,7 @@ func (r *NetworkInterfaceReconciler) buildNetworkInterfaceReservation(nic *metal
 			underlayIP = currentReservation.VirtualIP.Underlay
 		} else {
 			// Generate new underlay IP
-			underlayIP, err = r.generateUnderlayIP()
+			underlayIP, err = r.generateUnderlayIP(ipv6manager.UNDERLAY_TYPE_VIP)
 			if err != nil {
 				allErrors = append(allErrors, fmt.Errorf("failed to generate underlay IP for virtual IP %s: %w", overlayIP, err))
 			}
@@ -2278,7 +2278,7 @@ func (r *NetworkInterfaceReconciler) buildNetworkInterfaceReservation(nic *metal
 			underlayIP = currentReservation.NatIP.Underlay
 		} else {
 			// Generate new underlay IP
-			underlayIP, err = r.generateUnderlayIP()
+			underlayIP, err = r.generateUnderlayIP(ipv6manager.UNDERLAY_TYPE_NAT)
 			if err != nil {
 				allErrors = append(allErrors, fmt.Errorf("failed to generate underlay IP for NAT IP %s: %w", overlayIP, err))
 			}
@@ -2316,7 +2316,7 @@ func (r *NetworkInterfaceReconciler) buildNetworkInterfaceReservation(nic *metal
 
 			// If no existing underlay IP was found, generate a new one
 			if underlayIP == "" {
-				underlayIP, err = r.generateUnderlayIP()
+				underlayIP, err = r.generateUnderlayIP(ipv6manager.UNDERLAY_TYPE_LBTARGET)
 				if err != nil {
 					allErrors = append(allErrors, fmt.Errorf("failed to generate underlay IP for LoadBalancer target %s: %w", overlayPrefix, err))
 					continue
@@ -2354,7 +2354,7 @@ func (r *NetworkInterfaceReconciler) buildNetworkInterfaceReservation(nic *metal
 
 			// If no existing underlay IP was found, generate a new one
 			if underlayIP == "" {
-				underlayIP, err = r.generateUnderlayIP()
+				underlayIP, err = r.generateUnderlayIP(ipv6manager.UNDERLAY_TYPE_PREFIX)
 				if err != nil {
 					allErrors = append(allErrors, fmt.Errorf("failed to generate underlay IP for prefix %s: %w", overlayPrefix, err))
 					continue
@@ -2378,10 +2378,10 @@ func (r *NetworkInterfaceReconciler) buildNetworkInterfaceReservation(nic *metal
 }
 
 // generateUnderlayIP generates an underlay IP for a given overlay IP
-func (r *NetworkInterfaceReconciler) generateUnderlayIP() (string, error) {
+func (r *NetworkInterfaceReconciler) generateUnderlayIP(addressType uint8) (string, error) {
 	// For IPv6, we use the IPv6Manager to generate a unique IPv6 address
 	ipv6Manager := ipv6manager.GetInstance()
-	return ipv6Manager.GenerateRandomIPv6()
+	return ipv6Manager.GenerateRandomIPv6(addressType)
 }
 
 func (r *NetworkInterfaceReconciler) enqueueNetworkInterfacesReferencingLoadBalancer(ctx context.Context, log logr.Logger) handler.EventHandler {

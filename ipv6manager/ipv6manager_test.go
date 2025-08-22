@@ -88,7 +88,7 @@ var _ = Describe("IPv6Manager", func() {
 		})
 
 		It("should generate a valid IPv6 address within the CIDR", func() {
-			ip, err := manager.GenerateRandomIPv6()
+			ip, err := manager.GenerateRandomIPv6(ipv6manager.UNDERLAY_TYPE_UNDEFINED)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ip).To(HavePrefix("2001:db8:"))
 		})
@@ -97,7 +97,7 @@ var _ = Describe("IPv6Manager", func() {
 			// Generate multiple addresses
 			addresses := make(map[string]bool)
 			for i := 0; i < 10; i++ {
-				ip, err := manager.GenerateRandomIPv6()
+				ip, err := manager.GenerateRandomIPv6(ipv6manager.UNDERLAY_TYPE_UNDEFINED)
 				Expect(err).NotTo(HaveOccurred())
 
 				// Ensure each address is unique
@@ -113,7 +113,7 @@ var _ = Describe("IPv6Manager", func() {
 
 			// Generate multiple addresses and ensure none match the existing one
 			for i := 0; i < 10; i++ {
-				ip, err := manager.GenerateRandomIPv6()
+				ip, err := manager.GenerateRandomIPv6(ipv6manager.UNDERLAY_TYPE_UNDEFINED)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(ip).NotTo(Equal(existingIP))
 			}
@@ -129,7 +129,7 @@ var _ = Describe("IPv6Manager", func() {
 			// This SetCIDR("") might fail depending on implementation
 			// But we just want to ensure the CIDR is not set for this test
 
-			ip, err := newManager.GenerateRandomIPv6()
+			ip, err := newManager.GenerateRandomIPv6(ipv6manager.UNDERLAY_TYPE_UNDEFINED)
 			Expect(err).To(HaveOccurred())
 			Expect(ip).To(BeEmpty())
 		})
@@ -155,7 +155,7 @@ var _ = Describe("IPv6Manager", func() {
 			// Generate some IPs
 			generatedIPs := make([]string, 0, 2)
 			for i := 0; i < 2; i++ {
-				ip, err := manager.GenerateRandomIPv6()
+				ip, err := manager.GenerateRandomIPv6(ipv6manager.UNDERLAY_TYPE_UNDEFINED)
 				Expect(err).NotTo(HaveOccurred())
 				generatedIPs = append(generatedIPs, ip)
 			}
@@ -199,14 +199,14 @@ var _ = Describe("IPv6Manager", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// There should be one address left
-			ip, err := manager.GenerateRandomIPv6()
+			ip, err := manager.GenerateRandomIPv6(ipv6manager.UNDERLAY_TYPE_UNDEFINED)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ip).To(Equal("2001:db8::3"))
 
 			// Now the space should be exhausted
 			// This test depends on implementation details - it may retry many times
 			// before failing, or immediately recognize the space is exhausted
-			_, err = manager.GenerateRandomIPv6()
+			_, err = manager.GenerateRandomIPv6(ipv6manager.UNDERLAY_TYPE_UNDEFINED)
 			Expect(err).To(HaveOccurred())
 		})
 	})
@@ -260,7 +260,7 @@ var _ = Describe("IPv6Manager", func() {
 
 		It("should allow reuse of withdrawn IPs", func() {
 			// Generate an IP
-			ip, err := manager.GenerateRandomIPv6()
+			ip, err := manager.GenerateRandomIPv6(ipv6manager.UNDERLAY_TYPE_UNDEFINED)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Withdraw the IP
@@ -288,6 +288,58 @@ var _ = Describe("IPv6Manager", func() {
 			// Test for index 1
 			subnet = ipv6manager.ComputeMetalnetSubnet(baseIP, true)
 			Expect(subnet).To(Equal("2001:db8:abcd:abcd:d000:c000::/88"))
+		})
+	})
+
+	Context("Generating underlay address types", func() {
+		BeforeEach(func() {
+			ipv6manager.ResetForTest()
+			manager = ipv6manager.GetInstance()
+			cidr := ipv6manager.ComputeMetalnetSubnet("2001:db8:abcd:abcd::", false)
+			err := manager.SetCIDR(cidr)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should generate default underlay address type", func() {
+			ip, err := manager.GenerateRandomIPv6(ipv6manager.UNDERLAY_TYPE_UNDEFINED)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ip).To(HavePrefix("2001:db8:abcd:abcd:d000:"))
+		})
+
+		It("should generate NIC underlay address type", func() {
+			ip, err := manager.GenerateRandomIPv6(ipv6manager.UNDERLAY_TYPE_NIC)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ip).To(HavePrefix("2001:db8:abcd:abcd:d001:"))
+		})
+
+		It("should generate VIP underlay address type", func() {
+			ip, err := manager.GenerateRandomIPv6(ipv6manager.UNDERLAY_TYPE_VIP)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ip).To(HavePrefix("2001:db8:abcd:abcd:d002:"))
+		})
+
+		It("should generate NAT underlay address type", func() {
+			ip, err := manager.GenerateRandomIPv6(ipv6manager.UNDERLAY_TYPE_NAT)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ip).To(HavePrefix("2001:db8:abcd:abcd:d003:"))
+		})
+
+		It("should generate LB underlay address type", func() {
+			ip, err := manager.GenerateRandomIPv6(ipv6manager.UNDERLAY_TYPE_LB)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ip).To(HavePrefix("2001:db8:abcd:abcd:d004:"))
+		})
+
+		It("should generate LBTarget underlay address type", func() {
+			ip, err := manager.GenerateRandomIPv6(ipv6manager.UNDERLAY_TYPE_LBTARGET)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ip).To(HavePrefix("2001:db8:abcd:abcd:d005:"))
+		})
+
+		It("should generate Prefix underlay address type", func() {
+			ip, err := manager.GenerateRandomIPv6(ipv6manager.UNDERLAY_TYPE_PREFIX)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ip).To(HavePrefix("2001:db8:abcd:abcd:d006:"))
 		})
 	})
 })

@@ -25,6 +25,17 @@ var (
 	resetForTest = false
 )
 
+// from dpservice's include/dp_vnf.h
+const (
+	UNDERLAY_TYPE_UNDEFINED = 0
+	UNDERLAY_TYPE_NIC = 1
+	UNDERLAY_TYPE_VIP = 2
+	UNDERLAY_TYPE_NAT = 3
+	UNDERLAY_TYPE_LB = 4
+	UNDERLAY_TYPE_LBTARGET = 5
+	UNDERLAY_TYPE_PREFIX = 6
+)
+
 // GetInstance returns the singleton instance of IPv6Manager
 func GetInstance() *IPv6Manager {
 	if resetForTest {
@@ -122,7 +133,7 @@ func (m *IPv6Manager) AddExistingIP(ipStr string) error {
 }
 
 // GenerateRandomIPv6 generates a random IPv6 address within the CIDR
-func (m *IPv6Manager) GenerateRandomIPv6() (string, error) {
+func (m *IPv6Manager) GenerateRandomIPv6(addressType uint8) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -145,9 +156,10 @@ func (m *IPv6Manager) GenerateRandomIPv6() (string, error) {
 	// We don't perform exhaustion check upfront, instead we'll try random generation first
 	// and then fall back to systematic filling if random generation fails
 
-	// Start with the network prefix
+	// Start with the network prefix and type
 	newIP := make(net.IP, net.IPv6len)
 	copy(newIP, m.cidr.IP)
+	newIP[9] = addressType
 
 	// Phase 1: Try random generation up to 100 times
 	maxAttempts := 100
@@ -181,6 +193,7 @@ func (m *IPv6Manager) GenerateRandomIPv6() (string, error) {
 	// This is a simplified approach that works for small subnets
 	// For larger subnets, this would be extremely inefficient
 	copy(newIP, m.cidr.IP)
+	newIP[9] = addressType
 
 	// Try up to another maxAttempts different IPs
 	for attempt := 0; attempt < maxAttempts; attempt++ {

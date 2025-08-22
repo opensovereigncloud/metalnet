@@ -615,7 +615,7 @@ func (r *LoadBalancerReconciler) generateUnderlayIP(overlayIP metalnetv1alpha1.I
 	if overlayIP.Is4() {
 		// For IPv6, we use the IPv6Manager to generate a unique IPv6 address
 		ipv6Manager := ipv6manager.GetInstance()
-		return ipv6Manager.GenerateRandomIPv6()
+		return ipv6Manager.GenerateRandomIPv6(ipv6manager.UNDERLAY_TYPE_LB)
 	}
 
 	return "", fmt.Errorf("unsupported IP family")

@@ -130,6 +130,18 @@ func (m *IPv6Manager) GenerateRandomIPv6() (string, error) {
 		return "", fmt.Errorf("CIDR not set")
 	}
 
+	// Get prefix length
+	prefixLen, _ := m.cidr.Mask.Size()
+	hostBits := min(128-prefixLen, 63)
+
+	// Calculate maximum possible hosts, capping at 2^63 to avoid overflow
+	maxPossible := uint64(1) << hostBits
+
+	// If we've used all possible addresses, return an error
+	if uint64(len(m.existingIPs)) >= maxPossible {
+		return "", fmt.Errorf("all possible IPv6 addresses in the CIDR have been used")
+	}
+
 	// We don't perform exhaustion check upfront, instead we'll try random generation first
 	// and then fall back to systematic filling if random generation fails
 
@@ -167,18 +179,6 @@ func (m *IPv6Manager) GenerateRandomIPv6() (string, error) {
 	}
 
 	// Phase 2: If random generation failed, systematically look for gaps
-
-	// Get prefix length
-	prefixLen, _ := m.cidr.Mask.Size()
-	hostBits := min(128-prefixLen, 63)
-
-	// Calculate maximum possible hosts, capping at 2^63 to avoid overflow
-	maxPossible := uint64(1) << hostBits
-
-	// If we've used all possible addresses, return an error
-	if uint64(len(m.existingIPs)) >= maxPossible {
-		return "", fmt.Errorf("all possible IPv6 addresses in the CIDR have been used")
-	}
 
 	// Otherwise try to find a gap systematically
 	// This is a simplified approach that works for small subnets

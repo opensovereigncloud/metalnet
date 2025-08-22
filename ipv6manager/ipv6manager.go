@@ -145,19 +145,16 @@ func (m *IPv6Manager) GenerateRandomIPv6() (string, error) {
 	// We don't perform exhaustion check upfront, instead we'll try random generation first
 	// and then fall back to systematic filling if random generation fails
 
+	// Start with the network prefix
+	newIP := make(net.IP, net.IPv6len)
+	copy(newIP, m.cidr.IP)
+
 	// Phase 1: Try random generation up to 100 times
 	maxAttempts := 100
-	attempts := 0
+	hostBytes := make([]byte, 16)
 
-	for attempts < maxAttempts {
-		attempts++
-
-		// Start with the network prefix
-		newIP := make(net.IP, net.IPv6len)
-		copy(newIP, m.cidr.IP)
-
+	for attempt := 0; attempt < maxAttempts; attempt++ {
 		// Generate random bits for the host part
-		hostBytes := make([]byte, 16)
 		_, err := rand.Read(hostBytes)
 		if err != nil {
 			return "", fmt.Errorf("failed to generate random bytes: %v", err)
@@ -183,25 +180,24 @@ func (m *IPv6Manager) GenerateRandomIPv6() (string, error) {
 	// Otherwise try to find a gap systematically
 	// This is a simplified approach that works for small subnets
 	// For larger subnets, this would be extremely inefficient
-	ip := make(net.IP, net.IPv6len)
-	copy(ip, m.cidr.IP)
+	copy(newIP, m.cidr.IP)
 
 	// Try up to another maxAttempts different IPs
-	for i := 0; i < maxAttempts; i++ {
+	for attempt := 0; attempt < maxAttempts; attempt++ {
 		// Increment the last byte first, then ripple carry
-		for j := 15; j >= 0; j-- {
-			ip[j]++
-			if ip[j] != 0 {
+		for i := 15; i >= 0; i-- {
+			newIP[i]++
+			if newIP[i] != 0 {
 				break // No carry needed
 			}
 		}
 
 		// Give up if went outside our subnet
-		if !m.cidr.Contains(ip) {
+		if !m.cidr.Contains(newIP) {
 			break
 		}
 
-		ipStr := ip.String()
+		ipStr := newIP.String()
 		if !m.existingIPs[ipStr] {
 			m.existingIPs[ipStr] = true
 			return ipStr, nil

@@ -178,16 +178,13 @@ func (m *IPv6Manager) GenerateRandomIPv6() (string, error) {
 
 	// Get prefix length
 	prefixLen, _ := m.cidr.Mask.Size()
-	hostBits := 128 - prefixLen
+	hostBits := min(128 - prefixLen, 63)
 
 	// Calculate maximum possible hosts, capping at 2^63 to avoid overflow
-	maxPossible := int64(1)
-	if hostBits < 63 {
-		maxPossible = int64(1) << uint(hostBits)
-	}
+	maxPossible := uint64(1) << hostBits
 
 	// If we've used all possible addresses, return an error
-	if int64(addressesInCidr) >= maxPossible {
+	if addressesInCidr >= maxPossible {
 		return "", fmt.Errorf("all possible IPv6 addresses in the CIDR have been used")
 	}
 

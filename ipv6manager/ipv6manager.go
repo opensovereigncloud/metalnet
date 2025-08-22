@@ -178,13 +178,13 @@ func (m *IPv6Manager) GenerateRandomIPv6() (string, error) {
 
 	// Get prefix length
 	prefixLen, _ := m.cidr.Mask.Size()
-	hostBits := min(128 - prefixLen, 63)
+	hostBits := min(128-prefixLen, 63)
 
 	// Calculate maximum possible hosts, capping at 2^63 to avoid overflow
 	maxPossible := uint64(1) << hostBits
 
 	// If we've used all possible addresses, return an error
-	if addressesInCidr >= maxPossible {
+	if uint64(addressesInCidr) >= maxPossible {
 		return "", fmt.Errorf("all possible IPv6 addresses in the CIDR have been used")
 	}
 
@@ -204,9 +204,9 @@ func (m *IPv6Manager) GenerateRandomIPv6() (string, error) {
 			}
 		}
 
-		// Skip if not in our subnet
+		// Give up if went outside our subnet
 		if !m.cidr.Contains(ip) {
-			continue
+			break
 		}
 
 		ipStr := ip.String()
@@ -271,8 +271,8 @@ func ComputeMetalnetSubnet(baseIP string, secondaryPool bool) string {
 	//  0000..7fff - host only
 	//  d000..dfff - dpservice
 	//  ffff - podIPs
-	result[8] = 0xd0;
-	result[9] = 0x00;
+	result[8] = 0xd0
+	result[9] = 0x00
 
 	// Next 8 bits hold dpservice address flags
 	//   #define DP_UNDERLAY_FLAG_EXTERNALLY_GENERATED 0x80

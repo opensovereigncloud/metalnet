@@ -167,14 +167,6 @@ func (m *IPv6Manager) GenerateRandomIPv6() (string, error) {
 	}
 
 	// Phase 2: If random generation failed, systematically look for gaps
-	// Count addresses in the CIDR
-	addressesInCidr := 0
-	for ip := range m.existingIPs {
-		parsedIP := net.ParseIP(ip)
-		if parsedIP != nil && m.cidr.Contains(parsedIP) {
-			addressesInCidr++
-		}
-	}
 
 	// Get prefix length
 	prefixLen, _ := m.cidr.Mask.Size()
@@ -184,7 +176,7 @@ func (m *IPv6Manager) GenerateRandomIPv6() (string, error) {
 	maxPossible := uint64(1) << hostBits
 
 	// If we've used all possible addresses, return an error
-	if uint64(addressesInCidr) >= maxPossible {
+	if uint64(len(m.existingIPs)) >= maxPossible {
 		return "", fmt.Errorf("all possible IPv6 addresses in the CIDR have been used")
 	}
 

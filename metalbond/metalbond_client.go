@@ -198,7 +198,7 @@ func (c *MetalnetClient) addLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.Desti
 				}
 
 				// Mark this NAT as deleted
-				natKey := fmt.Sprintf("%d-%d-%s-%s", nat.Spec.Vni, nat.Spec.MinPort, nat.Spec.MaxPort, nat.Spec.UnderlayRoute.String())
+				natKey := fmt.Sprintf("%d-%d-%d-%s", nat.Spec.Vni, nat.Spec.MinPort, nat.Spec.MaxPort, nat.Spec.UnderlayRoute.String())
 				deletedNATs[natKey] = true
 			}
 		}
@@ -207,7 +207,7 @@ func (c *MetalnetClient) addLocalRoute(destVni mb.VNI, vni mb.VNI, dest mb.Desti
 		if len(deletedNATs) > 0 {
 			filteredNATs := make([]dpdk.Nat, 0, len(nats.Items))
 			for _, nat := range nats.Items {
-				natKey := fmt.Sprintf("%d-%d-%s-%s", nat.Spec.Vni, nat.Spec.MinPort, nat.Spec.MaxPort, nat.Spec.UnderlayRoute.String())
+				natKey := fmt.Sprintf("%d-%d-%d-%s", nat.Spec.Vni, nat.Spec.MinPort, nat.Spec.MaxPort, nat.Spec.UnderlayRoute.String())
 				if !deletedNATs[natKey] {
 					filteredNATs = append(filteredNATs, nat)
 				}

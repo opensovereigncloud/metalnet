@@ -80,6 +80,8 @@ spec:
           name: pciids
         - mountPath: /var/lib/metalnet
           name: metalnet
+        - mountPath: /var/lib/libvirt-provider/machines
+          name: libvirt-provider-machines
       volumes:
       - hostPath:
           path: /sys
@@ -93,5 +95,9 @@ spec:
           path: /var/lib/metalnet
           type: DirectoryOrCreate
         name: metalnet
+      - hostPath:
+          path: /var/lib/libvirt-provider/machines
+          type: Directory
+        name: libvirt-provider-machines
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10

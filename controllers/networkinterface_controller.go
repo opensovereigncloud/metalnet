@@ -109,10 +109,6 @@ type NetworkInterfaceReconciler struct {
 	LibvirtMachineUIDPath       string
 
 	// IPv6 CIDR for address reservation generation
-	IPv6CIDR     string
-	ControllerID string
-	VirtletMachineUIDPath       string
-	ReadyNeeded  int
 	IPv6CIDR       string
 	ControllerID   string
 	ControllerHash string

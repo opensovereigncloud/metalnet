@@ -1108,11 +1108,15 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 
 	log.V(1).Info("Patching status")
 	if err := r.patchStatus(ctx, nic, func() {
+		state := string(metalnetv1alpha1.NetworkInterfaceStateReady)
+		if len(errs) > 0 {
+			state = string(metalnetv1alpha1.NetworkInterfaceStateError)
+		}
 		// Update controller status with successful reconciliation
 		metalnetv1alpha1.SetNetworkInterfaceControllerStatus(
 			&nic.Status,
 			r.ControllerID,
-			string(metalnetv1alpha1.NetworkInterfaceStateReady),
+			state,
 			"Network interface successfully reconciled",
 			nic.Generation,
 			r.ControllerHash,

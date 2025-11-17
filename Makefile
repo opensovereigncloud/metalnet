@@ -93,8 +93,16 @@ check: manifests generate fmt check-license lint test ## Generate manifests, cod
 
 ENVTEST_ASSETS_DIR=$(shell pwd)/testbin
 .PHONY: test
-test: envtest manifests generate fmt vet ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test -v ./... -coverprofile cover.out -ginkgo.v -ginkgo.label-filter=$(labels) -ginkgo.randomize-all
+test: envtest manifests generate fmt vet ## Run unit tests only (excludes integration tests).
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test -v ./... -coverprofile cover.out -ginkgo.v -ginkgo.label-filter='!integration' -ginkgo.randomize-all
+
+.PHONY: test-integration
+test-integration: envtest manifests generate fmt vet ## Run integration tests (requires dpservice and metalbond servers).
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test -v ./... -coverprofile cover.out -ginkgo.v -ginkgo.label-filter='integration' -ginkgo.randomize-all
+
+.PHONY: test-all
+test-all: envtest manifests generate fmt vet ## Run all tests (unit + integration).
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test -v ./... -coverprofile cover.out -ginkgo.v -ginkgo.randomize-all
 
 ##@ Build
 
@@ -108,7 +116,27 @@ run-base: generate fmt lint ## Run the binary
 
 .PHONY: docker-build
 docker-build: ## Build docker image with partitionlet.
-	docker build $(BUILDARGS) -t ${IMG} $(GITHUB_PAT_MOUNT) .
+	podman build --platform linux/amd64 $(BUILDARGS) -t ${IMG} $(GITHUB_PAT_MOUNT) .
+
+.PHONY: test-build-container
+test-build-container: ## Build test container with .netrc authentication
+	@cp $(HOME)/.netrc .netrc && \
+	podman build --platform linux/amd64 -f Dockerfile.test -t metalnet-test:latest . && \
+	rm -f .netrc
+
+.PHONY: test-compile-container
+test-compile-container: ## Verify tests compile in container
+	@cp $(HOME)/.netrc .netrc && \
+	podman build --platform linux/amd64 --target builder -f Dockerfile.test -t metalnet-test:compile . && \
+	rm -f .netrc && \
+	echo "Tests compiled successfully in container"
+
+.PHONY: test-coverage-container
+test-coverage-container: ## Run unit tests with coverage in container
+	@cp $(HOME)/.netrc .netrc && \
+	podman build --platform linux/amd64 -f Dockerfile.coverage -t metalnet-test:coverage . 2>&1 | tee /tmp/coverage-build.log && \
+	rm -f .netrc && \
+	echo "Coverage test completed - logs saved to /tmp/coverage-build.log"
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.

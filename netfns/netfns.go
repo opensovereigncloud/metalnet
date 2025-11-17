@@ -264,6 +264,13 @@ var (
 	ErrRetryExceeded      = errors.New("exceeded maximum retries")
 )
 
+// ManagerInterface defines the interface for managing PCI address claims
+type ManagerInterface interface {
+	Get(uid types.UID) (*ghw.PCIAddress, error)
+	GetOrClaim(uid types.UID) (*ghw.PCIAddress, error)
+	Release(uid types.UID) error
+}
+
 type Manager struct {
 	store        ClaimStore
 	allAddresses []ghw.PCIAddress

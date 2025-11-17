@@ -28,12 +28,12 @@ var (
 // from dpservice's include/dp_vnf.h
 const (
 	UNDERLAY_TYPE_UNDEFINED = 0
-	UNDERLAY_TYPE_NIC = 1
-	UNDERLAY_TYPE_VIP = 2
-	UNDERLAY_TYPE_NAT = 3
-	UNDERLAY_TYPE_LB = 4
-	UNDERLAY_TYPE_LBTARGET = 5
-	UNDERLAY_TYPE_PREFIX = 6
+	UNDERLAY_TYPE_NIC       = 1
+	UNDERLAY_TYPE_VIP       = 2
+	UNDERLAY_TYPE_NAT       = 3
+	UNDERLAY_TYPE_LB        = 4
+	UNDERLAY_TYPE_LBTARGET  = 5
+	UNDERLAY_TYPE_PREFIX    = 6
 )
 
 // GetInstance returns the singleton instance of IPv6Manager

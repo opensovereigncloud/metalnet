@@ -31,3 +31,9 @@ charts/
 apiserver.local.config/
 default.etcd/
 
+# GitLab authentication file (sensitive credentials)
+.netrc
+
+# Draw.io temporary files
+.~*
+.\$*

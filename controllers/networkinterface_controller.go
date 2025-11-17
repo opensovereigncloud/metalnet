@@ -95,7 +95,7 @@ type NetworkInterfaceReconciler struct {
 	DPDK      dpdkclient.Client
 	RouteUtil metalbond.RouteUtil
 
-	NetFnsManager *netfns.Manager
+	NetFnsManager netfns.ManagerInterface
 	SysFS         sysfs.FS
 
 	PfToVfOffset                int
@@ -1875,7 +1875,7 @@ func (r *NetworkInterfaceReconciler) deleteLBTargets(
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("error(s) deleting lb target(s): %w", err)
+		return fmt.Errorf("error(s) deleting lb target(s): %w", errors.Join(errs...))
 	}
 	return nil
 }
@@ -1920,7 +1920,7 @@ func (r *NetworkInterfaceReconciler) deletePrefixes(
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("error(s) deleting prefix(es): %w", err)
+		return fmt.Errorf("error(s) deleting prefix(es): %w", errors.Join(errs...))
 	}
 	return nil
 }
@@ -1957,7 +1957,7 @@ func (r *NetworkInterfaceReconciler) deleteFirewallRules(
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("error(s) deleting firewall rule(s): %w", err)
+		return fmt.Errorf("error(s) deleting firewall rule(s): %w", errors.Join(errs...))
 	}
 	return nil
 }

@@ -1194,10 +1194,10 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 	})
 })
 
-var _ = Describe("Negative cases", Label("negative"), func() {
+var _ = Describe("Negative cases", Label("negative", "integration"), func() {
 	var wrongNetworkInterface *metalnetv1alpha1.NetworkInterface
 	var wrongLoadBalancer *metalnetv1alpha1.LoadBalancer
-	var wfr1 metalnetv1alpha1.FirewallRule
+	var wfr1 metalnetv1alpha1.FirewallRuleSpec
 
 	ctx := SetupContext()
 	ns := SetupTest(ctx)
@@ -1266,7 +1266,7 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 				LoadBalancerTargets: []metalnetv1alpha1.IPPrefix{metalnetv1alpha1.MustParseIPPrefix("5.5.5.5/32")},
 				// NAT:                 &nat,
 				VirtualIP:     metalnetv1alpha1.MustParseNewIP("5.5.5.5"),
-				FirewallRules: []metalnetv1alpha1.FirewallRule{},
+				FirewallRules: []metalnetv1alpha1.FirewallRuleSpec{},
 			},
 		}
 
@@ -1301,7 +1301,7 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 		It("should fail", func() {
 			By("unsupported direction string")
 			wfr1.Direction = "XXX"
-			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRule{wfr1}
+			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRuleSpec{wfr1}
 
 			// Create the NetworkInterface k8s object
 			Expect(k8sClient.Create(ctx, wrongNetworkInterface)).To(Succeed())
@@ -1378,7 +1378,7 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 		It("should fail", func() {
 			By("unsupported action string")
 			wfr1.Action = "XXX"
-			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRule{wfr1}
+			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRuleSpec{wfr1}
 
 			// Create the NetworkInterface k8s object
 			Expect(k8sClient.Create(ctx, wrongNetworkInterface)).To(Succeed())
@@ -1416,7 +1416,7 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 		It("should fail", func() {
 			By("fw rule src port out of range")
 			wfr1.ProtocolMatch.PortRange.EndSrcPort = 75000
-			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRule{wfr1}
+			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRuleSpec{wfr1}
 
 			// Try to create the NetworkInterface k8s object
 			Expect(k8sClient.Create(ctx, wrongNetworkInterface)).ToNot(Succeed())
@@ -1435,7 +1435,7 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 			By("fw rule src port is lower than -1")
 			srcPort := int32(-10)
 			wfr1.ProtocolMatch.PortRange.SrcPort = &srcPort
-			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRule{wfr1}
+			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRuleSpec{wfr1}
 
 			// Try to create the NetworkInterface k8s object
 			Expect(k8sClient.Create(ctx, wrongNetworkInterface)).ToNot(Succeed())
@@ -1454,7 +1454,7 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 			By("fw rule DstPortEnd lower than DstPort ")
 			// wfr1.ProtocolMatch.PortRange.DstPort is 443
 			wfr1.ProtocolMatch.PortRange.EndDstPort = 80
-			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRule{wfr1}
+			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRuleSpec{wfr1}
 
 			// Create the NetworkInterface k8s object
 			Expect(k8sClient.Create(ctx, wrongNetworkInterface)).To(Succeed())
@@ -1501,7 +1501,7 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 				},
 			}
 
-			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRule{wfr1}
+			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRuleSpec{wfr1}
 
 			// Try to create the NetworkInterface k8s object
 			Expect(k8sClient.Create(ctx, wrongNetworkInterface)).ToNot(Succeed())
@@ -1615,7 +1615,7 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 
 	When("creating a NetworkInterface with two ipv4 addresses", func() {
 		It("should fail", func() {
-			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRule{}
+			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRuleSpec{}
 			wrongNetworkInterface.Spec.NAT = nil
 			wrongNetworkInterface.Spec.IPFamilies = []corev1.IPFamily{corev1.IPv4Protocol}
 			wrongNetworkInterface.Spec.IPs = []metalnetv1alpha1.IP{
@@ -1651,7 +1651,7 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 
 	When("creating a NetworkInterface with two ipv6 addresses", func() {
 		It("should fail", func() {
-			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRule{}
+			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRuleSpec{}
 			wrongNetworkInterface.Spec.NAT = nil
 			wrongNetworkInterface.Spec.IPFamilies = []corev1.IPFamily{corev1.IPv6Protocol}
 			wrongNetworkInterface.Spec.IPs = []metalnetv1alpha1.IP{
@@ -1687,7 +1687,7 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 
 	When("creating a NetworkInterface with only ipv6 address", func() {
 		It("should succeed", func() {
-			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRule{}
+			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRuleSpec{}
 			wrongNetworkInterface.Spec.NAT = nil
 			wrongNetworkInterface.Spec.IPFamilies = []corev1.IPFamily{corev1.IPv4Protocol, corev1.IPv6Protocol}
 			wrongNetworkInterface.Spec.IPs = []metalnetv1alpha1.IP{
@@ -1863,8 +1863,8 @@ var _ = Describe("Negative cases", Label("negative"), func() {
 		})
 	})
 
-	// TODO: fix the conversion of PeeredIDs to uint32 and remove Pending
-	When("creating a Network with wrong data", Pending, func() {
+	// TODO: fix the conversion of PeeredIDs to uint32
+	When("creating a Network with wrong data", func() {
 		It("should fail", func() {
 			By("negative peered ID")
 			// Define a new Network object

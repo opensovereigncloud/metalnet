@@ -1,0 +1,54 @@
+# Coverage Dockerfile - runs tests with coverage analysis
+FROM golang:1.23 AS builder
+
+WORKDIR /workspace
+
+# Install envtest binaries required for controller-runtime tests
+RUN go install sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.0.0-20240320141353-395cfc7486e6 && \
+    ENVTEST_K8S_VERSION=1.30.0 && \
+    /go/bin/setup-envtest use ${ENVTEST_K8S_VERSION} -p path > /tmp/kubebuilder-assets-path && \
+    cat /tmp/kubebuilder-assets-path && \
+    echo "export KUBEBUILDER_ASSETS=$(cat /tmp/kubebuilder-assets-path)" >> /root/.bashrc
+
+# Set KUBEBUILDER_ASSETS for the test run
+ENV KUBEBUILDER_ASSETS=/root/.local/share/kubebuilder-envtest/k8s/1.30.0-linux-amd64
+
+# Copy go module files
+COPY go.mod go.sum ./
+
+# Copy .netrc for private GitLab dependencies
+COPY .netrc /root/.netrc
+
+# Download dependencies (including private GitLab repos)
+RUN go mod download && rm -f /root/.netrc
+
+# Copy all source code
+COPY api/ api/
+COPY client/ client/
+COPY control/ control/
+COPY controllers/ controllers/
+COPY internal/ internal/
+COPY encoding/ encoding/
+COPY metalbond/ metalbond/
+COPY netfns/ netfns/
+COPY sysfs/ sysfs/
+COPY ipv6manager/ ipv6manager/
+COPY health/ health/
+COPY config/crd/bases/ config/crd/bases/
+COPY main.go main.go
+
+# Run unit tests with coverage (excluding integration tests)
+RUN cd controllers && echo "=== Running Unit Tests (excluding integration tests) ===" && \
+    go test -v -coverprofile=coverage.out -covermode=atomic -coverpkg=./... . -ginkgo.label-filter='!integration' 2>&1 | tee test-output.log && \
+    echo "" && echo "=== Test Run Complete ===" && echo ""
+
+# Show coverage for networkinterface_controller.go
+RUN cd controllers && echo "=== Coverage Details for networkinterface_controller.go ===" && \
+    go tool cover -func=coverage.out | grep networkinterface_controller.go | head -30 || echo "No coverage data found"
+
+# Calculate average coverage
+RUN cd controllers && echo "" && echo "=== Coverage Summary ===" && \
+    go tool cover -func=coverage.out | grep networkinterface_controller.go | \
+    awk '{sum+=$3; count++; if($3 > 0) covered++} END {if(count>0) printf "Total functions: %d\nFunctions with coverage > 0%%: %d\nAverage coverage: %.1f%%\n", count, covered, sum/count; else print "No coverage data"}' && \
+    echo "" && echo "=== Overall Coverage ===" && \
+    go tool cover -func=coverage.out | tail -1

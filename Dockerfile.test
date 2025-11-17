@@ -1,0 +1,36 @@
+# Test Dockerfile - compiles and runs tests with GitLab authentication via .netrc
+FROM golang:1.23 AS builder
+
+WORKDIR /workspace
+
+# Copy go module files
+COPY go.mod go.sum ./
+
+# Copy .netrc for private GitLab dependencies
+# This file is temporarily copied during build and removed after
+COPY .netrc /root/.netrc
+
+# Download dependencies (including private GitLab repos)
+RUN go mod download && rm -f /root/.netrc
+
+# Copy all source code
+COPY api/ api/
+COPY client/ client/
+COPY control/ control/
+COPY controllers/ controllers/
+COPY internal/ internal/
+COPY encoding/ encoding/
+COPY metalbond/ metalbond/
+COPY netfns/ netfns/
+COPY sysfs/ sysfs/
+COPY ipv6manager/ ipv6manager/
+COPY health/ health/
+COPY main.go main.go
+
+# Compile all test files to verify they build correctly
+# This ensures all tests (unit and integration) compile with correct API types
+# Note: This Dockerfile only verifies compilation. Run Dockerfile.coverage for full test execution.
+RUN cd controllers && go test -c -o controller.test .
+
+# Success message
+RUN echo "SUCCESS: All tests compiled successfully in container"

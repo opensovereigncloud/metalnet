@@ -41,6 +41,7 @@ const (
 // LoadBalancerReconciler reconciles a LoadBalancer object
 type LoadBalancerReconciler struct {
 	client.Client
+	APIReader client.Reader
 	record.EventRecorder
 	Scheme *runtime.Scheme
 
@@ -72,7 +73,7 @@ func (r *LoadBalancerReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	} else {
 		lb := &metalnetv1alpha1.LoadBalancer{}
 
-		if err := r.Get(ctx, req.NamespacedName, lb); err != nil {
+		if err := r.APIReader.Get(ctx, req.NamespacedName, lb); err != nil {
 			return ctrl.Result{}, client.IgnoreNotFound(err)
 		}
 

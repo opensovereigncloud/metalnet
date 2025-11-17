@@ -39,6 +39,7 @@ const (
 // NetworkReconciler reconciles metalnetv1alpha1.Network.
 type NetworkReconciler struct {
 	client.Client
+	APIReader client.Reader
 	Scheme *runtime.Scheme
 
 	DPDK dpdkclient.Client
@@ -71,7 +72,7 @@ func (r *NetworkReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, nil
 	} else {
 		network := &metalnetv1alpha1.Network{}
-		if err := r.Get(ctx, req.NamespacedName, network); err != nil {
+		if err := r.APIReader.Get(ctx, req.NamespacedName, network); err != nil {
 			return ctrl.Result{}, client.IgnoreNotFound(err)
 		}
 

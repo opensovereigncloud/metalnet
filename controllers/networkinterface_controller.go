@@ -87,6 +87,7 @@ func getNetworkInterfaceIPs(nic *metalnetv1alpha1.NetworkInterface) []netip.Addr
 // NetworkInterfaceReconciler reconciles a NetworkInterface object
 type NetworkInterfaceReconciler struct {
 	client.Client
+	APIReader client.Reader
 	record.EventRecorder
 
 	Scheme *runtime.Scheme
@@ -133,7 +134,7 @@ func (r *NetworkInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	} else {
 		nic := &metalnetv1alpha1.NetworkInterface{}
 
-		if err := r.Get(ctx, req.NamespacedName, nic); err != nil {
+		if err := r.APIReader.Get(ctx, req.NamespacedName, nic); err != nil {
 			return ctrl.Result{}, client.IgnoreNotFound(err)
 		}
 
@@ -1201,18 +1202,11 @@ func (r *NetworkInterfaceReconciler) reconcilePrefixes(ctx context.Context, log 
 		}
 	}
 
-	// Sort prefixes to have deterministic error event output
-	allPrefixes := dpdkPrefixes.UnsortedList()
+	// Use union to ensure ALL prefixes from both sets are processed
+	allPrefixes := dpdkPrefixes.Union(specPrefixes).UnsortedList()
 	sort.Slice(allPrefixes, func(i, j int) bool {
 		return allPrefixes[i].String() < allPrefixes[j].String()
 	})
-
-	if dpdkPrefixes.Len() < specPrefixes.Len() {
-		allPrefixes = specPrefixes.UnsortedList()
-		sort.Slice(allPrefixes, func(i, j int) bool {
-			return allPrefixes[i].String() < allPrefixes[j].String()
-		})
-	}
 	var errs []error
 	for _, prefix := range allPrefixes {
 		if err := func() error {
@@ -1342,18 +1336,11 @@ func (r *NetworkInterfaceReconciler) reconcileLBTargets(ctx context.Context, log
 		specPrefixes.Insert(specPrefix.Prefix)
 	}
 
-	// Sort prefixes to have deterministic error event output
-	allPrefixes := dpdkPrefixes.UnsortedList()
+	// Use union to ensure ALL prefixes from both sets are processed
+	allPrefixes := dpdkPrefixes.Union(specPrefixes).UnsortedList()
 	sort.Slice(allPrefixes, func(i, j int) bool {
 		return allPrefixes[i].String() < allPrefixes[j].String()
 	})
-
-	if dpdkPrefixes.Len() < specPrefixes.Len() {
-		allPrefixes = specPrefixes.UnsortedList()
-		sort.Slice(allPrefixes, func(i, j int) bool {
-			return allPrefixes[i].String() < allPrefixes[j].String()
-		})
-	}
 	var errs []error
 	for _, prefix := range allPrefixes {
 		if err := func() error {

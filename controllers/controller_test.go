@@ -11,6 +11,7 @@ import (
 	dpdkerrors "github.com/ironcore-dev/dpservice/go/dpservice-go/errors"
 	dpdk "github.com/ironcore-dev/dpservice/go/dpservice-go/proto"
 	metalnetv1alpha1 "github.com/ironcore-dev/metalnet/api/v1alpha1"
+	"github.com/ironcore-dev/metalnet/control"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,7 +26,7 @@ import (
 	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 )
 
-var _ = Describe("Network Controller", Label("network"), Ordered, func() {
+var _ = Describe("Network Controller", Label("network", "integration"), Ordered, func() {
 	ctx := SetupContext()
 	ns := SetupTest(ctx)
 
@@ -300,7 +301,7 @@ var _ = Describe("Network Controller", Label("network"), Ordered, func() {
 	})
 })
 
-var _ = Describe("Network Interface and LoadBalancer Controller", func() {
+var _ = Describe("Network Interface and LoadBalancer Controller", Label("integration"), func() {
 	var (
 		loadBalancer     *metalnetv1alpha1.LoadBalancer
 		networkInterface *metalnetv1alpha1.NetworkInterface
@@ -1197,7 +1198,7 @@ var _ = Describe("Network Interface and LoadBalancer Controller", func() {
 var _ = Describe("Negative cases", Label("negative", "integration"), func() {
 	var wrongNetworkInterface *metalnetv1alpha1.NetworkInterface
 	var wrongLoadBalancer *metalnetv1alpha1.LoadBalancer
-	var wfr1 metalnetv1alpha1.FirewallRuleSpec
+	var wfr1 metalnetv1alpha1.FirewallRule
 
 	ctx := SetupContext()
 	ns := SetupTest(ctx)
@@ -1266,7 +1267,7 @@ var _ = Describe("Negative cases", Label("negative", "integration"), func() {
 				LoadBalancerTargets: []metalnetv1alpha1.IPPrefix{metalnetv1alpha1.MustParseIPPrefix("5.5.5.5/32")},
 				// NAT:                 &nat,
 				VirtualIP:     metalnetv1alpha1.MustParseNewIP("5.5.5.5"),
-				FirewallRules: []metalnetv1alpha1.FirewallRuleSpec{},
+				FirewallRules: []metalnetv1alpha1.FirewallRule{},
 			},
 		}
 
@@ -1301,7 +1302,7 @@ var _ = Describe("Negative cases", Label("negative", "integration"), func() {
 		It("should fail", func() {
 			By("unsupported direction string")
 			wfr1.Direction = "XXX"
-			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRuleSpec{wfr1}
+			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRule{wfr1}
 
 			// Create the NetworkInterface k8s object
 			Expect(k8sClient.Create(ctx, wrongNetworkInterface)).To(Succeed())
@@ -1378,7 +1379,7 @@ var _ = Describe("Negative cases", Label("negative", "integration"), func() {
 		It("should fail", func() {
 			By("unsupported action string")
 			wfr1.Action = "XXX"
-			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRuleSpec{wfr1}
+			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRule{wfr1}
 
 			// Create the NetworkInterface k8s object
 			Expect(k8sClient.Create(ctx, wrongNetworkInterface)).To(Succeed())
@@ -1416,7 +1417,7 @@ var _ = Describe("Negative cases", Label("negative", "integration"), func() {
 		It("should fail", func() {
 			By("fw rule src port out of range")
 			wfr1.ProtocolMatch.PortRange.EndSrcPort = 75000
-			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRuleSpec{wfr1}
+			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRule{wfr1}
 
 			// Try to create the NetworkInterface k8s object
 			Expect(k8sClient.Create(ctx, wrongNetworkInterface)).ToNot(Succeed())
@@ -1435,7 +1436,7 @@ var _ = Describe("Negative cases", Label("negative", "integration"), func() {
 			By("fw rule src port is lower than -1")
 			srcPort := int32(-10)
 			wfr1.ProtocolMatch.PortRange.SrcPort = &srcPort
-			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRuleSpec{wfr1}
+			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRule{wfr1}
 
 			// Try to create the NetworkInterface k8s object
 			Expect(k8sClient.Create(ctx, wrongNetworkInterface)).ToNot(Succeed())
@@ -1454,7 +1455,7 @@ var _ = Describe("Negative cases", Label("negative", "integration"), func() {
 			By("fw rule DstPortEnd lower than DstPort ")
 			// wfr1.ProtocolMatch.PortRange.DstPort is 443
 			wfr1.ProtocolMatch.PortRange.EndDstPort = 80
-			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRuleSpec{wfr1}
+			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRule{wfr1}
 
 			// Create the NetworkInterface k8s object
 			Expect(k8sClient.Create(ctx, wrongNetworkInterface)).To(Succeed())
@@ -1501,7 +1502,7 @@ var _ = Describe("Negative cases", Label("negative", "integration"), func() {
 				},
 			}
 
-			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRuleSpec{wfr1}
+			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRule{wfr1}
 
 			// Try to create the NetworkInterface k8s object
 			Expect(k8sClient.Create(ctx, wrongNetworkInterface)).ToNot(Succeed())
@@ -1615,7 +1616,7 @@ var _ = Describe("Negative cases", Label("negative", "integration"), func() {
 
 	When("creating a NetworkInterface with two ipv4 addresses", func() {
 		It("should fail", func() {
-			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRuleSpec{}
+			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRule{}
 			wrongNetworkInterface.Spec.NAT = nil
 			wrongNetworkInterface.Spec.IPFamilies = []corev1.IPFamily{corev1.IPv4Protocol}
 			wrongNetworkInterface.Spec.IPs = []metalnetv1alpha1.IP{
@@ -1651,7 +1652,7 @@ var _ = Describe("Negative cases", Label("negative", "integration"), func() {
 
 	When("creating a NetworkInterface with two ipv6 addresses", func() {
 		It("should fail", func() {
-			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRuleSpec{}
+			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRule{}
 			wrongNetworkInterface.Spec.NAT = nil
 			wrongNetworkInterface.Spec.IPFamilies = []corev1.IPFamily{corev1.IPv6Protocol}
 			wrongNetworkInterface.Spec.IPs = []metalnetv1alpha1.IP{
@@ -1687,7 +1688,7 @@ var _ = Describe("Negative cases", Label("negative", "integration"), func() {
 
 	When("creating a NetworkInterface with only ipv6 address", func() {
 		It("should succeed", func() {
-			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRuleSpec{}
+			wrongNetworkInterface.Spec.FirewallRules = []metalnetv1alpha1.FirewallRule{}
 			wrongNetworkInterface.Spec.NAT = nil
 			wrongNetworkInterface.Spec.IPFamilies = []corev1.IPFamily{corev1.IPv4Protocol, corev1.IPv6Protocol}
 			wrongNetworkInterface.Spec.IPs = []metalnetv1alpha1.IP{
@@ -1908,6 +1909,7 @@ func networkReconcile(ctx context.Context, network metalnetv1alpha1.Network) err
 
 	reconciler := &NetworkReconciler{
 		Client:            k8sClient,
+		APIReader:         k8sClient,
 		DPDK:              dpdkClient,
 		RouteUtil:         metalbondRouteUtil,
 		MetalnetCache:     metalnetCache,
@@ -1915,6 +1917,12 @@ func networkReconcile(ctx context.Context, network metalnetv1alpha1.Network) err
 		DefaultRouterAddr: &defaultRouterAddr,
 		NodeName:          testNode,
 		EnableIPv6Support: enableIPv6Support,
+		ControllerID:      "controller-integration",
+		ControllerHash:    "integration-hash",
+		ReadyNeeded:       1,
+		Control: &control.ReconcileControl{
+			SkipReconcile: false,
+		},
 	}
 
 	// Loop the reconciler until Requeue is false or error occurs
@@ -1979,6 +1987,7 @@ func lbReconcile(ctx context.Context, loadBalancer metalnetv1alpha1.LoadBalancer
 
 	reconciler := &LoadBalancerReconciler{
 		Client:            k8sClient,
+		APIReader:         k8sClient,
 		EventRecorder:     &record.FakeRecorder{},
 		DPDK:              dpdkClient,
 		RouteUtil:         metalbondRouteUtil,
@@ -1986,6 +1995,12 @@ func lbReconcile(ctx context.Context, loadBalancer metalnetv1alpha1.LoadBalancer
 		NodeName:          testNode,
 		PublicVNI:         int(defaultRouterAddr.PublicVNI),
 		EnableIPv6Support: enableIPv6Support,
+		ControllerID:      "controller-integration-lb",
+		ControllerHash:    "integration-hash-lb",
+		ReadyNeeded:       1,
+		Control: &control.ReconcileControl{
+			SkipReconcile: false,
+		},
 	}
 
 	// Loop the reconciler until Requeue is false or error occurs

@@ -351,7 +351,7 @@ var _ = Describe("NetworkInterfaceReconciler - Integration and Edge Cases", func
 					IPs: []metalnetv1alpha1.IP{
 						{Addr: netip.MustParseAddr("192.168.1.216")},
 					},
-					FirewallRules: []metalnetv1alpha1.FirewallRuleSpec{
+					FirewallRules: []metalnetv1alpha1.FirewallRule{
 						{
 							FirewallRuleID: "fw-rule-list-error",
 							Direction:      "ingress",

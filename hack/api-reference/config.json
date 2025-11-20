@@ -1,11 +1,6 @@
 {
-  "hideMemberFields": [
-    "TypeMeta"
-  ],
-  "hideTypePatterns": [
-    "ParseError$",
-    "List$"
-  ],
+  "hideMemberFields": ["TypeMeta"],
+  "hideTypePatterns": ["ParseError$", "List$"],
   "externalPackages": [
     {
       "typeMatchPrefix": "^net/netip",
@@ -25,7 +20,7 @@
     },
     {
       "typeMatchPrefix": "^github\\.com/ironcore-dev/metalnet/api/",
-      "docsURLTemplate": "../{{arrIndex .PackageSegments -2}}/#{{arrIndex .PackageSegments -2}}.api.onmetal.de/{{arrIndex .PackageSegments -1}}.{{.TypeIdentifier}}"
+      "docsURLTemplate": "../{{arrIndex .PackageSegments -2}}/#{{arrIndex .PackageSegments -2}}.api.ironcore.dev/{{arrIndex .PackageSegments -1}}.{{.TypeIdentifier}}"
     }
   ],
   "typeDisplayNamePrefixOverrides": {

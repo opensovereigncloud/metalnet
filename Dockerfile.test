@@ -1,5 +1,5 @@
 # Test Dockerfile - compiles and runs tests with GitLab authentication via .netrc
-FROM golang:1.23 AS builder
+FROM golang:1.24 AS builder
 
 WORKDIR /workspace
 

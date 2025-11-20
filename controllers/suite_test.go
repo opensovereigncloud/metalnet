@@ -60,7 +60,7 @@ var (
 	metalnetDir        string = "/tmp/var/lib/metalnet"
 	netFnsManager      *netfns.Manager
 	conn               *grpc.ClientConn
-	dpdkProtoClient    dpdkproto.DPDKonmetalClient
+	dpdkProtoClient    dpdkproto.DPDKironcoreClient
 	dpdkClient         dpdkclient.Client
 	metalnetCache      *internal.MetalnetCache
 	metalnetMBClient   *metalbond.MetalnetClient
@@ -127,7 +127,7 @@ var _ = BeforeSuite(func() {
 		return
 	}
 
-	dpdkProtoClient = dpdkproto.NewDPDKonmetalClient(conn)
+	dpdkProtoClient = dpdkproto.NewDPDKironcoreClient(conn)
 	dpdkClient = dpdkclient.NewClient(dpdkProtoClient)
 
 	_, err = dpdkClient.Initialize(context.TODO())

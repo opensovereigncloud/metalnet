@@ -85,8 +85,6 @@ github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
 github.com/ironcore-dev/controller-utils v0.10.0 h1:nG+TsVMtxt6PLJrlLr2LePYd8cOxud+z76rhuy5gCOs=
 github.com/ironcore-dev/controller-utils v0.10.0/go.mod h1:ZGv1A78M0X2G20ex/7F5BbyHoG0+7U2IWfqvzHh8T+4=
-github.com/ironcore-dev/dpservice/go/dpservice-go v0.3.17 h1:DCF6BH7EXqQ2kSoouUBsIpP5z0IZwa3o+l3pCYPDxY8=
-github.com/ironcore-dev/dpservice/go/dpservice-go v0.3.17/go.mod h1:d5x2tPmu1yqrVHac/FvL+MFOeEb3IT4gn7Bj4+Xkj8M=
 github.com/ironcore-dev/ironcore v0.2.4 h1:i/RqiMIdzaptuDR6EKSX9hbeolj7AfTuT+4v1ZC4Jeg=
 github.com/ironcore-dev/ironcore v0.2.4/go.mod h1:idYH/uyjxsIx8k3PFfXNtwfEpF9bBzBNe0aJFpIZpxs=
 github.com/jaypipes/ghw v0.19.1 h1:Lhybk6aadgEJqIxeS0h07UOL/EgMGIdxbAy6V8J7RgY=
@@ -128,8 +126,6 @@ github.com/onsi/ginkgo/v2 v2.27.1 h1:0LJC8MpUSQnfnp4n/3W3GdlmJP3ENGF0ZPzjQGLPP7s
 github.com/onsi/ginkgo/v2 v2.27.1/go.mod h1:wmy3vCqiBjirARfVhAqFpYt8uvX0yaFe+GudAqqcCqA=
 github.com/onsi/gomega v1.38.2 h1:eZCjf2xjZAqe+LeWvKb5weQ+NcPwX84kqJ0cZNxok2A=
 github.com/onsi/gomega v1.38.2/go.mod h1:W2MJcYxRGV63b418Ai34Ud0hEdTVXq9NW9+Sx6uXf3k=
-github.com/opensovereigncloud/metalbond v0.3.6-0.20250318092513-800a99853ed0 h1:aE4a4qLNk3yTzhlDhioInFyGrX7yW5F1cTk4eaRYrdE=
-github.com/opensovereigncloud/metalbond v0.3.6-0.20250318092513-800a99853ed0/go.mod h1:fCV7JZIvQUcwq05la4p07+4E7iUOPS1fq61h0S9kbK4=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
@@ -187,6 +183,10 @@ github.com/yuin/goldmark v1.1.27/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9de
 github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yusufpapurcu/wmi v1.2.4 h1:zFUKzehAFReQwLys1b/iSMl+JQGSCSjtVqQn9bBrPo0=
 github.com/yusufpapurcu/wmi v1.2.4/go.mod h1:SBZ9tNy3G9/m5Oi98Zks0QjeHVDvuK0qfxQmPyzfmi0=
+gitlab.devops.telekom.de/cas-devs/osc/upstream/ironcore-dev/dpservice/go/dpservice-go v0.3.18-0.20251121132829-23c9bfd843ae h1:0TPL0UqehZmEpFxoyQFdnr5htw9d9obWuuDlHxLBx8s=
+gitlab.devops.telekom.de/cas-devs/osc/upstream/ironcore-dev/dpservice/go/dpservice-go v0.3.18-0.20251121132829-23c9bfd843ae/go.mod h1:d5x2tPmu1yqrVHac/FvL+MFOeEb3IT4gn7Bj4+Xkj8M=
+gitlab.devops.telekom.de/cas-devs/osc/upstream/ironcore-dev/metalbond v1.0.6 h1:fV5IZ2EcWS17/nsXdNIfnfjXlTxKVQRovkxPpfmvqXQ=
+gitlab.devops.telekom.de/cas-devs/osc/upstream/ironcore-dev/metalbond v1.0.6/go.mod h1:fCV7JZIvQUcwq05la4p07+4E7iUOPS1fq61h0S9kbK4=
 go.opentelemetry.io/auto/sdk v1.1.0 h1:cH53jehLUN6UFLY71z+NDOiNJqDdPRaXzTel0sJySYA=
 go.opentelemetry.io/auto/sdk v1.1.0/go.mod h1:3wSPjt5PWp2RhlCcmmOial7AvC4DQqZb7a7wCow3W8A=
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.61.0 h1:F7Jx+6hwnZ41NSFTO5q4LYDtJRXBf2PD0rNBkeB/lus=
@@ -209,10 +209,6 @@ go.opentelemetry.io/proto/otlp v1.7.0 h1:jX1VolD6nHuFzOYso2E73H85i92Mv8JQYk0K9vz
 go.opentelemetry.io/proto/otlp v1.7.0/go.mod h1:fSKjH6YJ7HDlwzltzyMj036AJ3ejJLCgCSHGj4efDDo=
 go.uber.org/automaxprocs v1.6.0 h1:O3y2/QNTOdbF+e/dpXNNW7Rx2hZ4sTIPyybbxyNqTUs=
 go.uber.org/automaxprocs v1.6.0/go.mod h1:ifeIMSnPZuznNm6jmdzmU3/bfk01Fe2fotchwEFJ8r8=
-gitlab.devops.telekom.de/cas-devs/osc/upstream/onmetal/metalbond v1.0.2 h1:PIbIijtcRQDkaa47rd7by3S6rAoaBU/WGX+M68VE9mg=
-gitlab.devops.telekom.de/cas-devs/osc/upstream/onmetal/metalbond v1.0.2/go.mod h1:fCV7JZIvQUcwq05la4p07+4E7iUOPS1fq61h0S9kbK4=
-gitlab.devops.telekom.de/cas-devs/osc/upstream/onmetal/net-dpservice/go/dpservice-go v0.0.0-20250314002835-addf5d012fbf h1:B0bUf9oBsvD0KUDCiWeF/jBYhoYt9nA95w8tN83wByg=
-gitlab.devops.telekom.de/cas-devs/osc/upstream/onmetal/net-dpservice/go/dpservice-go v0.0.0-20250314002835-addf5d012fbf/go.mod h1:d5x2tPmu1yqrVHac/FvL+MFOeEb3IT4gn7Bj4+Xkj8M=
 go.uber.org/goleak v1.3.0 h1:2K3zAYmnTNqV73imy9J1T3WC+gmCePx2hEGkimedGto=
 go.uber.org/goleak v1.3.0/go.mod h1:CoHD4mav9JJNrW/WLlf7HGZPjdw8EucARQHekz1X6bE=
 go.uber.org/mock v0.5.2 h1:LbtPTcP8A5k9WPXj54PPPbjcI4Y6lhyOZXn+VS7wNko=

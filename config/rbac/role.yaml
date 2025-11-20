@@ -2,7 +2,6 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  creationTimestamp: null
   name: manager-role
 rules:
 - apiGroups:
@@ -12,6 +11,14 @@ rules:
   verbs:
   - create
   - patch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
 - apiGroups:
   - networking.metalnet.ironcore.dev
   resources:
@@ -41,5 +48,12 @@ rules:
   - networks/status
   verbs:
   - get
+  - patch
+  - update
+- apiGroups:
+  - networking.metalnet.ironcore.dev
+  resources:
+  - networks/finalizers
+  verbs:
   - patch
   - update

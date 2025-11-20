@@ -15,9 +15,9 @@ type DPDKClientMock struct {
 	mu sync.RWMutex
 
 	// Stateful tracking of created resources
-	createdInterfaces   map[string]*dpdk.Interface   // key: InterfaceId
-	createdVirtualIPs   map[string]*dpdk.VirtualIP   // key: InterfaceId
-	createdNATs         map[string]*dpdk.Nat         // key: InterfaceId
+	createdInterfaces    map[string]*dpdk.Interface    // key: InterfaceId
+	createdVirtualIPs    map[string]*dpdk.VirtualIP    // key: InterfaceId
+	createdNATs          map[string]*dpdk.Nat          // key: InterfaceId
 	createdLoadBalancers map[string]*dpdk.LoadBalancer // key: LoadBalancerId
 
 	// Call tracking

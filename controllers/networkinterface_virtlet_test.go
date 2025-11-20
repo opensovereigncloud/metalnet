@@ -9,23 +9,25 @@ import (
 
 	metalnetv1alpha1 "github.com/ironcore-dev/metalnet/api/v1alpha1"
 	"github.com/ironcore-dev/metalnet/controllers/mocks"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("NetworkInterfaceReconciler Virtlet Machine UID", func() {
 	var (
-		ctx            context.Context
-		ns             *corev1.Namespace
-		network        *metalnetv1alpha1.Network
-		reconciler     *NetworkInterfaceReconciler
-		dpdkMock       *mocks.DPDKClientMock
-		routeUtilMock  *mocks.RouteUtilMock
-		netFnsMock     *mocks.NetFnsManagerMock
-		virtletTestDir string
+		ctx                    context.Context
+		ns                     *corev1.Namespace
+		network                *metalnetv1alpha1.Network
+		reconciler             *NetworkInterfaceReconciler
+		dpdkMock               *mocks.DPDKClientMock
+		routeUtilMock          *mocks.RouteUtilMock
+		netFnsMock             *mocks.NetFnsManagerMock
+		libvirtProviderTestDir string
 	)
 
 	BeforeEach(func() {
@@ -34,11 +36,11 @@ var _ = Describe("NetworkInterfaceReconciler Virtlet Machine UID", func() {
 
 		// Create temp directory for virtlet machine UIDs
 		var err error
-		virtletTestDir, err = os.MkdirTemp("", "virtlet-test-*")
+		libvirtProviderTestDir, err = os.MkdirTemp("", "libvirt-provider-test-*")
 		Expect(err).NotTo(HaveOccurred())
 
 		// Set the path in the reconciler
-		reconciler.VirtletMachineUIDPath = virtletTestDir
+		reconciler.LibvirtMachineUIDPath = libvirtProviderTestDir
 	})
 
 	AfterEach(func() {
@@ -46,8 +48,8 @@ var _ = Describe("NetworkInterfaceReconciler Virtlet Machine UID", func() {
 		cleanupNetworkInterfaceTest(ctx, ns, dpdkMock, routeUtilMock, netFnsMock)
 
 		// Clean up temp directory
-		if virtletTestDir != "" {
-			os.RemoveAll(virtletTestDir)
+		if libvirtProviderTestDir != "" {
+			os.RemoveAll(libvirtProviderTestDir)
 		}
 	})
 
@@ -56,18 +58,18 @@ var _ = Describe("NetworkInterfaceReconciler Virtlet Machine UID", func() {
 			machineUID := "test-machine-123"
 
 			// Create machine UID directory
-			machineDir := filepath.Join(virtletTestDir, machineUID)
-			Expect(os.Mkdir(machineDir, 0755)).To(Succeed())
+			machineDir := filepath.Join(libvirtProviderTestDir, machineUID)
+			Expect(os.Mkdir(machineDir, 0o755)).To(Succeed())
 
 			// Create NIC with machine UID annotation and deletion marks
 			nic := &metalnetv1alpha1.NetworkInterface{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-nic-virtlet-exists",
+					Name:      "test-nic-libvirt-provider-exists",
 					Namespace: ns.Name,
 					Annotations: map[string]string{
-						"virtlet.onmetal.de/machine-uid":                      machineUID,
-						"metalnet.onmetal.de/ok-to-delete":                    "true",
-						"metalnet.onmetal.de/deletion-grace-period-timestamp": time.Now().Add(24 * time.Hour).Format(time.RFC3339),
+						libvirtMachineUIDAnnotation:           machineUID,
+						metalnetDeletionMarkAnnotation:        "true",
+						metalnetDeletionGracePeriodAnnotation: time.Now().Add(24 * time.Hour).Format(time.RFC3339),
 					},
 				},
 				Spec: metalnetv1alpha1.NetworkInterfaceSpec{
@@ -86,9 +88,9 @@ var _ = Describe("NetworkInterfaceReconciler Virtlet Machine UID", func() {
 
 			// Verify deletion marks were removed
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nic.Name, Namespace: nic.Namespace}, nic)).To(Succeed())
-			Expect(nic.Annotations).NotTo(HaveKey("metalnet.onmetal.de/ok-to-delete"))
-			Expect(nic.Annotations).NotTo(HaveKey("metalnet.onmetal.de/deletion-grace-period-timestamp"))
-			Expect(nic.Annotations).To(HaveKey("virtlet.onmetal.de/machine-uid")) // Original annotation should remain
+			Expect(nic.Annotations).NotTo(HaveKey(metalnetDeletionMarkAnnotation))
+			Expect(nic.Annotations).NotTo(HaveKey(metalnetDeletionGracePeriodAnnotation))
+			Expect(nic.Annotations).To(HaveKey(libvirtMachineUIDAnnotation)) // Original annotation should remain
 		})
 	})
 
@@ -104,7 +106,7 @@ var _ = Describe("NetworkInterfaceReconciler Virtlet Machine UID", func() {
 					Name:      "test-nic-virtlet-missing",
 					Namespace: ns.Name,
 					Annotations: map[string]string{
-						"virtlet.onmetal.de/machine-uid": machineUID,
+						libvirtMachineUIDAnnotation: machineUID,
 					},
 				},
 				Spec: metalnetv1alpha1.NetworkInterfaceSpec{
@@ -123,12 +125,12 @@ var _ = Describe("NetworkInterfaceReconciler Virtlet Machine UID", func() {
 
 			// Verify deletion marks were added
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nic.Name, Namespace: nic.Namespace}, nic)).To(Succeed())
-			Expect(nic.Annotations).To(HaveKey("metalnet.onmetal.de/ok-to-delete"))
-			Expect(nic.Annotations["metalnet.onmetal.de/ok-to-delete"]).To(Equal("true"))
-			Expect(nic.Annotations).To(HaveKey("metalnet.onmetal.de/deletion-grace-period-timestamp"))
+			Expect(nic.Annotations).To(HaveKey(metalnetDeletionMarkAnnotation))
+			Expect(nic.Annotations[metalnetDeletionMarkAnnotation]).To(Equal("true"))
+			Expect(nic.Annotations).To(HaveKey(metalnetDeletionGracePeriodAnnotation))
 
 			// Verify grace period is ~24 hours from now
-			gracePeriodStr := nic.Annotations["metalnet.onmetal.de/deletion-grace-period-timestamp"]
+			gracePeriodStr := nic.Annotations[metalnetDeletionGracePeriodAnnotation]
 			gracePeriod, err := time.Parse(time.RFC3339, gracePeriodStr)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(gracePeriod).To(BeTemporally("~", time.Now().Add(24*time.Hour), 5*time.Second))
@@ -146,9 +148,9 @@ var _ = Describe("NetworkInterfaceReconciler Virtlet Machine UID", func() {
 					Name:      "test-nic-virtlet-expired",
 					Namespace: ns.Name,
 					Annotations: map[string]string{
-						"virtlet.onmetal.de/machine-uid":                      machineUID,
-						"metalnet.onmetal.de/ok-to-delete":                    "true",
-						"metalnet.onmetal.de/deletion-grace-period-timestamp": pastTime.Format(time.RFC3339),
+						libvirtMachineUIDAnnotation:           machineUID,
+						metalnetDeletionMarkAnnotation:        "true",
+						metalnetDeletionGracePeriodAnnotation: pastTime.Format(time.RFC3339),
 					},
 				},
 				Spec: metalnetv1alpha1.NetworkInterfaceSpec{
@@ -183,9 +185,9 @@ var _ = Describe("NetworkInterfaceReconciler Virtlet Machine UID", func() {
 					Name:      "test-nic-virtlet-not-expired",
 					Namespace: ns.Name,
 					Annotations: map[string]string{
-						"virtlet.onmetal.de/machine-uid":                      machineUID,
-						"metalnet.onmetal.de/ok-to-delete":                    "true",
-						"metalnet.onmetal.de/deletion-grace-period-timestamp": futureTime.Format(time.RFC3339),
+						libvirtMachineUIDAnnotation:           machineUID,
+						metalnetDeletionMarkAnnotation:        "true",
+						metalnetDeletionGracePeriodAnnotation: futureTime.Format(time.RFC3339),
 					},
 				},
 				Spec: metalnetv1alpha1.NetworkInterfaceSpec{
@@ -212,7 +214,7 @@ var _ = Describe("NetworkInterfaceReconciler Virtlet Machine UID", func() {
 			machineUID := "test-machine-error"
 
 			// Set invalid path to trigger read error
-			reconciler.VirtletMachineUIDPath = "/nonexistent/path/that/does/not/exist"
+			reconciler.LibvirtMachineUIDPath = "/nonexistent/path/that/does/not/exist"
 
 			// Create NIC with machine UID annotation
 			nic := &metalnetv1alpha1.NetworkInterface{
@@ -220,7 +222,7 @@ var _ = Describe("NetworkInterfaceReconciler Virtlet Machine UID", func() {
 					Name:      "test-nic-virtlet-error",
 					Namespace: ns.Name,
 					Annotations: map[string]string{
-						"virtlet.onmetal.de/machine-uid": machineUID,
+						libvirtMachineUIDAnnotation: machineUID,
 					},
 				},
 				Spec: metalnetv1alpha1.NetworkInterfaceSpec{
@@ -240,7 +242,7 @@ var _ = Describe("NetworkInterfaceReconciler Virtlet Machine UID", func() {
 			Expect(err.Error()).To(ContainSubstring("error reading virtlet directory"))
 
 			// Restore valid path for cleanup
-			reconciler.VirtletMachineUIDPath = virtletTestDir
+			reconciler.LibvirtMachineUIDPath = libvirtProviderTestDir
 		})
 
 		It("should handle invalid grace period timestamp", func() {
@@ -254,9 +256,9 @@ var _ = Describe("NetworkInterfaceReconciler Virtlet Machine UID", func() {
 					Name:      "test-nic-virtlet-invalid-ts",
 					Namespace: ns.Name,
 					Annotations: map[string]string{
-						"virtlet.onmetal.de/machine-uid":                      machineUID,
-						"metalnet.onmetal.de/ok-to-delete":                    "true",
-						"metalnet.onmetal.de/deletion-grace-period-timestamp": "invalid-timestamp-format",
+						libvirtMachineUIDAnnotation:           machineUID,
+						metalnetDeletionMarkAnnotation:        "true",
+						metalnetDeletionGracePeriodAnnotation: "invalid-timestamp-format",
 					},
 				},
 				Spec: metalnetv1alpha1.NetworkInterfaceSpec{
@@ -282,12 +284,12 @@ var _ = Describe("NetworkInterfaceReconciler Virtlet Machine UID", func() {
 			machineUID := "test-machine-dir-only"
 
 			// Create a FILE with the machine UID name (not a directory)
-			machineFile := filepath.Join(virtletTestDir, machineUID)
-			Expect(os.WriteFile(machineFile, []byte("test"), 0644)).To(Succeed())
+			machineFile := filepath.Join(libvirtProviderTestDir, machineUID)
+			Expect(os.WriteFile(machineFile, []byte("test"), 0o644)).To(Succeed())
 
 			// Also create an unrelated directory
-			unrelatedDir := filepath.Join(virtletTestDir, "other-machine")
-			Expect(os.Mkdir(unrelatedDir, 0755)).To(Succeed())
+			unrelatedDir := filepath.Join(libvirtProviderTestDir, "other-machine")
+			Expect(os.Mkdir(unrelatedDir, 0o755)).To(Succeed())
 
 			// Create NIC - should NOT find the machine UID (file doesn't count)
 			nic := &metalnetv1alpha1.NetworkInterface{
@@ -295,7 +297,7 @@ var _ = Describe("NetworkInterfaceReconciler Virtlet Machine UID", func() {
 					Name:      "test-nic-virtlet-file-not-dir",
 					Namespace: ns.Name,
 					Annotations: map[string]string{
-						"virtlet.onmetal.de/machine-uid": machineUID,
+						libvirtMachineUIDAnnotation: machineUID,
 					},
 				},
 				Spec: metalnetv1alpha1.NetworkInterfaceSpec{
@@ -314,7 +316,7 @@ var _ = Describe("NetworkInterfaceReconciler Virtlet Machine UID", func() {
 
 			// Verify deletion marks were added
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nic.Name, Namespace: nic.Namespace}, nic)).To(Succeed())
-			Expect(nic.Annotations).To(HaveKey("metalnet.onmetal.de/ok-to-delete"))
+			Expect(nic.Annotations).To(HaveKey(metalnetDeletionMarkAnnotation))
 		})
 	})
 })

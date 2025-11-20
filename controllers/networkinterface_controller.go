@@ -362,7 +362,7 @@ func (r *NetworkInterfaceReconciler) removeLBTargetRouteIfExists(ctx context.Con
 
 func (r *NetworkInterfaceReconciler) fillTCPUDPFilter(ctx context.Context, specFirewallRule *metalnetv1alpha1.FirewallRule, protocolFilter *dpdkproto.ProtocolFilter) error {
 	var SrcPortLower, DstPortLower, SrcPortUpper, DstPortUpper int32
-	if specFirewallRule.ProtocolMatch.PortRange != nil {
+	if specFirewallRule.ProtocolMatch != nil && specFirewallRule.ProtocolMatch.PortRange != nil {
 		if specFirewallRule.ProtocolMatch.PortRange.SrcPort != nil {
 			SrcPortLower = *specFirewallRule.ProtocolMatch.PortRange.SrcPort
 			SrcPortUpper = specFirewallRule.ProtocolMatch.PortRange.EndSrcPort
@@ -382,6 +382,9 @@ func (r *NetworkInterfaceReconciler) fillTCPUDPFilter(ctx context.Context, specF
 		SrcPortUpper = -1
 		DstPortLower = -1
 		DstPortUpper = -1
+	}
+	if specFirewallRule.ProtocolMatch == nil || specFirewallRule.ProtocolMatch.ProtocolType == nil {
+		return nil
 	}
 	switch *specFirewallRule.ProtocolMatch.ProtocolType {
 	case metalnetv1alpha1.FirewallRuleProtocolTypeTCP:
@@ -410,34 +413,39 @@ func (r *NetworkInterfaceReconciler) createDPDKFwRule(ctx context.Context, nic *
 		destPrefix     metalnetv1alpha1.IPPrefix
 	)
 
-	switch *specFirewallRule.ProtocolMatch.ProtocolType {
-	case metalnetv1alpha1.FirewallRuleProtocolTypeICMP:
-		var icmpType, icmpCode int32
-		if specFirewallRule.ProtocolMatch.ICMP != nil {
-			if specFirewallRule.ProtocolMatch.ICMP.IcmpType != nil {
-				icmpType = *specFirewallRule.ProtocolMatch.ICMP.IcmpType
-			} else {
-				icmpType = -1
-			}
-			if specFirewallRule.ProtocolMatch.ICMP.IcmpCode != nil {
-				icmpCode = *specFirewallRule.ProtocolMatch.ICMP.IcmpCode
+	// Handle optional ProtocolMatch and ProtocolType - if nil, use default empty filter
+	if specFirewallRule.ProtocolMatch == nil || specFirewallRule.ProtocolMatch.ProtocolType == nil {
+		protocolFilter.Filter = nil
+	} else {
+		switch *specFirewallRule.ProtocolMatch.ProtocolType {
+		case metalnetv1alpha1.FirewallRuleProtocolTypeICMP:
+			var icmpType, icmpCode int32
+			if specFirewallRule.ProtocolMatch.ICMP != nil {
+				if specFirewallRule.ProtocolMatch.ICMP.IcmpType != nil {
+					icmpType = *specFirewallRule.ProtocolMatch.ICMP.IcmpType
+				} else {
+					icmpType = -1
+				}
+				if specFirewallRule.ProtocolMatch.ICMP.IcmpCode != nil {
+					icmpCode = *specFirewallRule.ProtocolMatch.ICMP.IcmpCode
+				} else {
+					icmpCode = -1
+				}
 			} else {
 				icmpCode = -1
+				icmpType = -1
 			}
-		} else {
-			icmpCode = -1
-			icmpType = -1
+			protocolFilter.Filter = &dpdkproto.ProtocolFilter_Icmp{Icmp: &dpdkproto.IcmpFilter{
+				IcmpType: icmpType,
+				IcmpCode: icmpCode,
+			}}
+		case metalnetv1alpha1.FirewallRuleProtocolTypeUDP, metalnetv1alpha1.FirewallRuleProtocolTypeTCP:
+			if err := r.fillTCPUDPFilter(ctx, specFirewallRule, &protocolFilter); err != nil {
+				return fmt.Errorf("error filling TCP/UDP filter: %w", err)
+			}
+		default:
+			protocolFilter.Filter = nil
 		}
-		protocolFilter.Filter = &dpdkproto.ProtocolFilter_Icmp{Icmp: &dpdkproto.IcmpFilter{
-			IcmpType: icmpType,
-			IcmpCode: icmpCode,
-		}}
-	case metalnetv1alpha1.FirewallRuleProtocolTypeUDP, metalnetv1alpha1.FirewallRuleProtocolTypeTCP:
-		if err := r.fillTCPUDPFilter(ctx, specFirewallRule, &protocolFilter); err != nil {
-			return fmt.Errorf("error filling TCP/UDP filter: %w", err)
-		}
-	default:
-		protocolFilter.Filter = nil
 	}
 
 	if specFirewallRule.Priority != nil {
@@ -1234,7 +1242,7 @@ func (r *NetworkInterfaceReconciler) reconcilePrefixes(ctx context.Context, log 
 				log.V(1).Info("Create prefix")
 
 				log.V(1).Info("Creating dpdk prefix")
-				var underlayRoute = &netip.Addr{}
+				underlayRoute := &netip.Addr{}
 				underlayRoute = nil
 				for _, pfx := range nic.Status.Reservation.Prefixes {
 					if pfx.Overlay == prefix.String() {
@@ -1368,7 +1376,7 @@ func (r *NetworkInterfaceReconciler) reconcileLBTargets(ctx context.Context, log
 				log.V(1).Info("Create lb target")
 
 				log.V(1).Info("Creating dpdk lb target")
-				var underlayRoute = &netip.Addr{}
+				underlayRoute := &netip.Addr{}
 				underlayRoute = nil
 				for _, lbt := range nic.Status.Reservation.LoadBalancerTargets {
 					if lbt.Overlay == prefix.String() {
@@ -1582,8 +1590,8 @@ func (r *NetworkInterfaceReconciler) applyInterface(ctx context.Context, log log
 				IPv4:          &primaryIpv4,
 				IPv6:          &primaryIpv6,
 				UnderlayRoute: &underlayRoute,
-				HostName: hostName,
-				Metering: meteringParams,
+				HostName:      hostName,
+				Metering:      meteringParams,
 			},
 		})
 		if err != nil {
@@ -1660,7 +1668,8 @@ func (r *NetworkInterfaceReconciler) processTAPDeviceString(device string) (stri
 }
 
 func (r *NetworkInterfaceReconciler) convertToDPDKDevice(addr ghw.PCIAddress) (string, error) {
-	if strings.Contains(addr.Device, "dtap") {
+	// Handle all tap devices (both dtap and generic tap)
+	if strings.Contains(addr.Device, "tap") {
 		return r.processTAPDeviceString(addr.Device)
 	}
 	pciFunction, err := strconv.ParseUint(addr.Function, 8, 64)
@@ -2400,15 +2409,12 @@ func (r *NetworkInterfaceReconciler) finalizer() string {
 func (r *NetworkInterfaceReconciler) removeFinalizer(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, finalizer string) (bool, error) {
 	if controllerutil.ContainsFinalizer(nic, finalizer) {
 		log.V(1).Info(fmt.Sprintf("finalizer '%s' present, cleaning up", finalizer))
-		removed := controllerutil.RemoveFinalizer(nic, finalizer)
-		if removed {
-			if err := r.Update(ctx, nic); err != nil {
-				return false, fmt.Errorf("error removing '%s' finalizer: %w", finalizer, err)
-			}
-			return true, nil
-		} else {
-			return false, nil
+		// Use PatchRemoveFinalizer instead of Update to avoid race conditions in HA setups
+		// Patch is safe for concurrent updates, Update would overwrite the entire object
+		if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, nic, finalizer); err != nil {
+			return false, fmt.Errorf("error removing '%s' finalizer: %w", finalizer, err)
 		}
+		return true, nil
 	}
 
 	return false, nil

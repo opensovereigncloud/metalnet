@@ -31,6 +31,9 @@ type LoadBalancerSpec struct {
 
 // LoadBalancerStatus defines the observed state of LoadBalancer
 type LoadBalancerStatus struct {
+	// Common status fields
+	CommonStatus `json:",inline"`
+
 	// Reservation contains the detailed reservation information
 	Reservation *LoadBalancerReservation `json:"reservation,omitempty"`
 

@@ -5,24 +5,22 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"crypto/sha256"
+	"crypto/tls"
 	"errors"
 	goflag "flag"
 	"fmt"
-	"github.com/ironcore-dev/metalnet/health"
-	"github.com/ironcore-dev/metalnet/ipv6manager"
 	"math/rand"
 	"net"
 	"net/http"
 	"net/netip"
 	"os"
 	"path/filepath"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/hashicorp/go-version"
 	"github.com/jaypipes/ghw"
 	log "github.com/sirupsen/logrus"
 	flag "github.com/spf13/pflag"
@@ -37,7 +35,9 @@ import (
 	metalnetclient "github.com/ironcore-dev/metalnet/client"
 	"github.com/ironcore-dev/metalnet/control"
 	"github.com/ironcore-dev/metalnet/controllers"
+	"github.com/ironcore-dev/metalnet/health"
 	"github.com/ironcore-dev/metalnet/internal"
+	"github.com/ironcore-dev/metalnet/ipv6manager"
 	"github.com/ironcore-dev/metalnet/metalbond"
 	"github.com/ironcore-dev/metalnet/netfns"
 	"github.com/ironcore-dev/metalnet/sysfs"
@@ -47,15 +47,11 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-
-	"github.com/hashicorp/go-version"
-	networkingv1alpha1 "github.com/ironcore-dev/metalnet/api/v1alpha1"
-	"github.com/ironcore-dev/metalnet/controllers"
-	//+kubebuilder:scaffold:imports
 )
 
 const dpserviceIPv6SupportVersionStr = "v0.3.1"
@@ -397,7 +393,7 @@ func main() {
 		}
 	}
 
-	//TODO make HA!?
+	// TODO make HA!?
 	claimStore, err := netfns.NewFileClaimStore(filepath.Join(metalnetDir, "netfns", "claims"), tapDeviceMod)
 	if err != nil {
 		setupLog.Error(err, "unable to create claim store")

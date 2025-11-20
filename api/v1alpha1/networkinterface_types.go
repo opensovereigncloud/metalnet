@@ -46,6 +46,9 @@ type NetworkInterfaceSpec struct {
 
 // NetworkInterfaceStatus defines the observed state of NetworkInterface
 type NetworkInterfaceStatus struct {
+	// Common status fields
+	CommonStatus `json:",inline"`
+
 	PCIAddress *PCIAddress `json:"pciAddress,omitempty"`
 
 	TAPDevice *TAPDevice `json:"tapDevice,omitempty"`
@@ -205,6 +208,7 @@ type MeteringParameters struct {
 	TotalRate  *uint64 `json:"totalRate,omitempty"`
 	PublicRate *uint64 `json:"publicRate,omitempty"`
 }
+
 // NetworkInterfaceReservation defines the network interface reservation details
 type NetworkInterfaceReservation struct {
 	// VirtualIP is the reserved virtual IP

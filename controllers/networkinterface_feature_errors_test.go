@@ -11,11 +11,13 @@ import (
 	dpdk "github.com/ironcore-dev/dpservice/go/dpservice-go/api"
 	metalnetv1alpha1 "github.com/ironcore-dev/metalnet/api/v1alpha1"
 	"github.com/ironcore-dev/metalnet/controllers/mocks"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("NetworkInterfaceReconciler - Feature Error Paths", func() {
@@ -142,7 +144,6 @@ var _ = Describe("NetworkInterfaceReconciler - Feature Error Paths", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("LB target route announcement failed"))
 		})
-
 	})
 
 	Context("Route Announcement Error Scenarios", func() {
@@ -367,7 +368,7 @@ var _ = Describe("NetworkInterfaceReconciler - Feature Error Paths", func() {
 					IPs: []metalnetv1alpha1.IP{
 						{Addr: netip.MustParseAddr("192.168.1.205")},
 					},
-					FirewallRules: []metalnetv1alpha1.FirewallRuleSpec{
+					FirewallRules: []metalnetv1alpha1.FirewallRule{
 						{
 							FirewallRuleID: "test-fw-rule-1",
 							Direction:      "ingress",

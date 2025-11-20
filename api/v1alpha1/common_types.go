@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 )
@@ -103,7 +104,7 @@ type CommonStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
 	// State is the aggregated state of the resource
-	// +required
+	// +optional
 	State string `json:"state,omitempty"`
 
 	// LastUpdateTime is when the overall status was last updated
@@ -122,7 +123,7 @@ const (
 // mergeControllerStatus updates a CommonStatus with a new controller status
 // using a merge strategy that preserves entries from other controllers while
 // avoiding unnecessary updates that would change the resourceVersion
-func mergeControllerStatus(status *CommonStatus, controllerID string, state string, message string, generation int64, controllerHash string, conditions ...metav1.Condition) {
+func mergeControllerStatus(status *CommonStatus, controllerID, state, message string, generation int64, controllerHash string, conditions ...metav1.Condition) {
 	// Check if we have an existing entry for this controller
 	var existingStatus *ControllerStatus
 	var existingIndex int = -1
@@ -210,13 +211,13 @@ func mergeControllerStatus(status *CommonStatus, controllerID string, state stri
 
 // SetNetworkInterfaceControllerStatus sets or updates the status from a specific controller instance
 // using a merge strategy that preserves entries from other controllers
-func SetNetworkInterfaceControllerStatus(status *NetworkInterfaceStatus, controllerID string, state string, message string, generation int64, controllerHash string, conditions ...metav1.Condition) {
+func SetNetworkInterfaceControllerStatus(status *NetworkInterfaceStatus, controllerID, state, message string, generation int64, controllerHash string, conditions ...metav1.Condition) {
 	mergeControllerStatus(&status.CommonStatus, controllerID, state, message, generation, controllerHash, conditions...)
 }
 
 // SetLoadBalancerControllerStatus sets or updates the status from a specific controller instance
 // using a merge strategy that preserves entries from other controllers
-func SetLoadBalancerControllerStatus(status *LoadBalancerStatus, controllerID string, state string, message string, generation int64, controllerHash string, conditions ...metav1.Condition) {
+func SetLoadBalancerControllerStatus(status *LoadBalancerStatus, controllerID, state, message string, generation int64, controllerHash string, conditions ...metav1.Condition) {
 	mergeControllerStatus(&status.CommonStatus, controllerID, state, message, generation, controllerHash, conditions...)
 }
 
@@ -692,7 +693,7 @@ func SortIPFamilies(families []corev1.IPFamily) {
 }
 
 // SortFirewallRuleSpecs sorts a slice of FirewallRuleSpec objects by FirewallRuleID
-func SortFirewallRuleSpecs(rules []FirewallRuleSpec) {
+func SortFirewallRuleSpecs(rules []FirewallRule) {
 	if len(rules) <= 1 {
 		return
 	}

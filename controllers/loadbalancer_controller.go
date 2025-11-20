@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -296,7 +295,7 @@ func (r *LoadBalancerReconciler) reconcile(ctx context.Context, log logr.Logger,
 	}
 	if modified {
 		log.V(1).Info("Added finalizer")
-		return ctrl.Result{RequeueAfter: time.Nanosecond}, nil
+		return ctrl.Result{Requeue: true}, nil
 	}
 	log.V(1).Info("Ensured finalizer")
 
@@ -629,15 +628,12 @@ func (r *LoadBalancerReconciler) finalizer() string {
 func (r *LoadBalancerReconciler) removeFinalizer(ctx context.Context, log logr.Logger, lb *metalnetv1alpha1.LoadBalancer, finalizer string) (bool, error) {
 	if controllerutil.ContainsFinalizer(lb, finalizer) {
 		log.V(1).Info(fmt.Sprintf("finalizer '%s' present, cleaning up", finalizer))
-		removed := controllerutil.RemoveFinalizer(lb, finalizer)
-		if removed {
-			if err := r.Update(ctx, lb); err != nil {
-				return false, fmt.Errorf("error removing '%s' finalizer: %w", finalizer, err)
-			}
-			return true, nil
-		} else {
-			return false, nil
+		// Use PatchRemoveFinalizer instead of Update to avoid race conditions in HA setups
+		// Patch is safe for concurrent updates, Update would overwrite the entire object
+		if err := clientutils.PatchRemoveFinalizer(ctx, r.Client, lb, finalizer); err != nil {
+			return false, fmt.Errorf("error removing '%s' finalizer: %w", finalizer, err)
 		}
+		return true, nil
 	}
 
 	return false, nil

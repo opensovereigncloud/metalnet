@@ -157,7 +157,7 @@ var _ = Describe("LoadBalancerReconciler - High Availability", func() {
 			Expect(routeUtilMockA.AnnounceRouteCallCount()).To(BeNumerically(">=", 1))
 
 			// Verify Controller A's finalizer
-			Expect(lb.ObjectMeta.Finalizers).To(ContainElement("networking.metalnet.onmetal.de/loadBalancer-controller-a"))
+			Expect(lb.ObjectMeta.Finalizers).To(ContainElement("networking.metalnet.ironcore.dev/loadBalancer-controller-a"))
 
 			// Controller B reconciles the same LoadBalancer
 			Expect(reconcileLoadBalancerUntilDone(reconcilerB, lb.Name, lb.Namespace, ctx)).To(Succeed())
@@ -191,7 +191,7 @@ var _ = Describe("LoadBalancerReconciler - High Availability", func() {
 			Expect(routeUtilMockB.AnnounceRouteCallCount()).To(BeNumerically(">=", 1))
 
 			// Verify Controller B's finalizer
-			Expect(lb.ObjectMeta.Finalizers).To(ContainElement("networking.metalnet.onmetal.de/loadBalancer-controller-b"))
+			Expect(lb.ObjectMeta.Finalizers).To(ContainElement("networking.metalnet.ironcore.dev/loadBalancer-controller-b"))
 
 			// Verify both finalizers present
 			Expect(lb.ObjectMeta.Finalizers).To(HaveLen(2))

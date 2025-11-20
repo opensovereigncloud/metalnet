@@ -844,6 +844,12 @@ var _ = Describe("NetworkInterfaceReconciler - Deletion and Cleanup", func() {
 					IP: metalnetv1alpha1.IP{
 						Addr: netip.MustParseAddr("203.0.113.100"),
 					},
+					Ports: []metalnetv1alpha1.LBPort{
+						{
+							Protocol: "TCP",
+							Port:     80,
+						},
+					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, lb)).To(Succeed())

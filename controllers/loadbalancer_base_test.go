@@ -167,8 +167,8 @@ func reconcileLoadBalancerUntilDone(reconciler *LoadBalancerReconciler, name, na
 }
 
 // expectLoadBalancerFinalizer verifies that the LoadBalancer object has the expected finalizer.
-// The finalizer format with HA support: "networking.metalnet.onmetal.de/loadBalancer-<controllerID>"
-// Example: "networking.metalnet.onmetal.de/loadBalancer-controller-a"
+// The finalizer format with HA support: "networking.metalnet.ironcore.dev/loadBalancer-<controllerID>"
+// Example: "networking.metalnet.ironcore.dev/loadBalancer-controller-a"
 func expectLoadBalancerFinalizer(ctx context.Context, loadBalancer *metalnetv1alpha1.LoadBalancer) {
 	// Fetch latest version from API server
 	Expect(k8sClient.Get(ctx, types.NamespacedName{
@@ -177,8 +177,8 @@ func expectLoadBalancerFinalizer(ctx context.Context, loadBalancer *metalnetv1al
 	}, loadBalancer)).To(Succeed())
 
 	// Check for LoadBalancer finalizer with controller-specific suffix
-	// Expected format: "networking.metalnet.onmetal.de/loadBalancer-controller-a"
-	Expect(loadBalancer.ObjectMeta.Finalizers).To(ContainElement("networking.metalnet.onmetal.de/loadBalancer-controller-a"))
+	// Expected format: "networking.metalnet.ironcore.dev/loadBalancer-controller-a"
+	Expect(loadBalancer.ObjectMeta.Finalizers).To(ContainElement("networking.metalnet.ironcore.dev/loadBalancer-controller-a"))
 }
 
 // createTestLoadBalancer creates a LoadBalancer object with sensible test defaults.

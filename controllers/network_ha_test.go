@@ -139,7 +139,7 @@ var _ = Describe("NetworkReconciler - High Availability", func() {
 			}, network)).To(Succeed())
 
 			// Verify Controller A's finalizer present (format: network-testNode-controller-a)
-			Expect(network.ObjectMeta.Finalizers).To(ContainElement("networking.metalnet.onmetal.de/network-testNode-controller-a"))
+			Expect(network.ObjectMeta.Finalizers).To(ContainElement("networking.metalnet.ironcore.dev/network-testNode-controller-a"))
 
 			// Verify Controller A subscribed to metalbond
 			Expect(routeUtilMockA.SubscribeCallCount()).To(BeNumerically(">=", 1))
@@ -155,8 +155,8 @@ var _ = Describe("NetworkReconciler - High Availability", func() {
 
 			// Verify both finalizers present
 			Expect(network.ObjectMeta.Finalizers).To(HaveLen(2))
-			Expect(network.ObjectMeta.Finalizers).To(ContainElement("networking.metalnet.onmetal.de/network-testNode-controller-a"))
-			Expect(network.ObjectMeta.Finalizers).To(ContainElement("networking.metalnet.onmetal.de/network-testNode-controller-b"))
+			Expect(network.ObjectMeta.Finalizers).To(ContainElement("networking.metalnet.ironcore.dev/network-testNode-controller-a"))
+			Expect(network.ObjectMeta.Finalizers).To(ContainElement("networking.metalnet.ironcore.dev/network-testNode-controller-b"))
 
 			// Verify Controller B also subscribed to metalbond
 			Expect(routeUtilMockB.SubscribeCallCount()).To(BeNumerically(">=", 1))
@@ -191,7 +191,7 @@ var _ = Describe("NetworkReconciler - High Availability", func() {
 			// Verify Controller A's finalizer
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: network.Name, Namespace: network.Namespace}, network)).To(Succeed())
 			Expect(network.ObjectMeta.Finalizers).To(HaveLen(1))
-			Expect(network.ObjectMeta.Finalizers).To(ContainElement("networking.metalnet.onmetal.de/network-testNode-controller-a"))
+			Expect(network.ObjectMeta.Finalizers).To(ContainElement("networking.metalnet.ironcore.dev/network-testNode-controller-a"))
 
 			// Controller B reconciles
 			Expect(reconcileNetworkUntilDone(reconcilerB, network.Name, network.Namespace, ctx)).To(Succeed())
@@ -204,10 +204,10 @@ var _ = Describe("NetworkReconciler - High Availability", func() {
 			foundA := false
 			foundB := false
 			for _, finalizer := range network.ObjectMeta.Finalizers {
-				if finalizer == "networking.metalnet.onmetal.de/network-testNode-controller-a" {
+				if finalizer == "networking.metalnet.ironcore.dev/network-testNode-controller-a" {
 					foundA = true
 				}
-				if finalizer == "networking.metalnet.onmetal.de/network-testNode-controller-b" {
+				if finalizer == "networking.metalnet.ironcore.dev/network-testNode-controller-b" {
 					foundB = true
 				}
 			}
@@ -236,7 +236,7 @@ var _ = Describe("NetworkReconciler - High Availability", func() {
 			// Verify initial finalizer with hash-a-001
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: network.Name, Namespace: network.Namespace}, network)).To(Succeed())
 			Expect(network.ObjectMeta.Finalizers).To(HaveLen(1))
-			Expect(network.ObjectMeta.Finalizers).To(ContainElement("networking.metalnet.onmetal.de/network-testNode-controller-a"))
+			Expect(network.ObjectMeta.Finalizers).To(ContainElement("networking.metalnet.ironcore.dev/network-testNode-controller-a"))
 
 			// Get initial subscription count
 			initialSubscribeCount := routeUtilMockA.SubscribeCallCount()
@@ -250,7 +250,7 @@ var _ = Describe("NetworkReconciler - High Availability", func() {
 			// Verify finalizer still exists (same ControllerID, different hash)
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: network.Name, Namespace: network.Namespace}, network)).To(Succeed())
 			Expect(network.ObjectMeta.Finalizers).To(HaveLen(1))
-			Expect(network.ObjectMeta.Finalizers).To(ContainElement("networking.metalnet.onmetal.de/network-testNode-controller-a"))
+			Expect(network.ObjectMeta.Finalizers).To(ContainElement("networking.metalnet.ironcore.dev/network-testNode-controller-a"))
 
 			// Verify controller re-reconciled (subscription should have been called again)
 			Expect(routeUtilMockA.SubscribeCallCount()).To(BeNumerically(">", initialSubscribeCount))
@@ -276,7 +276,7 @@ var _ = Describe("NetworkReconciler - High Availability", func() {
 
 			// Verify initial reconciliation happened
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: network.Name, Namespace: network.Namespace}, network)).To(Succeed())
-			Expect(network.ObjectMeta.Finalizers).To(ContainElement("networking.metalnet.onmetal.de/network-testNode-controller-a"))
+			Expect(network.ObjectMeta.Finalizers).To(ContainElement("networking.metalnet.ironcore.dev/network-testNode-controller-a"))
 
 			// Get counts after first reconciliation
 			firstSubscribeCount := routeUtilMockA.SubscribeCallCount()
@@ -297,7 +297,7 @@ var _ = Describe("NetworkReconciler - High Availability", func() {
 			// Finalizers should remain the same
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: network.Name, Namespace: network.Namespace}, network)).To(Succeed())
 			Expect(network.ObjectMeta.Finalizers).To(HaveLen(1))
-			Expect(network.ObjectMeta.Finalizers).To(ContainElement("networking.metalnet.onmetal.de/network-testNode-controller-a"))
+			Expect(network.ObjectMeta.Finalizers).To(ContainElement("networking.metalnet.ironcore.dev/network-testNode-controller-a"))
 		})
 	})
 })

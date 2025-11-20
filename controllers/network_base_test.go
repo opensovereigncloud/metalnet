@@ -77,18 +77,18 @@ func setupNetworkTest() (
 	// Create reconciler with mocks and HA controller fields
 	// Note: MetalnetCache is mostly unused (peering is commented out), passing nil
 	reconciler = &NetworkReconciler{
-		Client:             k8sClient, // global from suite_test.go
-		APIReader:          k8sClient, // global from suite_test.go
-		Scheme:             scheme.Scheme,
-		DPDK:               dpdkMock,
-		RouteUtil:          routeUtilMock,
-		MetalnetCache:      nil,
-		DefaultRouterAddr:  defaultRouterAddr,
-		NodeName:           testNode, // global from suite_test.go
-		EnableIPv6Support:  true,     // IPv6 enabled by default for tests
-		ControllerID:       "controller-a",
-		ControllerHash:     "test-hash-a",
-		ReadyNeeded:        1, // Single controller for basic tests (will be 2 for HA tests)
+		Client:            k8sClient, // global from suite_test.go
+		APIReader:         k8sClient, // global from suite_test.go
+		Scheme:            scheme.Scheme,
+		DPDK:              dpdkMock,
+		RouteUtil:         routeUtilMock,
+		MetalnetCache:     nil,
+		DefaultRouterAddr: defaultRouterAddr,
+		NodeName:          testNode, // global from suite_test.go
+		EnableIPv6Support: true,     // IPv6 enabled by default for tests
+		ControllerID:      "controller-a",
+		ControllerHash:    "test-hash-a",
+		ReadyNeeded:       1, // Single controller for basic tests (will be 2 for HA tests)
 		Control: &control.ReconcileControl{
 			SkipReconcile: false,
 		},
@@ -148,7 +148,7 @@ func reconcileNetworkUntilDone(reconciler *NetworkReconciler, name, namespace st
 }
 
 // expectNetworkFinalizer verifies that the Network object has the expected finalizer.
-// The finalizer format includes node name and controller ID: "networking.metalnet.onmetal.de/network-{nodeName}-{controllerID}"
+// The finalizer format includes node name and controller ID: "networking.metalnet.ironcore.dev/network-{nodeName}-{controllerID}"
 func expectNetworkFinalizer(ctx context.Context, network *metalnetv1alpha1.Network) {
 	// Fetch latest version from API server
 	Expect(k8sClient.Get(ctx, types.NamespacedName{
@@ -157,8 +157,8 @@ func expectNetworkFinalizer(ctx context.Context, network *metalnetv1alpha1.Netwo
 	}, network)).To(Succeed())
 
 	// Check for network finalizer with node name and controller ID suffix
-	// Expected format: "networking.metalnet.onmetal.de/network-testNode-controller-a"
-	Expect(network.ObjectMeta.Finalizers).To(ContainElement("networking.metalnet.onmetal.de/network-testNode-controller-a"))
+	// Expected format: "networking.metalnet.ironcore.dev/network-testNode-controller-a"
+	Expect(network.ObjectMeta.Finalizers).To(ContainElement("networking.metalnet.ironcore.dev/network-testNode-controller-a"))
 }
 
 // createTestNetwork creates a Network object with sensible test defaults.

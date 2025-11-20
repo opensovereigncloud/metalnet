@@ -1,6 +1,8 @@
 # Build the manager binary
 FROM --platform=$BUILDPLATFORM golang:1.25 AS builder
 
+ARG CI_JOB_TOKEN
+ENV CI_JOB_TOKEN=$CI_JOB_TOKEN
 ARG GOARCH=''
 
 WORKDIR /workspace
@@ -10,11 +12,8 @@ COPY go.sum go.sum
 
 COPY hack hack
 
-# cache deps before building and copying source so that we don't need to re-download as much
-# and so that source changes don't invalidate our downloaded layer
-RUN --mount=type=cache,target=/root/.cache/go-build \
-    --mount=type=cache,target=/go/pkg \
-    go mod download
+RUN ./hack/git-config.sh
+RUN go mod download
 
 # Copy the go source
 COPY main.go main.go
@@ -40,7 +39,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GO111MODULE=on go build -ldflags="-s -w -X main.buildVersion=$(git describe --tags)" -a -o manager main.go
 
-FROM debian:bullseye-slim
+FROM debian:bullseye-slim AS manager
 WORKDIR /
 
 RUN apt-get update && apt-get install -y --no-install-recommends \

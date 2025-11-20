@@ -5,10 +5,8 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/netip"
-	"time"
 
 	"github.com/go-logr/logr"
 
@@ -40,7 +38,7 @@ const (
 type NetworkReconciler struct {
 	client.Client
 	APIReader client.Reader
-	Scheme *runtime.Scheme
+	Scheme    *runtime.Scheme
 
 	DPDK dpdkclient.Client
 
@@ -147,7 +145,7 @@ func (r *NetworkReconciler) reconcile(ctx context.Context, log logr.Logger, netw
 	}
 	if modified {
 		log.V(1).Info("Added finalizer, requeueing")
-		return ctrl.Result{RequeueAfter: time.Nanosecond}, nil
+		return ctrl.Result{Requeue: true}, nil
 	}
 	log.V(1).Info("Ensured finalizer")
 
@@ -189,7 +187,6 @@ func (r *NetworkReconciler) reconcile(ctx context.Context, log logr.Logger, netw
 		}
 	}
 	log.V(1).Info("Checked existence of the VNI")
-
 
 	// log.V(1).Info("Reconciling peered VNIs")
 	// if err := r.reconcilePeeredVNIs(ctx, log, network, vni, vniAvail.Spec.InUse); err != nil {
@@ -471,6 +468,11 @@ func (r *NetworkReconciler) patchStatus(ctx context.Context, network *metalnetv1
 }
 
 func (r *NetworkReconciler) deletePeeredVNIs(ctx context.Context, log logr.Logger, vni uint32) error {
+	// If MetalnetCache is nil, there are no peered VNIs to delete
+	if r.MetalnetCache == nil {
+		return nil
+	}
+
 	// the ok flag is ignored because an empty set is returned if the VNI doesn't exist, and the loop below is skipped
 	mbPeerVnis, _ := r.MetalnetCache.GetPeerVnis(vni)
 

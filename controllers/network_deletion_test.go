@@ -57,18 +57,18 @@ var _ = Describe("NetworkReconciler - Deletion", func() {
 
 		// Create reconciler
 		reconciler = &NetworkReconciler{
-			Client:             k8sClient,
-			APIReader:          k8sClient,
-			Scheme:             scheme.Scheme,
-			DPDK:               dpdkMock,
-			RouteUtil:          routeUtilMock,
-			MetalnetCache:      nil,
-			DefaultRouterAddr:  defaultRouterAddr,
-			NodeName:           testNode,
-			EnableIPv6Support:  true,
-			ControllerID:       "controller-a",
-			ControllerHash:     "test-hash-a",
-			ReadyNeeded:        1,
+			Client:            k8sClient,
+			APIReader:         k8sClient,
+			Scheme:            scheme.Scheme,
+			DPDK:              dpdkMock,
+			RouteUtil:         routeUtilMock,
+			MetalnetCache:     nil,
+			DefaultRouterAddr: defaultRouterAddr,
+			NodeName:          testNode,
+			EnableIPv6Support: true,
+			ControllerID:      "controller-a",
+			ControllerHash:    "test-hash-a",
+			ReadyNeeded:       1,
 			Control: &control.ReconcileControl{
 				SkipReconcile: false,
 			},
@@ -142,7 +142,7 @@ var _ = Describe("NetworkReconciler - Deletion", func() {
 
 		It("should delete IPv4 default route on deletion", func() {
 			// Create Network with finalizer
-			network.Finalizers = []string{"networking.metalnet.onmetal.de/network-testNode-controller-a"}
+			network.Finalizers = []string{"networking.metalnet.ironcore.dev/network-testNode-controller-a"}
 			Expect(k8sClient.Create(ctx, network)).To(Succeed())
 
 			// Delete Network
@@ -176,7 +176,7 @@ var _ = Describe("NetworkReconciler - Deletion", func() {
 			reconciler.EnableIPv6Support = true
 
 			// Create Network with finalizer
-			network.Finalizers = []string{"networking.metalnet.onmetal.de/network-testNode-controller-a"}
+			network.Finalizers = []string{"networking.metalnet.ironcore.dev/network-testNode-controller-a"}
 			Expect(k8sClient.Create(ctx, network)).To(Succeed())
 
 			// Delete Network
@@ -206,7 +206,7 @@ var _ = Describe("NetworkReconciler - Deletion", func() {
 
 		It("should remove finalizer after cleanup", func() {
 			// Create Network with finalizer
-			network.Finalizers = []string{"networking.metalnet.onmetal.de/network-testNode-controller-a"}
+			network.Finalizers = []string{"networking.metalnet.ironcore.dev/network-testNode-controller-a"}
 			Expect(k8sClient.Create(ctx, network)).To(Succeed())
 
 			// Delete Network
@@ -248,7 +248,7 @@ var _ = Describe("NetworkReconciler - Deletion", func() {
 
 		It("should handle Unsubscribe error during deletion", func() {
 			// Create Network with finalizer
-			network.Finalizers = []string{"networking.metalnet.onmetal.de/network-testNode-controller-a"}
+			network.Finalizers = []string{"networking.metalnet.ironcore.dev/network-testNode-controller-a"}
 			Expect(k8sClient.Create(ctx, network)).To(Succeed())
 
 			// Configure Unsubscribe to fail
@@ -281,7 +281,7 @@ var _ = Describe("NetworkReconciler - Deletion", func() {
 
 		It("should handle DeleteRoute error during deletion", func() {
 			// Create Network with finalizer
-			network.Finalizers = []string{"networking.metalnet.onmetal.de/network-testNode-controller-a"}
+			network.Finalizers = []string{"networking.metalnet.ironcore.dev/network-testNode-controller-a"}
 			Expect(k8sClient.Create(ctx, network)).To(Succeed())
 
 			// Configure DeleteRoute to fail
@@ -314,7 +314,7 @@ var _ = Describe("NetworkReconciler - Deletion", func() {
 
 		It("should ignore NO_VNI error during route deletion", func() {
 			// Create Network with finalizer
-			network.Finalizers = []string{"networking.metalnet.onmetal.de/network-testNode-controller-a"}
+			network.Finalizers = []string{"networking.metalnet.ironcore.dev/network-testNode-controller-a"}
 			Expect(k8sClient.Create(ctx, network)).To(Succeed())
 
 			// Configure DeleteRoute to fail with NO_VNI (which should be ignored)
@@ -344,7 +344,7 @@ var _ = Describe("NetworkReconciler - Deletion", func() {
 
 		It("should ignore ROUTE_NOT_FOUND error during route deletion", func() {
 			// Create Network with finalizer
-			network.Finalizers = []string{"networking.metalnet.onmetal.de/network-testNode-controller-a"}
+			network.Finalizers = []string{"networking.metalnet.ironcore.dev/network-testNode-controller-a"}
 			Expect(k8sClient.Create(ctx, network)).To(Succeed())
 
 			// Configure DeleteRoute to fail with ROUTE_NOT_FOUND (which should be ignored)

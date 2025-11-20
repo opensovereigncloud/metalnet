@@ -403,7 +403,7 @@ var _ = Describe("LoadBalancerReconciler - Deletion", func() {
 		It("should ignore NOT_FOUND errors during deletion", func() {
 			// Create LoadBalancer and manually add finalizer
 			lb.ObjectMeta.Finalizers = []string{
-				fmt.Sprintf("networking.metalnet.onmetal.de/loadBalancer-%s", reconciler.ControllerID),
+				fmt.Sprintf("networking.metalnet.ironcore.dev/loadBalancer-%s", reconciler.ControllerID),
 			}
 			Expect(k8sClient.Create(ctx, lb)).To(Succeed())
 
@@ -570,8 +570,8 @@ var _ = Describe("LoadBalancerReconciler - Deletion", func() {
 			lbWithOldFinalizer := createTestLoadBalancer(ns.Name, network.Name)
 			lbWithOldFinalizer.Name = "test-lb-old-finalizer"
 			lbWithOldFinalizer.ObjectMeta.Finalizers = []string{
-				"networking.metalnet.onmetal.de/loadBalancer", // Old finalizer format
-				fmt.Sprintf("networking.metalnet.onmetal.de/loadBalancer-%s", reconciler.ControllerID), // New finalizer format
+				"networking.metalnet.ironcore.dev/loadBalancer",                                          // Old finalizer format
+				fmt.Sprintf("networking.metalnet.ironcore.dev/loadBalancer-%s", reconciler.ControllerID), // New finalizer format
 			}
 			Expect(k8sClient.Create(ctx, lbWithOldFinalizer)).To(Succeed())
 
@@ -597,7 +597,7 @@ var _ = Describe("LoadBalancerReconciler - Deletion", func() {
 					LbVipIP:       &lbWithOldFinalizer.Spec.IP.Addr,
 					UnderlayRoute: &underlayAddr,
 					Lbports: []dpdk.LBPort{
-						{Port: 80, Protocol: 6}, // TCP
+						{Port: 80, Protocol: 6},  // TCP
 						{Port: 80, Protocol: 17}, // UDP
 					},
 				},
@@ -629,8 +629,8 @@ var _ = Describe("LoadBalancerReconciler - Deletion", func() {
 				Name:      lbWithOldFinalizer.Name,
 				Namespace: lbWithOldFinalizer.Namespace,
 			}, lbWithOldFinalizer)).To(Succeed())
-			Expect(lbWithOldFinalizer.ObjectMeta.Finalizers).NotTo(ContainElement("networking.metalnet.onmetal.de/loadBalancer"))
-			Expect(lbWithOldFinalizer.ObjectMeta.Finalizers).To(ContainElement(fmt.Sprintf("networking.metalnet.onmetal.de/loadBalancer-%s", reconciler.ControllerID)))
+			Expect(lbWithOldFinalizer.ObjectMeta.Finalizers).NotTo(ContainElement("networking.metalnet.ironcore.dev/loadBalancer"))
+			Expect(lbWithOldFinalizer.ObjectMeta.Finalizers).To(ContainElement(fmt.Sprintf("networking.metalnet.ironcore.dev/loadBalancer-%s", reconciler.ControllerID)))
 
 			// Second reconcile - should remove new finalizer and complete deletion
 			result, err = reconciler.Reconcile(ctx, ctrl.Request{

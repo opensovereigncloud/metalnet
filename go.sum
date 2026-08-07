@@ -1,7 +1,11 @@
 cel.dev/expr v0.25.2 h1:K6j46C81hXtZQfuX60cVWQFBJahKSE2gfRbNuvr5bFs=
 cel.dev/expr v0.25.2/go.mod h1:hrXvqGP6G6gyx8UAHSHJ5RGk//1Oj5nXQ2NI02Nrsg4=
+cel.dev/expr v0.25.2 h1:K6j46C81hXtZQfuX60cVWQFBJahKSE2gfRbNuvr5bFs=
+cel.dev/expr v0.25.2/go.mod h1:hrXvqGP6G6gyx8UAHSHJ5RGk//1Oj5nXQ2NI02Nrsg4=
 github.com/Masterminds/semver/v3 v3.4.0 h1:Zog+i5UMtVoCU8oKka5P7i9q9HgrJeGzI9SA1Xbatp0=
 github.com/Masterminds/semver/v3 v3.4.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
+github.com/antlr4-go/antlr/v4 v4.13.1 h1:SqQKkuVZ+zWkMMNkjy5FZe5mr5WURWnlpmOuzYWrPrQ=
+github.com/antlr4-go/antlr/v4 v4.13.1/go.mod h1:GKmUxMtwp6ZgGwZSva4eWPC5mS6vUAmOABFgjdkM7Nw=
 github.com/antlr4-go/antlr/v4 v4.13.1 h1:SqQKkuVZ+zWkMMNkjy5FZe5mr5WURWnlpmOuzYWrPrQ=
 github.com/antlr4-go/antlr/v4 v4.13.1/go.mod h1:GKmUxMtwp6ZgGwZSva4eWPC5mS6vUAmOABFgjdkM7Nw=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
@@ -105,8 +109,8 @@ github.com/ironcore-dev/controller-utils v0.13.0 h1:X18bk2r6HvVkvAp1+oLy3trVxJPf
 github.com/ironcore-dev/controller-utils v0.13.0/go.mod h1:l37569QsY8tlD2ByAgr+Fb2IHDmpulsK/hPLW+ksjXA=
 github.com/ironcore-dev/dpservice/go/dpservice-go v0.3.17 h1:DCF6BH7EXqQ2kSoouUBsIpP5z0IZwa3o+l3pCYPDxY8=
 github.com/ironcore-dev/dpservice/go/dpservice-go v0.3.17/go.mod h1:d5x2tPmu1yqrVHac/FvL+MFOeEb3IT4gn7Bj4+Xkj8M=
-github.com/ironcore-dev/ironcore v0.5.0 h1:QAbXuqD8ZfS8wNP++EamrV7Xav3xfeZsC+28hddpkNE=
-github.com/ironcore-dev/ironcore v0.5.0/go.mod h1:HPW1+WJGharyrX30vOm43cGpeBXQDP43r66S4ADnhZ0=
+github.com/ironcore-dev/ironcore v0.5.1-0.20260804090802-d4dab327b377 h1:luvmADGYbvlciV7fUYFEw6yLSA2G6m1FwjVtYpxgZK8=
+github.com/ironcore-dev/ironcore v0.5.1-0.20260804090802-d4dab327b377/go.mod h1:s1nnt5yKtma/Hokyw2LDaQ9PNczLBrG44JNy7thc6GY=
 github.com/ironcore-dev/metalbond v0.5.0 h1:aWVHkG3anQeVo00hHkPjhLOQwfaq4Yhp9/Bk8nGJH4o=
 github.com/ironcore-dev/metalbond v0.5.0/go.mod h1:TssDAze8ldQycRYM3bNc3MJqi+ppvKiTkSs1FzWwlrk=
 github.com/jaypipes/ghw v0.25.0 h1:+7HlAHtQSrCOafYC6oRjqxuCzDZXBr2dFgVlYRRafrs=

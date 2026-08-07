@@ -6,7 +6,7 @@ require (
 	github.com/go-logr/logr v1.4.4
 	github.com/ironcore-dev/controller-utils v0.13.0
 	github.com/ironcore-dev/dpservice/go/dpservice-go v0.3.17
-	github.com/ironcore-dev/ironcore v0.5.0
+	github.com/ironcore-dev/ironcore v0.5.1-0.20260804090802-d4dab327b377
 	github.com/ironcore-dev/metalbond v0.5.0
 	github.com/jaypipes/ghw v0.25.0
 	github.com/onsi/ginkgo/v2 v2.32.1

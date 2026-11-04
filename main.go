@@ -31,6 +31,7 @@ import (
 
 	"github.com/ironcore-dev/metalnet/metalbond"
 	"github.com/ironcore-dev/metalnet/netfns"
+	"github.com/ironcore-dev/metalnet/orchestrator"
 	"github.com/ironcore-dev/metalnet/sysfs"
 
 	dpdk "github.com/ironcore-dev/dpservice/go/dpservice-go/api"
@@ -82,6 +83,22 @@ func detectBluefield(nodeName *string) bool {
 	return false
 }
 
+// waitForMetalbondPeers gives up after a second: a peer that takes longer is treated as unreachable.
+func waitForMetalbondPeers(mbInstance *mb.MetalBond, peers []string) {
+	for range 100 {
+		established := true
+		for _, peer := range peers {
+			if state, err := mbInstance.PeerState(peer); err != nil || state != mb.ESTABLISHED {
+				established = false
+			}
+		}
+		if established {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 func main() {
 	var metricsAddr string
 	var secureMetrics bool
@@ -110,6 +127,8 @@ func main() {
 	var metalbondRxChanEventCapacity int
 	var metalbondRxChanDataUpdateCapacity int
 	var routeDriftDetection bool
+	var mlsbondClientAddr string
+	var debugKeyFile string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -150,6 +169,10 @@ func main() {
 			"manages the message queue for data updates and subscriptions.")
 	flag.BoolVar(&routeDriftDetection, "route-drift-detection", false,
 		"detect divergence between dpservice installed route state (LB targets, neighbor NATs) and metalbond's route table. Read-only detection; no auto-cleanup.")
+	flag.StringVar(&mlsbondClientAddr, "mlsbond-client", "", "The address of this host's mlsbond client. "+
+		"Networks cannot get Security Associations without one.")
+	flag.StringVar(&debugKeyFile, "debug-key-file", "", "For debugging only: a root-only file to keep the raw keys and salts of the "+
+		"installed Security Associations in. Off by default, and hosts in production store no keys.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -355,8 +378,25 @@ func main() {
 	mbInstance := mb.NewMetalBond(config, metalnetMBClient)
 	metalbondRouteUtil := metalbond.NewMBRouteUtil(mbInstance)
 
+	encryption := orchestrator.New(orchestrator.Options{
+		Client:   mgr.GetClient(),
+		Reader:   mgr.GetAPIReader(),
+		DPDK:     dpdkClient,
+		NodeName: nodeName,
+		Address:  mlsbondClientAddr,
+		KeyFile:  debugKeyFile,
+	})
+	// before anything can fail on a dpservice that is down: its keys are gone or as good as gone
+	if err := encryption.ResetStatus(context.Background()); err != nil {
+		setupLog.Error(err, "unable to reset the encryption status")
+		os.Exit(1)
+	}
+
+	// If this metalnet is the one that initializes dpservice, that dpservice is new.
+	dataplaneIsNew := false
 	dpdkUUID, err := dpdkProtoClient.CheckInitialized(context.Background(), &dpdkproto.CheckInitializedRequest{})
 	if err != nil {
+		dataplaneIsNew = true
 		_, err = dpdkProtoClient.Initialize(context.Background(), &dpdkproto.InitializeRequest{})
 		if err != nil {
 			setupLog.Error(err, "dp-service can not be initialized")
@@ -368,6 +408,15 @@ func main() {
 			setupLog.Error(err, "dp-service down")
 			os.Exit(1)
 		}
+	}
+
+	if err := encryption.LoadInventory(context.Background(), dataplaneIsNew); err != nil {
+		setupLog.Error(err, "unable to take the inventory of dpservice")
+		os.Exit(1)
+	}
+	if err := mgr.Add(encryption); err != nil {
+		setupLog.Error(err, "unable to add the orchestrator to the manager")
+		os.Exit(1)
 	}
 
 	protoVersion, err := dpdkClient.GetVersion(ctx, &dpdk.Version{
@@ -404,6 +453,9 @@ func main() {
 		setupLog.Error(err, "unable to set up field indexer", "Field", metalnetclient.LoadBalancerNetworkRefNameField)
 		os.Exit(1)
 	}
+
+	// Connecting takes a moment, and subscribing without a connection fails.
+	waitForMetalbondPeers(mbInstance, metalbondPeers)
 
 	err = metalbondRouteUtil.Subscribe(ctx, metalbond.VNI(publicVNI))
 	if err != nil {
@@ -442,6 +494,7 @@ func main() {
 		RouteUtil:         metalbondRouteUtil,
 		MetalnetCache:     metalnetCache,
 		MetalnetMBClient:  metalnetMBClient,
+		Orchestrator:      encryption,
 		DefaultRouterAddr: &defaultRouterAddr,
 		NodeName:          nodeName,
 		EnableIPv6Support: enableIPv6Support,

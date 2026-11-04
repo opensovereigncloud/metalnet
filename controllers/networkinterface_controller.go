@@ -38,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 const (
@@ -817,7 +818,7 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 	log.V(1).Info("Got network", "NetworkKey", networkKey, "VNI", vni)
 
 	log.V(1).Info("Applying interface")
-	pciAddr, underlayRoute, isCreated, err := r.applyInterface(ctx, log, nic, vni)
+	pciAddr, underlayRoute, isCreated, encrypting, err := r.applyInterface(ctx, log, nic, vni)
 	if err != nil {
 		if err := r.patchStatus(ctx, nic, func() {
 			nic.Status = metalnetv1alpha1.NetworkInterfaceStatus{
@@ -903,6 +904,10 @@ func (r *NetworkInterfaceReconciler) reconcile(ctx context.Context, log logr.Log
 	log.V(1).Info("Patching status")
 	if err := r.patchStatus(ctx, nic, func() {
 		nic.Status.State = metalnetv1alpha1.NetworkInterfaceStateReady
+		nic.Status.Encryption = ""
+		if encrypting {
+			nic.Status.Encryption = metalnetv1alpha1.EncryptionStateReady
+		}
 		if r.BluefieldDetected {
 			pciAddr.Bus = r.BluefieldHostDefaultBusAddr
 			log.V(1).Info("Bluefield detected. Converting PCI Bus to the host PCI bus", "PCIAddress", pciAddr)
@@ -1246,14 +1251,14 @@ func (r *NetworkInterfaceReconciler) getInterfaceMeteringParams(nic *metalnetv1a
 	return meterParams, nil
 }
 
-func (r *NetworkInterfaceReconciler) applyInterface(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, vni uint32) (*ghw.PCIAddress, netip.Addr, bool, error) {
+func (r *NetworkInterfaceReconciler) applyInterface(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, vni uint32) (*ghw.PCIAddress, netip.Addr, bool, bool, error) {
 	log.V(1).Info("Getting dpdk interface")
 	var hostName = ""
 
 	iface, err := r.DPDK.GetInterface(ctx, string(nic.UID))
 	if err != nil {
 		if !dpdkerrors.IsStatusErrorCode(err, dpdkerrors.NOT_FOUND) {
-			return nil, netip.Addr{}, false, fmt.Errorf("error getting dpdk interface: %w", err)
+			return nil, netip.Addr{}, false, false, fmt.Errorf("error getting dpdk interface: %w", err)
 		}
 
 		log.V(1).Info("DPDK interface does not yet exist, creating it")
@@ -1261,14 +1266,14 @@ func (r *NetworkInterfaceReconciler) applyInterface(ctx context.Context, log log
 		log.V(1).Info("Getting or claiming pci address")
 		addr, err := r.NetFnsManager.GetOrClaim(nic.UID)
 		if err != nil {
-			return nil, netip.Addr{}, false, fmt.Errorf("error claiming address: %w", err)
+			return nil, netip.Addr{}, false, false, fmt.Errorf("error claiming address: %w", err)
 		}
 		log.V(1).Info("Got pci address", "Address", addr)
 
 		log.V(1).Info("Converting to dpdk device")
 		dpdkDevice, err := r.convertToDPDKDevice(*addr)
 		if err != nil {
-			return nil, netip.Addr{}, false, fmt.Errorf("error converting %s to dpdk device: %w", addr, err)
+			return nil, netip.Addr{}, false, false, fmt.Errorf("error converting %s to dpdk device: %w", addr, err)
 		}
 		log.V(1).Info("Converted to dpdk device", "DPDKDevice", dpdkDevice)
 
@@ -1279,7 +1284,7 @@ func (r *NetworkInterfaceReconciler) applyInterface(ctx context.Context, log log
 
 		meteringParams, err := r.getInterfaceMeteringParams(nic)
 		if err != nil {
-			return nil, netip.Addr{}, false, fmt.Errorf("error getting metering params: %w", err)
+			return nil, netip.Addr{}, false, false, fmt.Errorf("error getting metering params: %w", err)
 		}
 
 		if nic.Spec.Hostname != nil {
@@ -1295,36 +1300,58 @@ func (r *NetworkInterfaceReconciler) applyInterface(ctx context.Context, log log
 				IPv6:     &primaryIpv6,
 				Metering: meteringParams,
 				HostName: hostName,
+				Encrypt:  nic.Spec.Encrypt,
 			},
 		})
 		if err != nil {
-			return nil, netip.Addr{}, false, fmt.Errorf("error creating dpdk interface: %w", err)
+			return nil, netip.Addr{}, false, false, fmt.Errorf("error creating dpdk interface: %w", err)
 		}
 		log.V(1).Info("Adding interface routes if not exist")
 		ips := getNetworkInterfaceIPs(nic)
 		if err := r.addInterfaceRoutesIfNotExist(ctx, log, vni, ips, *iface.Spec.UnderlayRoute); err != nil {
-			return nil, netip.Addr{}, false, err
+			return nil, netip.Addr{}, false, false, err
 		}
 		log.V(1).Info("Added interface routes if not existed")
-		return addr, *iface.Spec.UnderlayRoute, true, nil
+		return addr, *iface.Spec.UnderlayRoute, true, iface.Spec.Encrypt, nil
 	}
 
 	log.V(1).Info("DPDK interface exists")
 
+	if iface.Spec.Encrypt != nic.Spec.Encrypt {
+		log.V(1).Info("Switching encryption", "Encrypt", nic.Spec.Encrypt)
+		if err := r.setInterfaceEncryption(ctx, nic); err != nil {
+			return nil, netip.Addr{}, false, false, err
+		}
+		log.V(1).Info("Switched encryption")
+	}
+
 	log.V(1).Info("Getting pci device for uid")
 	addr, err := r.NetFnsManager.Get(nic.UID)
 	if err != nil {
-		return nil, netip.Addr{}, false, fmt.Errorf("error getting pci address: %w", err)
+		return nil, netip.Addr{}, false, false, fmt.Errorf("error getting pci address: %w", err)
 	}
 	log.V(1).Info("Got pci device for uid", "PCIDevice", addr)
 
 	log.V(1).Info("Adding interface route if not exists")
 	ips := getNetworkInterfaceIPs(nic)
 	if err := r.addInterfaceRoutesIfNotExist(ctx, log, vni, ips, *iface.Spec.UnderlayRoute); err != nil {
-		return nil, netip.Addr{}, false, err
+		return nil, netip.Addr{}, false, false, err
 	}
 	log.V(1).Info("Added interface route if not existed")
-	return addr, *iface.Spec.UnderlayRoute, false, nil
+	return addr, *iface.Spec.UnderlayRoute, false, nic.Spec.Encrypt, nil
+}
+
+func (r *NetworkInterfaceReconciler) setInterfaceEncryption(ctx context.Context, nic *metalnetv1alpha1.NetworkInterface) error {
+	var err error
+	if nic.Spec.Encrypt {
+		_, err = r.DPDK.EnableInterfaceEncryption(ctx, string(nic.UID))
+	} else {
+		_, err = r.DPDK.DisableInterfaceEncryption(ctx, string(nic.UID))
+	}
+	if err != nil {
+		return fmt.Errorf("error switching encryption of the dpdk interface: %w", err)
+	}
+	return nil
 }
 
 func (r *NetworkInterfaceReconciler) processTAPDeviceString(device string) (string, error) {
@@ -1650,6 +1677,8 @@ func (r *NetworkInterfaceReconciler) SetupWithManager(mgr ctrl.Manager, metalnet
 		Watches(
 			&metalnetv1alpha1.Network{},
 			r.enqueueNetworkInterfacesReferencingNetwork(ctx, log),
+			// One interface reconcile costs at least 6 dpservice calls, a status write should not.
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		).
 		Watches(
 			&metalnetv1alpha1.LoadBalancer{},

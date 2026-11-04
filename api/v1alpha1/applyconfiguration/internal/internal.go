@@ -26,6 +26,8 @@ func Parser() *typed.Parser {
 var parserOnce sync.Once
 var parser *typed.Parser
 var schemaYAML = typed.YAMLObject(`types:
+- name: com.github.ironcore-dev.metalnet.api.v1alpha1.EncryptionState
+  scalar: string
 - name: com.github.ironcore-dev.metalnet.api.v1alpha1.FirewallRule
   map:
     fields:
@@ -171,6 +173,18 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: status
       type:
         namedType: com.github.ironcore-dev.metalnet.api.v1alpha1.NetworkStatus
+- name: com.github.ironcore-dev.metalnet.api.v1alpha1.NetworkEncryptionStatus
+  map:
+    fields:
+    - name: message
+      type:
+        scalar: string
+    - name: nodeName
+      type:
+        scalar: string
+    - name: state
+      type:
+        namedType: com.github.ironcore-dev.metalnet.api.v1alpha1.EncryptionState
 - name: com.github.ironcore-dev.metalnet.api.v1alpha1.NetworkInterface
   map:
     fields:
@@ -192,6 +206,9 @@ var schemaYAML = typed.YAMLObject(`types:
 - name: com.github.ironcore-dev.metalnet.api.v1alpha1.NetworkInterfaceSpec
   map:
     fields:
+    - name: encrypt
+      type:
+        scalar: boolean
     - name: firewallRules
       type:
         list:
@@ -245,6 +262,9 @@ var schemaYAML = typed.YAMLObject(`types:
 - name: com.github.ironcore-dev.metalnet.api.v1alpha1.NetworkInterfaceStatus
   map:
     fields:
+    - name: encryption
+      type:
+        namedType: com.github.ironcore-dev.metalnet.api.v1alpha1.EncryptionState
     - name: loadBalancerTargets
       type:
         list:
@@ -286,6 +306,9 @@ var schemaYAML = typed.YAMLObject(`types:
 - name: com.github.ironcore-dev.metalnet.api.v1alpha1.NetworkSpec
   map:
     fields:
+    - name: encrypt
+      type:
+        scalar: boolean
     - name: id
       type:
         scalar: numeric
@@ -306,6 +329,14 @@ var schemaYAML = typed.YAMLObject(`types:
 - name: com.github.ironcore-dev.metalnet.api.v1alpha1.NetworkStatus
   map:
     fields:
+    - name: encryption
+      type:
+        list:
+          elementType:
+            namedType: com.github.ironcore-dev.metalnet.api.v1alpha1.NetworkEncryptionStatus
+          elementRelationship: associative
+          keys:
+          - nodeName
     - name: peerings
       type:
         list:

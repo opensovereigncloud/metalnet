@@ -37,6 +37,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.NATDetailsApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("Network"):
 		return &apiv1alpha1.NetworkApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("NetworkEncryptionStatus"):
+		return &apiv1alpha1.NetworkEncryptionStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("NetworkInterface"):
 		return &apiv1alpha1.NetworkInterfaceApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("NetworkInterfaceSpec"):

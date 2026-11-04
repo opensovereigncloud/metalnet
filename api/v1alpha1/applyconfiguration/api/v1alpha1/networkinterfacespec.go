@@ -39,6 +39,9 @@ type NetworkInterfaceSpecApplyConfiguration struct {
 	MeteringRate *MeteringParametersApplyConfiguration `json:"meteringRate,omitempty"`
 	// Hostname is the hostname which should be announced by the network interface.
 	Hostname *string `json:"hostname,omitempty"`
+	// Encrypt makes dpservice encrypt this interface's underlay traffic, independently of Network's Encrypt.
+	// An encrypting interface never falls back to cleartext: without Security Associations it drops its traffic.
+	Encrypt *bool `json:"encrypt,omitempty"`
 }
 
 // NetworkInterfaceSpecApplyConfiguration constructs a declarative configuration of the NetworkInterfaceSpec type for use with
@@ -145,5 +148,13 @@ func (b *NetworkInterfaceSpecApplyConfiguration) WithMeteringRate(value *Meterin
 // If called multiple times, the Hostname field is set to the value of the last call.
 func (b *NetworkInterfaceSpecApplyConfiguration) WithHostname(value string) *NetworkInterfaceSpecApplyConfiguration {
 	b.Hostname = &value
+	return b
+}
+
+// WithEncrypt sets the Encrypt field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Encrypt field is set to the value of the last call.
+func (b *NetworkInterfaceSpecApplyConfiguration) WithEncrypt(value bool) *NetworkInterfaceSpecApplyConfiguration {
+	b.Encrypt = &value
 	return b
 }

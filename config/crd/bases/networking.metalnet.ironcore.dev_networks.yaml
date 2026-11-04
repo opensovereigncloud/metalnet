@@ -49,6 +49,12 @@ spec:
           spec:
             description: NetworkSpec defines the desired state of Network
             properties:
+              encrypt:
+                description: |-
+                  Encrypt asks for Security Associations: while it is true and the Network is in use on a node,
+                  that node subscribes the Network's ID at its mlsbond client and installs what it derives.
+                  Whether an interface uses them is up to NetworkInterfaceSpec.Encrypt, which is independent of this.
+                type: boolean
               id:
                 description: ID is the unique identifier of the Network
                 format: int32
@@ -89,6 +95,33 @@ spec:
             type: object
           status:
             properties:
+              encryption:
+                description: |-
+                  Encryption has one entry per node that is subscribed because of Spec.Encrypt. Each node writes
+                  only its own entry.
+                items:
+                  description: NetworkEncryptionStatus is the state of a Network's
+                    encryption on one node.
+                  properties:
+                    message:
+                      description: Message is set while an install fails, and when
+                        nothing can be installed at all.
+                      type: string
+                    nodeName:
+                      description: NodeName is the node this entry is about.
+                      type: string
+                    state:
+                      description: State does not change on a failed install while
+                        another peer works, so read Message as well.
+                      type: string
+                  required:
+                  - nodeName
+                  - state
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - nodeName
+                x-kubernetes-list-type: map
               peerings:
                 description: Peerings contains the states of the network peerings
                   for the network.

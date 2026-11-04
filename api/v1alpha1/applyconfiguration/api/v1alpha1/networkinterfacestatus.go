@@ -26,6 +26,9 @@ type NetworkInterfaceStatusApplyConfiguration struct {
 	LoadBalancerTargets []apiv1alpha1.IPPrefix `json:"loadBalancerTargets,omitempty"`
 	// State is the NetworkInterfaceState of the NetworkInterface.
 	State *apiv1alpha1.NetworkInterfaceState `json:"state,omitempty"`
+	// Encryption is Ready once dpservice has confirmed that the interface encrypts, and empty once
+	// it has confirmed that it does not. It says nothing about peers or keys.
+	Encryption *apiv1alpha1.EncryptionState `json:"encryption,omitempty"`
 }
 
 // NetworkInterfaceStatusApplyConfiguration constructs a declarative configuration of the NetworkInterfaceStatus type for use with
@@ -91,5 +94,13 @@ func (b *NetworkInterfaceStatusApplyConfiguration) WithLoadBalancerTargets(value
 // If called multiple times, the State field is set to the value of the last call.
 func (b *NetworkInterfaceStatusApplyConfiguration) WithState(value apiv1alpha1.NetworkInterfaceState) *NetworkInterfaceStatusApplyConfiguration {
 	b.State = &value
+	return b
+}
+
+// WithEncryption sets the Encryption field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Encryption field is set to the value of the last call.
+func (b *NetworkInterfaceStatusApplyConfiguration) WithEncryption(value apiv1alpha1.EncryptionState) *NetworkInterfaceStatusApplyConfiguration {
+	b.Encryption = &value
 	return b
 }

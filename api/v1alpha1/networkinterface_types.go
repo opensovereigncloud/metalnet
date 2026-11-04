@@ -42,6 +42,10 @@ type NetworkInterfaceSpec struct {
 	MeteringRate *MeteringParameters `json:"meteringRate,omitempty"`
 	// Hostname is the hostname which should be announced by the network interface.
 	Hostname *string `json:"hostname,omitempty"`
+	// Encrypt makes dpservice encrypt this interface's underlay traffic, independently of Network's Encrypt.
+	// An encrypting interface never falls back to cleartext: without Security Associations it drops its traffic.
+	// +optional
+	Encrypt bool `json:"encrypt,omitempty"`
 }
 
 // NetworkInterfaceStatus defines the observed state of NetworkInterface
@@ -64,6 +68,11 @@ type NetworkInterfaceStatus struct {
 
 	// State is the NetworkInterfaceState of the NetworkInterface.
 	State NetworkInterfaceState `json:"state,omitempty"`
+
+	// Encryption is Ready once dpservice has confirmed that the interface encrypts, and empty once
+	// it has confirmed that it does not. It says nothing about peers or keys.
+	// +optional
+	Encryption EncryptionState `json:"encryption,omitempty"`
 }
 
 // TAPDevice is a TAP device.

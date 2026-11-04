@@ -16,16 +16,20 @@ import (
 	dpdkclient "github.com/ironcore-dev/dpservice/go/dpservice-go/client"
 	dpdkerrors "github.com/ironcore-dev/dpservice/go/dpservice-go/errors"
 	metalnetv1alpha1 "github.com/ironcore-dev/metalnet/api/v1alpha1"
+	metalnetclient "github.com/ironcore-dev/metalnet/client"
 	"github.com/ironcore-dev/metalnet/internal"
 	"github.com/ironcore-dev/metalnet/metalbond"
+	"github.com/ironcore-dev/metalnet/orchestrator"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -43,6 +47,8 @@ type NetworkReconciler struct {
 	RouteUtil        metalbond.RouteUtil
 	MetalnetCache    *internal.MetalnetCache
 	MetalnetMBClient *metalbond.MetalnetClient
+	// Orchestrator is left out if nothing here is to encrypt.
+	Orchestrator *orchestrator.Orchestrator
 
 	DefaultRouterAddr *metalbond.DefaultRouterAddress
 	NodeName          string
@@ -85,6 +91,12 @@ func (r *NetworkReconciler) delete(ctx context.Context, log logr.Logger, network
 	log.V(1).Info("Finalizer present, doing cleanup")
 
 	vni := uint32(network.Spec.ID)
+
+	log.V(1).Info("Reconciling encryption")
+	if err := r.reconcileEncryption(ctx, network, false); err != nil {
+		return ctrl.Result{}, err
+	}
+	log.V(1).Info("Reconciled encryption")
 
 	log.V(1).Info("Unsubscribing from metalbond if not subscribed")
 	if err := r.unsubscribeIfSubscribed(ctx, vni); err != nil {
@@ -135,6 +147,11 @@ func (r *NetworkReconciler) reconcile(ctx context.Context, log logr.Logger, netw
 		return ctrl.Result{}, err
 	}
 
+	// A failure here does not stand in the way of the routes.
+	log.V(1).Info("Reconciling encryption")
+	encryptionErr := r.reconcileEncryption(ctx, network, vniAvail.Spec.InUse)
+	log.V(1).Info("Reconciled encryption", "Error", encryptionErr)
+
 	if !vniAvail.Spec.InUse {
 		if !r.MetalnetCache.IsVniPeered(vni) {
 			log.V(1).Info("VNI doesn't exist in dp-service and no peering, unsubscribe from it")
@@ -149,7 +166,7 @@ func (r *NetworkReconciler) reconcile(ctx context.Context, log logr.Logger, netw
 			return ctrl.Result{}, err
 		}
 		log.V(1).Info("Reconciled peered VNIs")
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, encryptionErr
 	}
 	log.V(1).Info("Checked existence of the VNI")
 
@@ -171,7 +188,34 @@ func (r *NetworkReconciler) reconcile(ctx context.Context, log logr.Logger, netw
 	}
 	log.V(1).Info("Subscribed to metalbond if not subscribed")
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{}, encryptionErr
+}
+
+// reconcileEncryption hands over to the orchestrator. An interface that is yet to appear in dpservice
+// keeps a host in the VNI group: after a dpservice restart, every VNI is unused for a moment.
+func (r *NetworkReconciler) reconcileEncryption(ctx context.Context, network *metalnetv1alpha1.Network, inUse bool) error {
+	if r.Orchestrator == nil {
+		return nil
+	}
+
+	nics := &metalnetv1alpha1.NetworkInterfaceList{}
+	if err := r.List(ctx, nics,
+		client.InNamespace(network.Namespace),
+		client.MatchingFields{metalnetclient.NetworkInterfaceNetworkRefNameField: network.Name},
+	); err != nil {
+		return fmt.Errorf("error listing network interfaces: %w", err)
+	}
+	expected := false
+	for i := range nics.Items {
+		if isNetworkInterfaceAssignedToNode(&nics.Items[i], r.NodeName) && nics.Items[i].DeletionTimestamp.IsZero() {
+			expected = true
+			break
+		}
+	}
+	if err := r.Orchestrator.Reconcile(ctx, network, inUse, expected); err != nil {
+		return fmt.Errorf("error reconciling encryption: %w", err)
+	}
+	return nil
 }
 
 func (r *NetworkReconciler) createDefaultRoutesIfNotExist(ctx context.Context, vni uint32) error {
@@ -475,7 +519,9 @@ func (r *NetworkReconciler) unsubscribeIfSubscribed(ctx context.Context, vni uin
 // SetupWithManager sets up the controller with the Manager.
 func (r *NetworkReconciler) SetupWithManager(mgr ctrl.Manager, metalnetCache cache.Cache) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&metalnetv1alpha1.Network{}).
+		// A status write reconciles nothing. Each node writes its encryption status, and it would
+		// cost every node's dpservice calls.
+		For(&metalnetv1alpha1.Network{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(
 			&metalnetv1alpha1.NetworkInterface{},
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForNetworkInterface),

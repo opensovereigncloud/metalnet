@@ -18,6 +18,10 @@ type NetworkSpecApplyConfiguration struct {
 	PeeredIDs []int32 `json:"peeredIDs,omitempty"`
 	// PeeredPrefixes are the allowed CIDRs of the peered networks.
 	PeeredPrefixes []PeeredPrefixApplyConfiguration `json:"peeredPrefixes,omitempty"`
+	// Encrypt asks for Security Associations: while it is true and the Network is in use on a node,
+	// that node subscribes the Network's ID at its mlsbond client and installs what it derives.
+	// Whether an interface uses them is up to NetworkInterfaceSpec.Encrypt, which is independent of this.
+	Encrypt *bool `json:"encrypt,omitempty"`
 }
 
 // NetworkSpecApplyConfiguration constructs a declarative configuration of the NetworkSpec type for use with
@@ -54,5 +58,13 @@ func (b *NetworkSpecApplyConfiguration) WithPeeredPrefixes(values ...*PeeredPref
 		}
 		b.PeeredPrefixes = append(b.PeeredPrefixes, *values[i])
 	}
+	return b
+}
+
+// WithEncrypt sets the Encrypt field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Encrypt field is set to the value of the last call.
+func (b *NetworkSpecApplyConfiguration) WithEncrypt(value bool) *NetworkSpecApplyConfiguration {
+	b.Encrypt = &value
 	return b
 }

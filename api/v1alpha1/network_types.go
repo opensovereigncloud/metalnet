@@ -27,6 +27,12 @@ type NetworkSpec struct {
 	// +listType=map
 	// +listMapKey=id
 	PeeredPrefixes []PeeredPrefix `json:"peeredPrefixes,omitempty" patchStrategy:"merge" patchMergeKey:"peeredPrefixes"`
+
+	// Encrypt asks for Security Associations: while it is true and the Network is in use on a node,
+	// that node subscribes the Network's ID at its mlsbond client and installs what it derives.
+	// Whether an interface uses them is up to NetworkInterfaceSpec.Encrypt, which is independent of this.
+	// +optional
+	Encrypt bool `json:"encrypt,omitempty"`
 }
 
 // PeeredPrefix contains information of the peered networks and their allowed CIDRs.
@@ -40,6 +46,35 @@ type PeeredPrefix struct {
 type NetworkStatus struct {
 	// Peerings contains the states of the network peerings for the network.
 	Peerings []NetworkPeeringStatus `json:"peerings,omitempty"`
+
+	// Encryption has one entry per node that is subscribed because of Spec.Encrypt. Each node writes
+	// only its own entry.
+	// +optional
+	// +listType=map
+	// +listMapKey=nodeName
+	Encryption []NetworkEncryptionStatus `json:"encryption,omitempty"`
+}
+
+// EncryptionState is the state of encryption on a node or an interface.
+type EncryptionState string
+
+const (
+	// EncryptionStatePending signals that nothing is installed yet.
+	EncryptionStatePending EncryptionState = "Pending"
+	// EncryptionStateReady signals that what was asked for is installed in dpservice. On a Network, that
+	// is egress and ingress for at least one peer on that node. On a NetworkInterface, the encrypt flag.
+	EncryptionStateReady EncryptionState = "Ready"
+)
+
+// NetworkEncryptionStatus is the state of a Network's encryption on one node.
+type NetworkEncryptionStatus struct {
+	// NodeName is the node this entry is about.
+	NodeName string `json:"nodeName"`
+	// State does not change on a failed install while another peer works, so read Message as well.
+	State EncryptionState `json:"state"`
+	// Message is set while an install fails, and when nothing can be installed at all.
+	// +optional
+	Message string `json:"message,omitempty"`
 }
 
 // NetworkPeeringState is the state a NetworkPeering

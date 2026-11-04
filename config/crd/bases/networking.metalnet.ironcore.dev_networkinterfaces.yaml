@@ -74,6 +74,11 @@ spec:
           spec:
             description: Spec defines the desired state of NetworkInterface.
             properties:
+              encrypt:
+                description: |-
+                  Encrypt makes dpservice encrypt this interface's underlay traffic, independently of Network's Encrypt.
+                  An encrypting interface never falls back to cleartext: without Security Associations it drops its traffic.
+                type: boolean
               firewallRules:
                 description: FirewallRules are the firewall rules to be applied to
                   this interface.
@@ -265,6 +270,11 @@ spec:
           status:
             description: Status defines the observed state of NetworkInterface.
             properties:
+              encryption:
+                description: |-
+                  Encryption is Ready once dpservice has confirmed that the interface encrypts, and empty once
+                  it has confirmed that it does not. It says nothing about peers or keys.
+                type: string
               loadBalancerTargets:
                 description: LoadBalancerTargets are the Targets reserved for this
                   NetworkInterface

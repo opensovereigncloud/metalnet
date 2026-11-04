@@ -10,6 +10,30 @@
 </div>
 Resource Types:
 <ul></ul>
+<h3 id="networking.metalnet.ironcore.dev/v1alpha1.EncryptionState">EncryptionState
+(<code>string</code> alias)</h3>
+<p>
+(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkEncryptionStatus">NetworkEncryptionStatus</a>, <a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkInterfaceStatus">NetworkInterfaceStatus</a>)
+</p>
+<div>
+<p>EncryptionState is the state of encryption on a node or an interface.</p>
+</div>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr><td><p>&#34;Pending&#34;</p></td>
+<td><p>EncryptionStatePending signals that nothing is installed yet.</p>
+</td>
+</tr><tr><td><p>&#34;Ready&#34;</p></td>
+<td><p>EncryptionStateReady signals that what was asked for is installed in dpservice. On a Network, that
+is egress and ingress for at least one peer on that node. On a NetworkInterface, the encrypt flag.</p>
+</td>
+</tr></tbody>
+</table>
 <h3 id="networking.metalnet.ironcore.dev/v1alpha1.FirewallRule">FirewallRule
 </h3>
 <p>
@@ -813,6 +837,20 @@ int32
 <p>PeeredPrefixes are the allowed CIDRs of the peered networks.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>encrypt</code><br/>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Encrypt asks for Security Associations: while it is true and the Network is in use on a node,
+that node subscribes the Network&rsquo;s ID at its mlsbond client and installs what it derives.
+Whether an interface uses them is up to NetworkInterfaceSpec.Encrypt, which is independent of this.</p>
+</td>
+</tr>
 </table>
 </td>
 </tr>
@@ -826,6 +864,60 @@ NetworkStatus
 </em>
 </td>
 <td>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="networking.metalnet.ironcore.dev/v1alpha1.NetworkEncryptionStatus">NetworkEncryptionStatus
+</h3>
+<p>
+(<em>Appears on:</em><a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkStatus">NetworkStatus</a>)
+</p>
+<div>
+<p>NetworkEncryptionStatus is the state of a Network&rsquo;s encryption on one node.</p>
+</div>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>nodeName</code><br/>
+<em>
+string
+</em>
+</td>
+<td>
+<p>NodeName is the node this entry is about.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>state</code><br/>
+<em>
+<a href="#networking.metalnet.ironcore.dev/v1alpha1.EncryptionState">
+EncryptionState
+</a>
+</em>
+</td>
+<td>
+<p>State does not change on a failed install while another peer works, so read Message as well.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>message</code><br/>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Message is set while an install fails, and when nothing can be installed at all.</p>
 </td>
 </tr>
 </tbody>
@@ -1012,6 +1104,19 @@ string
 <p>Hostname is the hostname which should be announced by the network interface.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>encrypt</code><br/>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Encrypt makes dpservice encrypt this interface&rsquo;s underlay traffic, independently of Network&rsquo;s Encrypt.
+An encrypting interface never falls back to cleartext: without Security Associations it drops its traffic.</p>
+</td>
+</tr>
 </table>
 </td>
 </tr>
@@ -1187,6 +1292,19 @@ string
 <p>Hostname is the hostname which should be announced by the network interface.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>encrypt</code><br/>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Encrypt makes dpservice encrypt this interface&rsquo;s underlay traffic, independently of Network&rsquo;s Encrypt.
+An encrypting interface never falls back to cleartext: without Security Associations it drops its traffic.</p>
+</td>
+</tr>
 </tbody>
 </table>
 <h3 id="networking.metalnet.ironcore.dev/v1alpha1.NetworkInterfaceState">NetworkInterfaceState
@@ -1320,6 +1438,21 @@ NetworkInterfaceState
 <p>State is the NetworkInterfaceState of the NetworkInterface.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>encryption</code><br/>
+<em>
+<a href="#networking.metalnet.ironcore.dev/v1alpha1.EncryptionState">
+EncryptionState
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Encryption is Ready once dpservice has confirmed that the interface encrypts, and empty once
+it has confirmed that it does not. It says nothing about peers or keys.</p>
+</td>
+</tr>
 </tbody>
 </table>
 <h3 id="networking.metalnet.ironcore.dev/v1alpha1.NetworkPeeringState">NetworkPeeringState
@@ -1442,6 +1575,20 @@ int32
 <p>PeeredPrefixes are the allowed CIDRs of the peered networks.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>encrypt</code><br/>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Encrypt asks for Security Associations: while it is true and the Network is in use on a node,
+that node subscribes the Network&rsquo;s ID at its mlsbond client and installs what it derives.
+Whether an interface uses them is up to NetworkInterfaceSpec.Encrypt, which is independent of this.</p>
+</td>
+</tr>
 </tbody>
 </table>
 <h3 id="networking.metalnet.ironcore.dev/v1alpha1.NetworkStatus">NetworkStatus
@@ -1470,6 +1617,21 @@ int32
 </td>
 <td>
 <p>Peerings contains the states of the network peerings for the network.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>encryption</code><br/>
+<em>
+<a href="#networking.metalnet.ironcore.dev/v1alpha1.NetworkEncryptionStatus">
+[]NetworkEncryptionStatus
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Encryption has one entry per node that is subscribed because of Spec.Encrypt. Each node writes
+only its own entry.</p>
 </td>
 </tr>
 </tbody>

@@ -10,6 +10,9 @@ package v1alpha1
 type NetworkStatusApplyConfiguration struct {
 	// Peerings contains the states of the network peerings for the network.
 	Peerings []NetworkPeeringStatusApplyConfiguration `json:"peerings,omitempty"`
+	// Encryption has one entry per node that is subscribed because of Spec.Encrypt. Each node writes
+	// only its own entry.
+	Encryption []NetworkEncryptionStatusApplyConfiguration `json:"encryption,omitempty"`
 }
 
 // NetworkStatusApplyConfiguration constructs a declarative configuration of the NetworkStatus type for use with
@@ -27,6 +30,19 @@ func (b *NetworkStatusApplyConfiguration) WithPeerings(values ...*NetworkPeering
 			panic("nil value passed to WithPeerings")
 		}
 		b.Peerings = append(b.Peerings, *values[i])
+	}
+	return b
+}
+
+// WithEncryption adds the given value to the Encryption field in the declarative configuration
+// and returns the receiver, so that objects can be build by chaining "With" function invocations.
+// If called multiple times, values provided by each call will be appended to the Encryption field.
+func (b *NetworkStatusApplyConfiguration) WithEncryption(values ...*NetworkEncryptionStatusApplyConfiguration) *NetworkStatusApplyConfiguration {
+	for i := range values {
+		if values[i] == nil {
+			panic("nil value passed to WithEncryption")
+		}
+		b.Encryption = append(b.Encryption, *values[i])
 	}
 	return b
 }

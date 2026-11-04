@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/go-logr/logr"
 	"github.com/ironcore-dev/controller-utils/clientutils"
@@ -368,6 +369,7 @@ func (r *LoadBalancerReconciler) SetupWithManager(mgr ctrl.Manager, metalnetCach
 		Watches(
 			&metalnetv1alpha1.Network{},
 			r.enqueueLoadBalancersReferencingNetwork(ctx, log),
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		).
 		Complete(r)
 }

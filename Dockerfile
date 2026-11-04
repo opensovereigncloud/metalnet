@@ -25,6 +25,7 @@ COPY internal/ internal/
 COPY encoding/ encoding/
 COPY metalbond/ metalbond/
 COPY netfns/ netfns/
+COPY orchestrator/ orchestrator/
 COPY sysfs/ sysfs/
 # Needed for version extraction by go build
 COPY .git/ .git/

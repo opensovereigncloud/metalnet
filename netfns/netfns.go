@@ -221,11 +221,15 @@ const (
 	networkControllerClassID = "02"
 )
 
-func CollectVirtualFunctions(fs sysfs.FS) ([]ghw.PCIAddress, error) {
+// CollectVirtualFunctions collects the virtual functions of the given physical functions, or of
+// all physical functions if none are given.
+func CollectVirtualFunctions(fs sysfs.FS, physFns ...ghw.PCIAddress) ([]ghw.PCIAddress, error) {
 	pci, err := ghw.PCI()
 	if err != nil {
 		return nil, err
 	}
+
+	onlyPhysFns := sets.New(physFns...)
 
 	var addresses []ghw.PCIAddress
 	for _, dev := range pci.Devices {
@@ -234,6 +238,10 @@ func CollectVirtualFunctions(fs sysfs.FS) ([]ghw.PCIAddress, error) {
 		}
 
 		address := *ghw.PCIAddressFromString(dev.Address)
+		if onlyPhysFns.Len() > 0 && !onlyPhysFns.Has(address) {
+			continue
+		}
+
 		sysFSDev, err := fs.PCIDevice(address)
 		if err != nil {
 			if !errors.Is(err, os.ErrNotExist) {

@@ -91,6 +91,7 @@ func main() {
 	var probeAddr string
 	var nodeName string
 	var pfBaseAddr string
+	var pfAddrs []string
 	var dpserviceAddr string
 	var metalbondPeers []string
 	var metalbondDebug bool
@@ -123,6 +124,8 @@ func main() {
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.StringVar(&nodeName, "node-name", hostName, "The node name to react to when reconciling network interfaces.")
 	flag.StringVar(&pfBaseAddr, "pf-pci-base-addr", baseAddr, "Physical Function(pf) PCI base address used for VF address calculation")
+	flag.StringSliceVar(&pfAddrs, "pf-pci-addr", nil, "Only use the virtual functions of these Physical Functions(pf), given by PCI address. "+
+		"By default, those of all Physical Functions are used. Needed when another metalnet uses the others.")
 	flag.StringVar(&dpserviceAddr, "dp-service-address", "127.0.0.1:1337", "The address of dpservice.")
 	flag.StringSliceVar(&metalbondPeers, "metalbond-peer", nil, "The addresses of the metalbond peers.")
 	flag.BoolVar(&metalbondDebug, "metalbond-debug", false, "Enable metalbond debug.")
@@ -271,9 +274,23 @@ func main() {
 	}
 
 	if !tapDeviceMod {
-		initAvailable, err = netfns.CollectVirtualFunctions(sysFS)
+		physFns := make([]ghw.PCIAddress, 0, len(pfAddrs))
+		for _, pfAddr := range pfAddrs {
+			physFn := ghw.PCIAddressFromString(pfAddr)
+			if physFn == nil {
+				setupLog.Error(fmt.Errorf("invalid pci address %q", pfAddr), "invalid value of --pf-pci-addr")
+				os.Exit(1)
+			}
+			physFns = append(physFns, *physFn)
+		}
+
+		initAvailable, err = netfns.CollectVirtualFunctions(sysFS, physFns...)
 		if err != nil {
 			setupLog.Error(err, "unable to collect virtual functions")
+			os.Exit(1)
+		}
+		if len(initAvailable) == 0 && len(physFns) > 0 {
+			setupLog.Error(fmt.Errorf("no virtual functions found"), "unable to collect virtual functions", "PFAddresses", pfAddrs)
 			os.Exit(1)
 		}
 		if len(initAvailable) == 0 {

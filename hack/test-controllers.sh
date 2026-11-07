@@ -10,9 +10,9 @@
 # is only asked for then.
 set -Eeuo pipefail
 
-BASE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+BASE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 DPSERVICE_DIR=${DPSERVICE_DIR:-$BASE/../dpservice}
-MLSBOND_DIR=${MLSBOND_DIR:-$DPSERVICE_DIR/docs/local/mlsbond}
+MLSBOND_DIR=${MLSBOND_DIR:-$BASE/../mlsbond}
 NETNS=metalnet-test
 SELF=$(realpath "$0")
 

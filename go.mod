@@ -125,4 +125,4 @@ require (
 
 replace github.com/ironcore-dev/dpservice/go/dpservice-go => ../dpservice/go/dpservice-go
 
-replace mlsbond => ../dpservice/docs/local/mlsbond/go
+replace mlsbond => ../mlsbond/go

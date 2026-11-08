@@ -96,6 +96,9 @@ type NetworkInterfaceReconciler struct {
 	BluefieldHostDefaultBusAddr string
 	MultiportEswitchMode        bool
 	TapDeviceMode               bool
+	// EncryptionEnabled is whether metalnet has an mlsbond client. Without one, it makes no
+	// encryption call to dpservice.
+	EncryptionEnabled bool
 }
 
 //+kubebuilder:rbac:groups=networking.metalnet.ironcore.dev,resources=networkinterfaces,verbs=get;list;watch;create;update;patch;delete
@@ -1252,6 +1255,12 @@ func (r *NetworkInterfaceReconciler) getInterfaceMeteringParams(nic *metalnetv1a
 }
 
 func (r *NetworkInterfaceReconciler) applyInterface(ctx context.Context, log logr.Logger, nic *metalnetv1alpha1.NetworkInterface, vni uint32) (*ghw.PCIAddress, netip.Addr, bool, bool, error) {
+	// Failing here keeps what exists as it is, and says why, where going on would carry traffic in
+	// the clear that was asked to be encrypted.
+	if nic.Spec.Encrypt && !r.EncryptionEnabled {
+		return nil, netip.Addr{}, false, false, errors.New("interface asks for encryption, but metalnet has no --mlsbond-client")
+	}
+
 	log.V(1).Info("Getting dpdk interface")
 	var hostName = ""
 

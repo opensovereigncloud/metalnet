@@ -490,16 +490,13 @@ var _ = Describe("Encryption", Label("encryption"), Serial, func() {
 			Eventually(env.entryGetter(ctx, network), encTimeout, encPolling).Should(haveState(metalnetv1alpha1.EncryptionStatePending))
 		})
 
-		It("reports a metalnet without an mlsbond client in message", func() {
+		It("touches nothing without an mlsbond client", func() {
+			Eventually(env.entryGetter(ctx, network), encTimeout, encPolling).Should(haveState(metalnetv1alpha1.EncryptionStatePending))
+			before := env.entry(ctx, network)
 			env.stopMetalnet()
 			env.mlsbondClient = ""
 			env.startMetalnet()
-			Eventually(func(g Gomega) {
-				entry := env.entry(ctx, network)
-				g.Expect(entry).NotTo(BeNil())
-				g.Expect(entry.State).To(Equal(metalnetv1alpha1.EncryptionStatePending))
-				g.Expect(entry.Message).To(ContainSubstring("no mlsbond client"))
-			}, encTimeout, encPolling).Should(Succeed())
+			Consistently(env.entryGetter(ctx, network), encConsistent, encPolling).Should(Equal(before))
 		})
 	})
 

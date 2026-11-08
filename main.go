@@ -170,7 +170,7 @@ func main() {
 	flag.BoolVar(&routeDriftDetection, "route-drift-detection", false,
 		"detect divergence between dpservice installed route state (LB targets, neighbor NATs) and metalbond's route table. Read-only detection; no auto-cleanup.")
 	flag.StringVar(&mlsbondClientAddr, "mlsbond-client", "", "The address of this host's mlsbond client. "+
-		"Networks cannot get Security Associations without one.")
+		"Without one, metalnet does nothing about encryption, and an interface asking for it fails.")
 	flag.StringVar(&debugKeyFile, "debug-key-file", "", "For debugging only: a root-only file to keep the raw keys and salts of the "+
 		"installed Security Associations in. Off by default, and hosts in production store no keys.")
 	opts := zap.Options{
@@ -378,18 +378,23 @@ func main() {
 	mbInstance := mb.NewMetalBond(config, metalnetMBClient)
 	metalbondRouteUtil := metalbond.NewMBRouteUtil(mbInstance)
 
-	encryption := orchestrator.New(orchestrator.Options{
-		Client:   mgr.GetClient(),
-		Reader:   mgr.GetAPIReader(),
-		DPDK:     dpdkClient,
-		NodeName: nodeName,
-		Address:  mlsbondClientAddr,
-		KeyFile:  debugKeyFile,
-	})
-	// before anything can fail on a dpservice that is down: its keys are gone or as good as gone
-	if err := encryption.ResetStatus(context.Background()); err != nil {
-		setupLog.Error(err, "unable to reset the encryption status")
-		os.Exit(1)
+	// Without an mlsbond client nothing here is to encrypt, and none of this runs.
+	var encryption *orchestrator.Orchestrator
+	encryptionEnabled := mlsbondClientAddr != ""
+	if encryptionEnabled {
+		encryption = orchestrator.New(orchestrator.Options{
+			Client:   mgr.GetClient(),
+			Reader:   mgr.GetAPIReader(),
+			DPDK:     dpdkClient,
+			NodeName: nodeName,
+			Address:  mlsbondClientAddr,
+			KeyFile:  debugKeyFile,
+		})
+		// before anything can fail on a dpservice that is down: its keys are gone or as good as gone
+		if err := encryption.ResetStatus(context.Background()); err != nil {
+			setupLog.Error(err, "unable to reset the encryption status")
+			os.Exit(1)
+		}
 	}
 
 	// If this metalnet is the one that initializes dpservice, that dpservice is new.
@@ -410,13 +415,15 @@ func main() {
 		}
 	}
 
-	if err := encryption.LoadInventory(context.Background(), dataplaneIsNew); err != nil {
-		setupLog.Error(err, "unable to take the inventory of dpservice")
-		os.Exit(1)
-	}
-	if err := mgr.Add(encryption); err != nil {
-		setupLog.Error(err, "unable to add the orchestrator to the manager")
-		os.Exit(1)
+	if encryptionEnabled {
+		if err := encryption.LoadInventory(context.Background(), dataplaneIsNew); err != nil {
+			setupLog.Error(err, "unable to take the inventory of dpservice")
+			os.Exit(1)
+		}
+		if err := mgr.Add(encryption); err != nil {
+			setupLog.Error(err, "unable to add the orchestrator to the manager")
+			os.Exit(1)
+		}
 	}
 
 	protoVersion, err := dpdkClient.GetVersion(ctx, &dpdk.Version{
@@ -503,6 +510,7 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.NetworkInterfaceReconciler{
+		EncryptionEnabled:           encryptionEnabled,
 		Client:                      mgr.GetClient(),
 		EventRecorder:               mgr.GetEventRecorder("networkinterface"),
 		Scheme:                      mgr.GetScheme(),

@@ -195,6 +195,9 @@ func (r *NetworkReconciler) reconcile(ctx context.Context, log logr.Logger, netw
 // keeps a host in the VNI group: after a dpservice restart, every VNI is unused for a moment.
 func (r *NetworkReconciler) reconcileEncryption(ctx context.Context, network *metalnetv1alpha1.Network, inUse bool) error {
 	if r.Orchestrator == nil {
+		if network.Spec.Encrypt {
+			ctrl.LoggerFrom(ctx).Info("Network asks for encryption, but metalnet has no --mlsbond-client")
+		}
 		return nil
 	}
 

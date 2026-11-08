@@ -281,6 +281,48 @@ var _ = Describe("Encryption", Label("encryption"), Serial, func() {
 			eventuallyReady()
 		})
 
+		// The step waiting for this metalnet is for the epoch the pair moved to while it was away.
+		lateStep := func(initialized bool) {
+			GinkgoHelper()
+			peer := env.newPeer("peer1", "fc00:2::/64")
+			peer.subscribe(vni)
+			eventuallyReady()
+			oldEgress, _ := env.expectPaired(ctx, peer, vni)
+
+			env.stopMetalnet()
+			env.restartDpservice()
+			if initialized {
+				Eventually(func() error {
+					_, err := dpdkClient.Initialize(ctx)
+					return err
+				}, encTimeout, encPolling).Should(Succeed())
+			}
+			env.rekey(ctx, vni)
+			Eventually(func(g Gomega) {
+				g.Expect(env.clientStatus(ctx, g).Pairs).To(ContainElement(HaveField("Waiting", Not(Equal(mlsbond.WaitingNothing)))))
+			}, encTimeout, encPolling).Should(Succeed())
+
+			env.proxy = newLateStepProxy(env.mlsbondClient)
+			env.startMetalnet()
+
+			Eventually(func(g Gomega) {
+				egress, _ := env.pairedWith(ctx, g, peer, vni)
+				g.Expect(egress.Spec.Key).NotTo(Equal(oldEgress.Spec.Key))
+			}, encTimeout, encPolling).Should(Succeed())
+			eventuallyReady()
+			Consistently(func(g Gomega) {
+				env.pairedWith(ctx, g, peer, vni)
+			}, encConsistent, encPolling).Should(Succeed())
+		}
+
+		It("carries out no step sent before it reported its new dpservice", func() {
+			lateStep(false)
+		})
+
+		It("carries out no step sent before it reported that it lost its associations", func() {
+			lateStep(true)
+		})
+
 		It("is Pending from the moment metalnet starts without its dpservice", func() {
 			peer := env.newPeer("peer1", "fc00:2::/64")
 			peer.subscribe(vni)
@@ -603,10 +645,12 @@ type encryptionEnv struct {
 	mlsbondAdmin  mlsbondpb.AdminClient
 	mlsbondClient string
 	clientProc    *process
-	metalnet      *process
-	metricsAddr   string
-	healthAddr    string
-	processes     []*process
+	// what metalnet reaches its mlsbond client through, if not directly
+	proxy       *lateStepProxy
+	metalnet    *process
+	metricsAddr string
+	healthAddr  string
+	processes   []*process
 }
 
 func newEncryptionEnv() *encryptionEnv {
@@ -649,6 +693,9 @@ func (e *encryptionEnv) cleanUp(ctx context.Context, namespace string) {
 	}
 	for _, p := range e.processes {
 		p.kill()
+	}
+	if e.proxy != nil {
+		e.proxy.stop()
 	}
 }
 
@@ -769,7 +816,9 @@ func (e *encryptionEnv) metalnetArgs() []string {
 		"--metrics-secure=false",
 		"--zap-log-level=2",
 	}
-	if e.mlsbondClient != "" {
+	if e.proxy != nil {
+		args = append(args, "--mlsbond-client="+e.proxy.address)
+	} else if e.mlsbondClient != "" {
 		args = append(args, "--mlsbond-client="+e.mlsbondClient)
 	}
 	if e.keyFile != "" {

@@ -60,11 +60,8 @@ type Orchestrator struct {
 	conn *mlsbond.Conn
 	// the Security Associations in dpservice
 	installed map[mlsbond.SecurityAssociationID]bool
-	// the dpservice is new and the mlsbond client does not know yet, so steps must not reach it
+	// the dpservice is new and the mlsbond client does not know yet, see dial
 	resetPending bool
-	// dial has yet to compare dpservice with the mlsbond client, which can turn out to need a reset. A
-	// step carried out before that reset would stay in dpservice with no one knowing of it.
-	comparing bool
 	// VNIs the mlsbond client is subscribed to, as far as known
 	subscribed map[uint32]bool
 	// VNIs found unwanted while not connected: an earlier metalnet may have subscribed them
@@ -261,65 +258,61 @@ func (o *Orchestrator) setBlocked(vni uint32, err error) {
 	o.refreshLocked(vni)
 }
 
-// connect connects to the mlsbond client unless that happened already, and tells it of a new
-// dpservice: until it knows, it may still ask for Security Associations of the old one. Only the
-// Network controller calls it, one reconcile at a time.
+// connect connects to the mlsbond client unless that happened already. Only the Network controller
+// calls it, one reconcile at a time.
 func (o *Orchestrator) connect(ctx context.Context) error {
 	o.mtx.Lock()
-	conn := o.conn
+	connected := o.conn != nil
 	o.mtx.Unlock()
-
-	if conn == nil {
-		var err error
-		if conn, err = o.dial(ctx); err != nil {
-			return err
-		}
+	if connected {
+		return nil
 	}
-
-	o.mtx.Lock()
-	resetPending := o.resetPending
-	o.mtx.Unlock()
-	if resetPending {
-		if err := conn.DataplaneReset(ctx); err != nil {
-			return fmt.Errorf("error reporting the dataplane reset to the mlsbond client: %w", err)
-		}
-		o.log.Info("Reported the new dpservice to the mlsbond client")
-		o.mtx.Lock()
-		o.resetPending = false
-		o.mtx.Unlock()
-	}
-	return nil
+	return o.dial(ctx)
 }
 
-func (o *Orchestrator) dial(ctx context.Context) (*mlsbond.Conn, error) {
+// dial settles with the mlsbond client whether dpservice is new or lost its associations, and only
+// then opens the step stream. The client forgets what it asked of a dataplane that is reset, but
+// cannot recall a step already sent: carried out after the reset, it would stay in dpservice with no
+// one knowing of it. With no stream open, no step can be underway. A failure leaves nothing open, and
+// the next reconcile starts over.
+func (o *Orchestrator) dial(ctx context.Context) error {
 	prefix, err := o.hostPrefix(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	// Connect opens the stream, and steps can come at once
-	o.mtx.Lock()
-	o.comparing = true
-	o.mtx.Unlock()
-	conn, err := mlsbond.Connect(ctx, o.address, o.nodeName, prefix, o)
+	conn, err := mlsbond.Dial(ctx, o.address, o.nodeName, prefix, o)
 	if err != nil {
-		return nil, fmt.Errorf("error connecting to the mlsbond client %s: %w", o.address, err)
+		return fmt.Errorf("error connecting to the mlsbond client %s: %w", o.address, err)
 	}
 	st, err := conn.Status(ctx)
 	if err != nil {
 		_ = conn.Close()
-		return nil, fmt.Errorf("error asking the mlsbond client %s for its status: %w", o.address, err)
+		return fmt.Errorf("error asking the mlsbond client %s for its status: %w", o.address, err)
 	}
 	o.log.Info("Connected to the mlsbond client", "Address", o.address, "HostPrefix", prefix, "VNIs", st.VNIs)
 
 	o.mtx.Lock()
-	o.conn = conn
 	// A metalnet that initialized dpservice may have died before it could tell the mlsbond client.
 	// A pair holding what dpservice does not hold gives that away, with nothing stored anywhere.
 	if !o.resetPending && o.lostAssociationsLocked(st) {
 		o.log.Info("The mlsbond client has pairs whose Security Associations dpservice does not hold")
 		o.resetPending = true
 	}
-	o.comparing = false
+	resetPending := o.resetPending
+	o.mtx.Unlock()
+
+	if resetPending {
+		if err := conn.DataplaneReset(ctx); err != nil {
+			_ = conn.Close()
+			return fmt.Errorf("error reporting the dataplane reset to the mlsbond client: %w", err)
+		}
+		o.log.Info("Reported the new dpservice to the mlsbond client")
+	}
+	conn.Start()
+
+	o.mtx.Lock()
+	o.resetPending = false
+	o.conn = conn
 	// What an earlier metalnet subscribed is unsubscribed if it is not wanted any more. Whether it
 	// is, those not looked at yet find out when their Network is reconciled.
 	var unwanted []uint32
@@ -339,7 +332,7 @@ func (o *Orchestrator) dial(ctx context.Context) (*mlsbond.Conn, error) {
 			o.log.Error(err, "Error unsubscribing", "VNI", vni)
 		}
 	}
-	return conn, nil
+	return nil
 }
 
 // lostAssociationsLocked tells whether a pair of the mlsbond client has a Security Association that
@@ -630,15 +623,6 @@ func peerOf(id mlsbond.SecurityAssociationID) netip.Addr {
 
 // step carries out one step in dpservice. A failure goes back to the mlsbond client, which retries.
 func (o *Orchestrator) step(do func(ctx context.Context) error) error {
-	o.mtx.Lock()
-	resetPending, comparing := o.resetPending, o.comparing
-	o.mtx.Unlock()
-	if resetPending {
-		return errors.New("dpservice is new, waiting for the mlsbond client to learn of it")
-	}
-	if comparing {
-		return errors.New("waiting to compare dpservice with the mlsbond client")
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), stepTimeout)
 	defer cancel()
 	return do(ctx)

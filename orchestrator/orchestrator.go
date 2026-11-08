@@ -62,6 +62,9 @@ type Orchestrator struct {
 	installed map[mlsbond.SecurityAssociationID]bool
 	// the dpservice is new and the mlsbond client does not know yet, so steps must not reach it
 	resetPending bool
+	// dial has yet to compare dpservice with the mlsbond client, which can turn out to need a reset. A
+	// step carried out before that reset would stay in dpservice with no one knowing of it.
+	comparing bool
 	// VNIs the mlsbond client is subscribed to, as far as known
 	subscribed map[uint32]bool
 	// VNIs found unwanted while not connected: an earlier metalnet may have subscribed them
@@ -293,6 +296,10 @@ func (o *Orchestrator) dial(ctx context.Context) (*mlsbond.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Connect opens the stream, and steps can come at once
+	o.mtx.Lock()
+	o.comparing = true
+	o.mtx.Unlock()
 	conn, err := mlsbond.Connect(ctx, o.address, o.nodeName, prefix, o)
 	if err != nil {
 		return nil, fmt.Errorf("error connecting to the mlsbond client %s: %w", o.address, err)
@@ -312,6 +319,7 @@ func (o *Orchestrator) dial(ctx context.Context) (*mlsbond.Conn, error) {
 		o.log.Info("The mlsbond client has pairs whose Security Associations dpservice does not hold")
 		o.resetPending = true
 	}
+	o.comparing = false
 	// What an earlier metalnet subscribed is unsubscribed if it is not wanted any more. Whether it
 	// is, those not looked at yet find out when their Network is reconciled.
 	var unwanted []uint32
@@ -623,10 +631,13 @@ func peerOf(id mlsbond.SecurityAssociationID) netip.Addr {
 // step carries out one step in dpservice. A failure goes back to the mlsbond client, which retries.
 func (o *Orchestrator) step(do func(ctx context.Context) error) error {
 	o.mtx.Lock()
-	resetPending := o.resetPending
+	resetPending, comparing := o.resetPending, o.comparing
 	o.mtx.Unlock()
 	if resetPending {
 		return errors.New("dpservice is new, waiting for the mlsbond client to learn of it")
+	}
+	if comparing {
+		return errors.New("waiting to compare dpservice with the mlsbond client")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), stepTimeout)
 	defer cancel()
